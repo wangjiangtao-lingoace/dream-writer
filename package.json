@@ -1,0 +1,29 @@
+{
+  "name": "dream-writer",
+  "version": "1.0.0",
+  "description": "古色古香AI小说创作助手 - 传统线装书风格的智能写作平台",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:client\" \"pnpm dev:server\"",
+    "dev:client": "cd client && pnpm dev",
+    "dev:server": "cd server && pnpm dev",
+    "build": "pnpm build:shared && pnpm build:server && pnpm build:client",
+    "build:shared": "cd shared && pnpm build",
+    "build:server": "cd server && pnpm build",
+    "build:client": "cd client && pnpm build",
+    "typecheck": "pnpm typecheck:shared && pnpm typecheck:server && pnpm typecheck:client",
+    "typecheck:shared": "cd shared && pnpm typecheck",
+    "typecheck:server": "cd server && pnpm typecheck",
+    "typecheck:client": "cd client && pnpm typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "pnpm": ">=10.6.0"
+  },
+  "packageManager": "pnpm@10.6.0"
+}
