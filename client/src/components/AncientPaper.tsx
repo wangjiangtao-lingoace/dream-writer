@@ -1,8 +1,8 @@
 import React from 'react';
-import './ancient-theme.css';
+import '../styles/ancient-theme.css';
 
 /**
- * Dream Writer - 传统线装书风格基础组件
+ * Dream Writer - 传统线装书风格基础组件（增强版）
  * 提供古色古香的宣纸背景和古典边框装饰
  */
 
@@ -39,7 +39,7 @@ export default function AncientPaper({
 }
 
 /**
- * 古典边框卡片组件
+ * 古典边框卡片组件（增强版）
  */
 interface AncientCardProps {
   children: React.ReactNode;
@@ -57,12 +57,12 @@ export function AncientCard({
   return (
     <div className={`ancient-card ${className}`}>
       {title && (
-        <div className="ancient-title">
+        <div className="ancient-title brush-stroke-effect" data-text={title}>
           {title}
         </div>
       )}
       {seal && (
-        <div className="seal-stamp seal-stamp-small" style={{ position: 'absolute', top: '16px', right: '16px' }}>
+        <div className="seal-stamp seal-stamp-small" style={{ position: 'absolute', top: '20px', right: '20px' }}>
           {seal}
         </div>
       )}
@@ -77,7 +77,7 @@ export function AncientCard({
 interface SealStampProps {
   text: string;
   size?: 'normal' | 'small';
-  color?: 'red' | 'brown' | 'purple';
+  color?: 'red' | 'brown' | 'purple' | 'gold';
 }
 
 export function SealStamp({
@@ -94,7 +94,9 @@ export function SealStamp({
       case 'brown':
         return { borderColor: 'var(--seal-brown)', color: 'var(--seal-brown)' };
       case 'purple':
-        return { borderColor: 'var(--seal-purple)', color: 'var(--seal-purple)' };
+        return { borderColor: 'var(--silk-purple)', color: 'var(--silk-purple)' };
+      case 'gold':
+        return { borderColor: 'var(--seal-gold)', color: 'var(--seal-gold)' };
       default:
         return {};
     }
@@ -111,7 +113,7 @@ export function SealStamp({
 }
 
 /**
- * 古风按钮组件
+ * 古风按钮组件（增强版）
  */
 interface AncientButtonProps {
   children: React.ReactNode;
@@ -138,12 +140,14 @@ export function AncientButton({
       case 'secondary':
         return {
           background: 'linear-gradient(180deg, var(--paper-cream) 0%, var(--paper-warm) 100%)',
-          color: 'var(--ink-dark)'
+          color: 'var(--ink-dark)',
+          borderColor: 'var(--border-antique)'
         };
       case 'outline':
         return {
           background: 'transparent',
-          color: 'var(--ink-dark)'
+          color: 'var(--ink-dark)',
+          borderColor: 'var(--border-antique)'
         };
       default:
         return {};
@@ -160,14 +164,16 @@ export function AncientButton({
       {loading ? (
         <span className="ancient-loading" />
       ) : (
-        children
+        <span className="brush-stroke-effect" data-text={children?.toString()}>
+          {children}
+        </span>
       )}
     </button>
   );
 }
 
 /**
- * 古典输入框组件
+ * 古典输入框组件（增强版）
  */
 interface AncientInputProps {
   value: string;
