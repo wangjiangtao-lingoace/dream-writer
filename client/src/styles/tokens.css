@@ -80,3 +80,14 @@
   --ai-panel-width: 280px;
   --topbar-height: 48px;
 }
+
+/* Backward-compatible aliases (to be removed after full migration) */
+:root {
+  --bg-primary: var(--bg-base);
+  --bg-secondary: var(--bg-elevated);
+  --bg-card: var(--bg-surface);
+  --border: var(--border-default);
+  --border-light: var(--border-subtle);
+  --border-dark: var(--border-strong);
+  --font-serif: "KaiTi", "STKaiti", "楷体", "Georgia", serif;
+}
