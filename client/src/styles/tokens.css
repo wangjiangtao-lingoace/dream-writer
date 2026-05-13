@@ -1,89 +1,39 @@
-/*
- * Dream Writer - 统一设计令牌
- * 合并自 variables.css / ancient-theme.css / workbench.css 三套变量系统
- * 变量命名规则：语义优先，无前缀冲突
- */
-
-/* ===== 颜色系统 ===== */
+/* client/src/styles/tokens.css */
 :root {
-  /* --- 基础纸墨色 --- */
-  --paper: #f8f1e4;
-  --paper-warm: #faf5e6;
-  --paper-cream: #fefcf5;
-  --paper-aged: #f0e6d2;
-  --paper-texture: #e8d5b7;
-  --surface: #fffaf0;
-  --surface-strong: #fff4dc;
+  /* 背景 */
+  --bg-base: #08080a;
+  --bg-surface: #0c0c0e;
+  --bg-elevated: #0f0f12;
+  --bg-overlay: #111114;
 
-  --ink: #25180f;
-  --ink-black: #1a1a1a;
-  --ink-dark: #2d2d2d;
-  --ink-faded: #4a4a4a;
-  --ink-light: #6a6a6a;
-  --muted: #6d5438;
+  /* 边框 */
+  --border-subtle: #1a1a20;
+  --border-default: #222228;
+  --border-strong: #2a2a34;
 
-  /* --- 主题色 --- */
-  --accent: #951f17;
-  --accent-dark: #2a1b10;
-  --accent-light: #c0392b;
+  /* 文字 */
+  --text-primary: #e4e4e7;
+  --text-secondary: #9a9aa0;
+  --text-muted: #6b6b76;
+  --text-disabled: #3a3a42;
 
-  /* --- 金色装饰 --- */
-  --gold-muted: #c9a967;
-  --gold-bright: #daa520;
-  --gold-pale: #f4d03f;
+  /* 主色：琥珀橙 */
+  --accent: #f97316;
+  --accent-hover: #fb923c;
+  --accent-muted: rgba(249, 115, 22, 0.15);
+  --accent-glow: rgba(249, 115, 22, 0.4);
 
-  /* --- 边框色 --- */
-  --line: #d8b27a;
-  --line-soft: #ead7b5;
-  --border-antique: #8b7355;
-  --border-faded: #c4a882;
-  --border-gold: #d4af37;
+  /* 语义色 */
+  --success: #22c55e;
+  --success-muted: rgba(34, 197, 94, 0.15);
+  --warning: #eab308;
+  --warning-muted: rgba(234, 179, 8, 0.15);
+  --error: #ef4444;
+  --error-muted: rgba(239, 68, 68, 0.15);
+  --info: #3b82f6;
+  --info-muted: rgba(59, 130, 246, 0.15);
 
-  /* --- 木纹色 --- */
-  --wood-dark: #5d4037;
-  --wood-medium: #8d6e63;
-  --wood-light: #d7ccc8;
-
-  /* --- 印泥色 --- */
-  --seal-red: #c0392b;
-  --seal-dark-red: #8b2a2a;
-  --seal-brown: #7a5a3a;
-  --seal-gold: #b8860b;
-
-  /* --- 功能色 --- */
-  --success: #4a9a4a;
-  --warning: #d4a017;
-  --error: #c0392b;
-
-  /* --- 语义别名（兼容旧 variables.css） --- */
-  --color-cream: var(--paper-cream);
-  --color-cyan: #2d6a6a;
-  --color-vermilion: var(--accent);
-  --color-ink: var(--ink);
-  --color-gold: var(--gold-muted);
-  --bg-primary: var(--paper);
-  --bg-secondary: var(--surface-strong);
-  --bg-card: var(--surface);
-  --text-primary: var(--ink);
-  --text-secondary: var(--muted);
-  --text-muted: var(--ink-light);
-  --border: var(--line);
-  --border-light: var(--line-soft);
-  --border-dark: var(--border-antique);
-
-  /* ===== 圆角 ===== */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-
-  /* ===== 阴影 ===== */
-  --shadow-sm: 0 2px 4px rgba(67, 43, 20, 0.06);
-  --shadow: 0 18px 42px rgba(67, 43, 20, 0.08);
-  --shadow-md: 0 4px 12px rgba(67, 43, 20, 0.1);
-  --shadow-lg: 0 8px 24px rgba(67, 43, 20, 0.12);
-
-  /* ===== 间距 ===== */
+  /* 间距（4px 网格） */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -94,12 +44,39 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  /* ===== 字体 ===== */
-  --font-serif: "KaiTi", "STKaiti", "楷体", "Georgia", serif;
-  --font-sans: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
 
-  /* ===== 过渡 ===== */
-  --transition-fast: 140ms ease;
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 16px var(--accent-glow);
+
+  /* 字体 */
+  --font-sans: "Noto Sans SC", "PingFang SC", -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* 字号 */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+
+  /* 过渡 */
+  --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms ease;
+
+  /* 布局 */
+  --sidebar-width: 200px;
+  --sidebar-collapsed-width: 52px;
+  --ai-panel-width: 280px;
+  --topbar-height: 48px;
 }
