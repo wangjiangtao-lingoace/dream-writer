@@ -129,6 +129,64 @@ export class LlmInvokeService {
     return json.choices?.[0]?.message?.content?.trim() || null;
   }
 
+  async *streamText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): AsyncGenerator<string> {
+    const config = resolveModelConfig();
+    if (!config) {
+      yield* this.streamFallbackRaw(input.prompt);
+      return;
+    }
+
+    const response = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: config.model,
+        stream: true,
+        temperature: input.temperature ?? 0.8,
+        max_tokens: input.maxTokens ?? 4000,
+        messages: [
+          { role: "system", content: input.system || "你是严谨的中文长篇小说助手。" },
+          { role: "user", content: input.prompt },
+        ],
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      yield* this.streamFallbackRaw(input.prompt);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const text = extractOpenAIStreamDelta(line.trim());
+        if (text) {
+          yield text;
+        }
+      }
+    }
+  }
+
+  private async *streamFallbackRaw(prompt: string): AsyncGenerator<string> {
+    const draft = `生成失败：未配置 LLM API Key。请在 server/.env 中配置 DEFAULT_LLM_API_KEY。\n\n原始 prompt 前 200 字：${prompt.substring(0, 200)}`;
+    for (const part of draft.match(/.{1,24}|\n/gus) ?? [draft]) {
+      yield part;
+      await new Promise((resolve) => setTimeout(resolve, 12));
+    }
+  }
+
   async *streamChapterDraft(input: ChapterDraftInput): AsyncGenerator<string> {
     const config = resolveModelConfig();
     if (!config) {

@@ -6,6 +6,7 @@ import {
   generateVolumeOutline,
   generateChapterOutline,
   generateChapterContent,
+  generateChapterContentStream,
   checkConsistency,
 } from "../services/AIService";
 
@@ -55,29 +56,27 @@ router.post("/chapter-outline", async (req, res, next) => {
 // 正文生成（流式）
 router.post("/chapter-content/:novelId/:chapterId", async (req, res) => {
   const disposeHeartbeat = initSSE(res);
-  const startTime = Date.now();
 
   try {
     const { novelId, chapterId } = req.params;
-    
-    // 生成正文
-    const result = await generateChapterContent({ novelId, chapterId });
-    
-    // 模拟流式输出
-    const chunks = result.match(/.{1,50}|\n/gus) || [result];
-    for (const chunk of chunks) {
+    let fullContent = "";
+
+    for await (const chunk of generateChapterContentStream({ novelId, chapterId })) {
+      if (res.writableEnded) break;
+      fullContent += chunk;
       writeSSEFrame(res, { type: "chunk", content: chunk });
-      await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    
-    writeSSEFrame(res, { type: "done", fullContent: result });
+
+    writeSSEFrame(res, { type: "done", fullContent });
     res.end();
   } catch (error) {
-    writeSSEFrame(res, {
-      type: "error",
-      error: error instanceof Error ? error.message : "正文生成失败。",
-    });
-    res.end();
+    if (!res.writableEnded) {
+      writeSSEFrame(res, {
+        type: "error",
+        error: error instanceof Error ? error.message : "正文生成失败。",
+      });
+      res.end();
+    }
   } finally {
     disposeHeartbeat();
   }

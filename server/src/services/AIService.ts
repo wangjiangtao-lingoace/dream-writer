@@ -379,6 +379,129 @@ ${prevOutlines || "这是第一章"}
   return result || "生成失败，请重试。";
 }
 
+export async function* generateChapterContentStream(input: {
+  novelId: string;
+  chapterId: string;
+}): AsyncGenerator<string> {
+  const chapter = await prisma.chapter.findUnique({
+    where: { id: input.chapterId },
+    include: {
+      novel: {
+        include: {
+          characters: true,
+          chapterOutlines: {
+            orderBy: { sortOrder: "asc" },
+            take: 5,
+          },
+          worldviews: { take: 1 },
+          mainlines: true,
+          styleProfiles: { where: { isDefault: true }, take: 1 },
+          assets: { where: { category: "book_analysis" }, take: 1 },
+        },
+      },
+    },
+  });
+
+  if (!chapter) {
+    throw new Error("章节不存在。");
+  }
+
+  const novel = chapter.novel;
+  const characterInfo = novel.characters.map((c: any) => {
+    return `${c.name}：${c.identity || c.role || "未设定"}，${c.motivation || "动机未知"}`;
+  }).join("\n");
+
+  const { getCompressedMemoryContext } = await import("./MemoryCompressionService");
+  const memoryContext = await getCompressedMemoryContext(input.novelId, chapter.order);
+
+  const chapterOutline = novel.chapterOutlines.find((co: any) => co.sortOrder === chapter.order);
+
+  const storyContext = await buildStoryContext(input.novelId);
+
+  const worldview = novel.worldviews[0];
+  const worldviewInfo = worldview ? `
+【世界观】${worldview.name}
+概述：${worldview.summary || ""}
+规则：${worldview.rules || ""}
+地理：${worldview.geography || ""}
+势力：${worldview.factions || ""}
+` : "";
+
+  const mainlineInfo = novel.mainlines.length > 0 ? `
+【故事主线】
+${novel.mainlines.map((m: any, i: number) => `${i + 1}. ${m.title}：${m.description || ""}`).join("\n")}
+` : "";
+
+  const styleInfo = novel.styleProfiles[0] ? `
+【写作风格】${novel.styleProfiles[0].name}
+描述：${novel.styleProfiles[0].description || ""}
+叙事视角：${novel.styleProfiles[0].narrativePov}
+节奏：${novel.styleProfiles[0].pacing}
+句子长度：${novel.styleProfiles[0].sentenceLength}
+对话比例：${novel.styleProfiles[0].dialogueRatio}
+` : "";
+
+  const analysisInfo = novel.assets[0] ? `
+【仿写参考】
+${novel.assets[0].content?.substring(0, 1000) || ""}
+` : "";
+
+  const outlineInfo = chapterOutline ? `
+【章纲】
+- 目标：${chapterOutline.goal || "推进剧情"}
+- 冲突：${chapterOutline.conflict || "未设定"}
+- 情绪：${chapterOutline.emotion || "未设定"}
+- 钩子：${chapterOutline.hook || "未设定"}
+- 伏笔：${chapterOutline.foreshadowing || "无"}
+- 爽点：${chapterOutline.pleasurePoint || "未设定"}
+` : "";
+
+  const prompt = [
+    "你是一位专业的中文网络小说作家，风格细腻，擅长写对话和场景。",
+    "",
+    "小说信息：",
+    `- 书名：${novel.title}`,
+    `- 类型：${novel.genre || "未指定"}`,
+    "",
+    worldviewInfo,
+    mainlineInfo,
+    styleInfo,
+    "当前章节：",
+    `- 章节名：${chapter.title}`,
+    outlineInfo,
+    "",
+    "角色设定：",
+    characterInfo || "暂无",
+    "",
+    "重要记忆：",
+    memoryContext || "暂无",
+    "",
+    "剧情状态：",
+    storyContext || "暂无",
+    analysisInfo,
+    "",
+    chapter.content ? `已有正文，请续写：\n${chapter.content}` : "请开始写作。",
+    "",
+    "要求：",
+    "1. 严格按照章纲写作，不要偏离",
+    "2. 保持人设一致性",
+    "3. 多用短句和对话，增强可读性",
+    "4. 控制节奏，紧凑有力",
+    "5. 章末必须有钩子",
+    "6. 去除 AI 味，让文字更有烟火气",
+    "7. 目标字数：2000-2500字，不要写太长",
+    "",
+    "请生成正文。",
+  ].join("\n");
+
+  yield* llmService.streamText({
+    system: "你是克制、细腻、重视叙事推进的中文小说写作助手。你的文字有烟火气，擅长写对话和场景，避免 AI 味的套路化表达。",
+    prompt,
+    temperature: 0.8,
+    maxTokens: 4000,
+  });
+}
+
 export async function generateChapterContent(input: {
   novelId: string;
   chapterId: string;
