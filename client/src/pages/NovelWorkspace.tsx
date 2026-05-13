@@ -8,6 +8,9 @@ import VolumeEditor from "../components/VolumeEditor";
 import MemoryPanel from "../components/MemoryPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import StylePanel from "../components/StylePanel";
+import { AIPanel } from "../components/layout/AIPanel";
+import { Tabs } from "../components/ui/Tabs";
+import "../styles/pages/workspace.css";
 
 type WorkspaceTab =
   | "dashboard"
@@ -58,6 +61,7 @@ const NovelWorkspace: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
+  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -367,8 +371,8 @@ const NovelWorkspace: React.FC = () => {
                     style={{
                       width: "100%",
                       padding: "0.75rem",
-                      background: "var(--bg-primary)",
-                      border: "1px solid var(--border)",
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border-default)",
                       borderRadius: "var(--radius-md)",
                       color: "var(--text-primary)",
                       fontSize: "1rem",
@@ -422,219 +426,259 @@ const NovelWorkspace: React.FC = () => {
     }
   };
 
-  return (
-    <div className={`novel-workspace ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={{
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      background: "var(--bg-primary)",
-      backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4a574' fill-opacity='0.05'%3E%3Cpath d='M50 0L51 100H49L50 0z' /%3E%3Cpath d='M0 50H100V52H0z' /%3E%3C/g%3E%3C/svg%3E\")",
-    }}>
-      <header className="workspace-header" style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0.75rem 1.5rem",
-        borderBottom: "1px solid var(--border)",
-        background: "var(--bg-card)",
-        boxShadow: "var(--shadow-sm)",
-      }}>
-        <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <button className="btn-back" onClick={() => navigate("/")} style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "32px",
-            height: "32px",
-            background: "transparent",
-            color: "var(--text-secondary)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
-          <h1 style={{
-            fontFamily: "var(--font-serif)",
-            fontSize: "1.25rem",
-            color: "var(--text-primary)",
-            letterSpacing: "0.05em",
-          }}>《{novel.title}》</h1>
-        </div>
-        <div className="header-actions" style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn-pipeline" onClick={() => navigate(`/novel/${id}/pipeline`)} style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            padding: "0.375rem 0.75rem",
-            background: "transparent",
-            color: "var(--text-secondary)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-sm)",
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-            流程
-          </button>
-          <button className="btn-save" onClick={handleSave} style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            padding: "0.375rem 0.75rem",
-            background: "var(--accent)",
-            color: "var(--text-inverse)",
-            border: "none",
-            borderRadius: "var(--radius-sm)",
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            保存
-          </button>
-        </div>
-      </header>
+  const getAIActions = () => {
+    const actions: Record<string, Array<{ key: string; label: string; icon: string; description: string; shortcut?: string; primary?: boolean }>> = {
+      dashboard: [
+        { key: "analyze", label: "分析进度", icon: "📊", description: "分析当前创作进度和下一步建议", shortcut: "⌘⇧A", primary: true },
+      ],
+      outline: [
+        { key: "generate-outline", label: "生成大纲", icon: "📝", description: "AI 根据已有信息生成完整大纲", shortcut: "⌘⇧G", primary: true },
+        { key: "expand-outline", label: "扩展大纲", icon: "📖", description: "扩展现有大纲的细节" },
+      ],
+      characters: [
+        { key: "generate-character", label: "生成人物卡", icon: "👤", description: "AI 生成新人物设定", shortcut: "⌘⇧R", primary: true },
+        { key: "analyze-relations", label: "人物关系分析", icon: "🔗", description: "分析人物之间的关系网络" },
+      ],
+      write: [
+        { key: "continue-write", label: "续写本章", icon: "✍️", description: "AI 根据上下文续写内容", shortcut: "⌘↵", primary: true },
+        { key: "consistency-check", label: "一致性检查", icon: "🔍", description: "检查内容与前文的一致性", shortcut: "⌘⇧C" },
+        { key: "polish", label: "润色优化", icon: "✨", description: "优化文笔和节奏", shortcut: "⌘⇧P" },
+      ],
+    };
+    return actions[activeTab] || actions.dashboard;
+  };
 
-      {notice && (
-        <div className="notice-bar" style={{
+  return (
+    <div className="workspace">
+      {/* 左栏：章节目录 */}
+      <aside className="workspace-chapters">
+        <div className="workspace-chapters-title">章节目录</div>
+        {novel?.chapters?.map((chapter: { id: string; title: string }) => (
+          <div
+            key={chapter.id}
+            className={`workspace-chapter-item ${activeChapterId === chapter.id ? "active" : ""}`}
+            onClick={() => setActiveChapterId(chapter.id)}
+          >
+            <span>{chapter.title}</span>
+          </div>
+        ))}
+      </aside>
+
+      {/* 中栏：编辑器 */}
+      <div className="workspace-editor">
+        <header className="workspace-header" style={{
           display: "flex",
           alignItems: "center",
-          gap: "0.5rem",
+          justifyContent: "space-between",
           padding: "0.75rem 1.5rem",
-          background: "rgba(139,69,19,0.08)",
-          color: "var(--accent)",
-          fontSize: "0.875rem",
-          borderBottom: "1px solid var(--border)",
+          borderBottom: "1px solid var(--border-default)",
+          background: "var(--bg-surface)",
+          boxShadow: "var(--shadow-sm)",
         }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-          {notice}
-        </div>
-      )}
-
-      <div className="workspace-layout" style={{
-        display: "flex",
-        flex: 1,
-        overflow: "hidden",
-      }}>
-        <aside className="workspace-sidebar" style={{
-          width: sidebarCollapsed ? "48px" : "200px",
-          background: "var(--bg-card)",
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          transition: "width var(--transition-normal)",
-          overflow: "hidden",
-        }}>
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            style={{
-              display: "flex",
+          <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <button className="btn-back" onClick={() => navigate("/")} style={{
+              display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              height: "40px",
+              width: "32px",
+              height: "32px",
               background: "transparent",
-              color: "var(--text-muted)",
-              border: "none",
-              borderBottom: "1px solid var(--border)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
               cursor: "pointer",
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-              {sidebarCollapsed ? (
-                <path d="m9 18 6-6-6-6" />
-              ) : (
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
                 <path d="m15 18-6-6 6-6" />
-              )}
-            </svg>
-          </button>
-          <nav className="sidebar-nav" style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "0.5rem",
-          }}>
-            {tabGroups.map((group) => (
-              <div key={group.label} className="tab-group" style={{ marginBottom: "0.75rem" }}>
-                <div className="group-label" style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 600,
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  padding: "0.5rem 0.5rem 0.25rem",
-                  whiteSpace: "nowrap",
-                }}>{group.label}</div>
-                <div className="group-tabs" style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                }}>
-                  {group.tabs.map((t) => (
-                    <button
-                      key={t.key}
-                      className={`sidebar-item ${activeTab === t.key ? "active" : ""}`}
-                      onClick={() => handleTabChange(t.key)}
-                      title={t.label}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        padding: "0.5rem",
-                        background: activeTab === t.key ? "rgba(139,69,19,0.08)" : "transparent",
-                        color: activeTab === t.key ? "var(--accent)" : "var(--text-secondary)",
-                        border: activeTab === t.key ? "1px solid var(--border)" : "1px solid transparent",
-                        borderRadius: "var(--radius-sm)",
-                        cursor: "pointer",
-                        fontSize: "0.8125rem",
-                        whiteSpace: "nowrap",
-                        transition: "all var(--transition-fast)",
-                      }}
-                    >
-                      <span className="tab-icon" style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: "1.25rem",
-                        height: "1.25rem",
-                        flexShrink: 0,
-                      }}>{t.icon}</span>
-                      <span className="tab-label">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </nav>
-        </aside>
+              </svg>
+            </button>
+            <h1 style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "1.25rem",
+              color: "var(--text-primary)",
+              letterSpacing: "0.05em",
+            }}>《{novel.title}》</h1>
+          </div>
+          <div className="header-actions" style={{ display: "flex", gap: "0.5rem" }}>
+            <button className="btn-pipeline" onClick={() => navigate(`/novel/${id}/pipeline`)} style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              background: "transparent",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+              流程
+            </button>
+            <button className="btn-save" onClick={handleSave} style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              background: "var(--accent)",
+              color: "var(--text-inverse)",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              保存
+            </button>
+          </div>
+        </header>
 
-        <main className="workspace-content workspace-ancient" style={{
+        {notice && (
+          <div className="notice-bar" style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.75rem 1.5rem",
+            background: "rgba(249,115,22,0.08)",
+            color: "var(--accent)",
+            fontSize: "0.875rem",
+            borderBottom: "1px solid var(--border-default)",
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            {notice}
+          </div>
+        )}
+
+        <div className="workspace-layout" style={{
+          display: "flex",
           flex: 1,
-          overflow: "auto",
-          padding: "1.5rem",
+          overflow: "hidden",
         }}>
-          <div style={{
-            background: "var(--bg-card)",
-            borderRadius: "var(--radius-lg)",
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-sm)",
-            minHeight: "100%",
+          <aside className="workspace-sidebar" style={{
+            width: sidebarCollapsed ? "48px" : "200px",
+            background: "var(--bg-surface)",
+            borderRight: "1px solid var(--border-default)",
+            display: "flex",
+            flexDirection: "column",
+            transition: "width var(--transition-normal)",
+            overflow: "hidden",
+          }}>
+            <button
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "40px",
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "none",
+                borderBottom: "1px solid var(--border-default)",
+                cursor: "pointer",
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
+                {sidebarCollapsed ? (
+                  <path d="m9 18 6-6-6-6" />
+                ) : (
+                  <path d="m15 18-6-6 6-6" />
+                )}
+              </svg>
+            </button>
+            <nav className="sidebar-nav" style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "0.5rem",
+            }}>
+              {tabGroups.map((group) => (
+                <div key={group.label} className="tab-group" style={{ marginBottom: "0.75rem" }}>
+                  <div className="group-label" style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 600,
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "0.5rem 0.5rem 0.25rem",
+                    whiteSpace: "nowrap",
+                  }}>{group.label}</div>
+                  <div className="group-tabs" style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "2px",
+                  }}>
+                    {group.tabs.map((t) => (
+                      <button
+                        key={t.key}
+                        className={`sidebar-item ${activeTab === t.key ? "active" : ""}`}
+                        onClick={() => handleTabChange(t.key)}
+                        title={t.label}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          padding: "0.5rem",
+                          background: activeTab === t.key ? "rgba(249,115,22,0.08)" : "transparent",
+                          color: activeTab === t.key ? "var(--accent)" : "var(--text-secondary)",
+                          border: activeTab === t.key ? "1px solid var(--border-default)" : "1px solid transparent",
+                          borderRadius: "var(--radius-sm)",
+                          cursor: "pointer",
+                          fontSize: "0.8125rem",
+                          whiteSpace: "nowrap",
+                          transition: "all var(--transition-fast)",
+                        }}
+                      >
+                        <span className="tab-icon" style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "1.25rem",
+                          height: "1.25rem",
+                          flexShrink: 0,
+                        }}>{t.icon}</span>
+                        <span className="tab-label">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+          </aside>
+
+          <main className="workspace-content" style={{
+            flex: 1,
+            overflow: "auto",
             padding: "1.5rem",
           }}>
-            {renderContent()}
-          </div>
-        </main>
+            <div style={{
+              background: "var(--bg-surface)",
+              borderRadius: "var(--radius-lg)",
+              border: "1px solid var(--border-default)",
+              boxShadow: "var(--shadow-sm)",
+              minHeight: "100%",
+              padding: "1.5rem",
+            }}>
+              {renderContent()}
+            </div>
+          </main>
+        </div>
       </div>
+
+      {/* 右栏：AI 面板 */}
+      <AIPanel
+        context={activeTab || "工作台"}
+        actions={getAIActions()}
+        onAction={(key) => console.log("AI action:", key)}
+      />
     </div>
   );
 };
@@ -737,7 +781,7 @@ const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               alignItems: "center",
               gap: "0.375rem",
               padding: "0.375rem 0.75rem",
-              background: generating ? "var(--border)" : "var(--accent)",
+              background: generating ? "var(--border-default)" : "var(--accent)",
               color: "var(--text-inverse)",
               border: "none",
               borderRadius: "var(--radius-sm)",
@@ -811,7 +855,7 @@ const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     height: "28px",
                     background: "transparent",
                     color: "var(--text-secondary)",
-                    border: "1px solid var(--border)",
+                    border: "1px solid var(--border-default)",
                     borderRadius: "var(--radius-sm)",
                     cursor: "pointer",
                   }}
@@ -957,7 +1001,7 @@ const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               alignItems: "center",
               gap: "0.375rem",
               padding: "0.375rem 0.75rem",
-              background: generating ? "var(--border)" : "var(--accent)",
+              background: generating ? "var(--border-default)" : "var(--accent)",
               color: "var(--text-inverse)",
               border: "none",
               borderRadius: "var(--radius-sm)",
@@ -1058,7 +1102,7 @@ const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     height: "28px",
                     background: "transparent",
                     color: "var(--text-secondary)",
-                    border: "1px solid var(--border)",
+                    border: "1px solid var(--border-default)",
                     borderRadius: "var(--radius-sm)",
                     cursor: "pointer",
                   }}
@@ -1191,11 +1235,11 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
         <p className="panel-desc">主路径：资料 → 拆书 → 仿写蓝图 → 资产落库 → 自动生成 1-3 章 → 继续创作。</p>
       </div>
 
-      {notice && <div className="notice-bar" style={{ padding: "0.75rem 1rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--accent)", background: "rgba(139,69,19,0.06)" }}>{notice}</div>}
+      {notice && <div className="notice-bar" style={{ padding: "0.75rem 1rem", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", color: "var(--accent)", background: "rgba(249,115,22,0.06)" }}>{notice}</div>}
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "1rem" }}>
         {cards.map((card) => (
-          <article key={card.label} style={{ padding: "1rem", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-card)" }}>
+          <article key={card.label} style={{ padding: "1rem", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-surface)" }}>
             <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>{card.label}</div>
             <strong style={{ display: "block", marginTop: "0.375rem", fontSize: "1.5rem", color: "var(--text-primary)" }}>{card.value}</strong>
             <p style={{ margin: "0.375rem 0 0", fontSize: "0.8125rem", lineHeight: 1.5, color: "var(--text-secondary)" }}>{card.text}</p>
@@ -1204,8 +1248,8 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: "1rem" }}>
-        <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)", overflow: "hidden" }}>
-          <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "1rem" }}>下一步动作</h3>
+        <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-base)", overflow: "hidden" }}>
+          <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "1rem" }}>下一步动作</h3>
           <div style={{ display: "grid", gap: "0.75rem", padding: "1rem" }}>
             {status.nextActions.map((action) => (
               <button
@@ -1219,9 +1263,9 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
                   alignItems: "center",
                   padding: "0.875rem 1rem",
                   textAlign: "left",
-                  border: "1px solid var(--border)",
+                  border: "1px solid var(--border-default)",
                   borderRadius: "var(--radius-sm)",
-                  background: action.enabled ? "var(--bg-card)" : "var(--border-light)",
+                  background: action.enabled ? "var(--bg-surface)" : "var(--border-light)",
                   color: action.enabled ? "var(--text-primary)" : "var(--text-muted)",
                   cursor: action.enabled ? "pointer" : "not-allowed",
                 }}
@@ -1233,8 +1277,8 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
           </div>
         </article>
 
-        <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)", overflow: "hidden" }}>
-          <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "1rem" }}>资产采用状态</h3>
+        <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-base)", overflow: "hidden" }}>
+          <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "1rem" }}>资产采用状态</h3>
           <div style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
             {Object.entries(status.adoption).map(([key, value]) => (
               <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.875rem" }}>
@@ -1251,8 +1295,8 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
         </article>
       </section>
 
-      <section style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)", overflow: "hidden" }}>
-        <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "1rem" }}>成果与使用记录</h3>
+      <section style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-base)", overflow: "hidden" }}>
+        <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "1rem" }}>成果与使用记录</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", padding: "1rem" }}>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {status.chapters.firstThree.map((chapter) => (
@@ -1837,7 +1881,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
       {notice && (
         <div className="notice-bar" style={{
           padding: "0.75rem 1rem",
-          background: notice.includes("失败") ? "rgba(220,53,69,0.08)" : "rgba(139,69,19,0.08)",
+          background: notice.includes("失败") ? "rgba(220,53,69,0.08)" : "rgba(249,115,22,0.08)",
           color: notice.includes("失败") ? "#dc3545" : "var(--accent)",
           borderRadius: "var(--radius-sm)",
           marginBottom: "1rem",
@@ -1866,9 +1910,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               placeholder="输入书名，例如：权宠天下 / 医妃倾天下"
               style={{
                 padding: "0.5rem 0.75rem",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--border-default)",
                 borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)",
+                background: "var(--bg-base)",
                 color: "var(--text-primary)",
                 fontSize: "0.875rem",
               }}
@@ -1879,9 +1923,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             disabled={!analysisTitle.trim() || loading}
             style={{
               padding: "0.625rem 1rem",
-              background: !analysisTitle.trim() || loading ? "var(--border)" : "var(--bg-card)",
+              background: !analysisTitle.trim() || loading ? "var(--border-default)" : "var(--bg-surface)",
               color: !analysisTitle.trim() || loading ? "var(--text-muted)" : "var(--accent)",
-              border: "1px solid var(--border)",
+              border: "1px solid var(--border-default)",
               borderRadius: "var(--radius-sm)",
               fontSize: "0.875rem",
               fontWeight: 600,
@@ -1897,9 +1941,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               onChange={(e) => setAnalysisSourceTitle(e.target.value)}
               style={{
                 padding: "0.5rem 0.75rem",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--border-default)",
                 borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)",
+                background: "var(--bg-base)",
                 color: "var(--text-primary)",
                 fontSize: "0.875rem",
               }}
@@ -1923,9 +1967,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               placeholder="可留空。点击“一键拆书并创作”时，系统会先按书名自动查询真实来源；查不到时才需要你粘贴资料。"
               style={{
                 padding: "0.5rem 0.75rem",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--border-default)",
                 borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)",
+                background: "var(--bg-base)",
                 color: "var(--text-primary)",
                 fontSize: "0.875rem",
                 flex: 1,
@@ -1940,7 +1984,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             disabled={!analysisTitle.trim() || loading}
             style={{
               padding: "0.75rem 1rem",
-              background: !analysisTitle.trim() || loading ? "var(--border)" : "var(--accent)",
+              background: !analysisTitle.trim() || loading ? "var(--border-default)" : "var(--accent)",
               color: "var(--text-inverse)",
               border: "none",
               borderRadius: "var(--radius-sm)",
@@ -1963,9 +2007,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             disabled={!analysisTitle.trim() || loading}
             style={{
               padding: "0.625rem 1rem",
-              background: !analysisTitle.trim() || loading ? "var(--border)" : "transparent",
+              background: !analysisTitle.trim() || loading ? "var(--border-default)" : "transparent",
               color: !analysisTitle.trim() || loading ? "var(--text-muted)" : "var(--accent)",
-              border: "1px solid var(--border)",
+              border: "1px solid var(--border-default)",
               borderRadius: "var(--radius-sm)",
               fontSize: "0.875rem",
               fontWeight: 500,
@@ -1981,8 +2025,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             gridTemplateColumns: "1fr",
             gap: "0.5rem",
             padding: "0.75rem",
-            background: "rgba(139,69,19,0.05)",
-            border: "1px solid var(--border)",
+            background: "rgba(249,115,22,0.05)",
+            border: "1px solid var(--border-default)",
             borderRadius: "var(--radius-sm)",
           }}>
             {["1 查看/修改 8 个分区", "2 沉淀知识库与记忆", "3 生成仿写方案", "4 基于方案自动创作"].map((step) => (
@@ -1991,7 +2035,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           </div>
 
           <div className="analysis-list" style={{
-            borderTop: "1px solid var(--border)",
+            borderTop: "1px solid var(--border-default)",
             paddingTop: "1rem",
           }}>
             <h3 style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginBottom: "0.75rem", fontWeight: 600 }}>
@@ -2010,8 +2054,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     flexDirection: "column",
                     gap: "0.25rem",
                     padding: "0.625rem 0.75rem",
-                    background: activeAnalysis?.id === analysis.id ? "rgba(139,69,19,0.08)" : "transparent",
-                    border: activeAnalysis?.id === analysis.id ? "1px solid var(--border)" : "1px solid transparent",
+                    background: activeAnalysis?.id === analysis.id ? "rgba(249,115,22,0.08)" : "transparent",
+                    border: activeAnalysis?.id === analysis.id ? "1px solid var(--border-default)" : "1px solid transparent",
                     borderRadius: "var(--radius-sm)",
                     cursor: "pointer",
                     textAlign: "left",
@@ -2034,9 +2078,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
         </div>
 
         <div className="analysis-result" style={{
-          border: "1px solid var(--border)",
+          border: "1px solid var(--border-default)",
           borderRadius: "var(--radius-md)",
-          background: "var(--bg-primary)",
+          background: "var(--bg-base)",
           overflow: "hidden",
         }}>
           {activeAnalysis ? (
@@ -2046,8 +2090,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "1rem 1.25rem",
-                borderBottom: "1px solid var(--border)",
-                background: "var(--bg-card)",
+                borderBottom: "1px solid var(--border-default)",
+                background: "var(--bg-surface)",
               }}>
                 <div>
                   <strong style={{ fontSize: "1rem", color: "var(--text-primary)" }}>{activeAnalysis.title}</strong>
@@ -2063,7 +2107,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                       padding: "0.375rem 0.75rem",
                       background: "transparent",
                       color: "var(--text-secondary)",
-                      border: "1px solid var(--border)",
+                      border: "1px solid var(--border-default)",
                       borderRadius: "var(--radius-sm)",
                       fontSize: "0.8125rem",
                       cursor: loading ? "not-allowed" : "pointer",
@@ -2076,7 +2120,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     disabled={activeAnalysis.status !== "succeeded" || loading}
                     style={{
                       padding: "0.375rem 0.75rem",
-                      background: activeAnalysis.status !== "succeeded" || loading ? "var(--border)" : "var(--accent)",
+                      background: activeAnalysis.status !== "succeeded" || loading ? "var(--border-default)" : "var(--accent)",
                       color: "var(--text-inverse)",
                       border: "none",
                       borderRadius: "var(--radius-sm)",
@@ -2091,7 +2135,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     disabled={activeAnalysis.status !== "succeeded" || loading}
                     style={{
                       padding: "0.375rem 0.75rem",
-                      background: activeAnalysis.status !== "succeeded" || loading ? "var(--border)" : "var(--accent)",
+                      background: activeAnalysis.status !== "succeeded" || loading ? "var(--border-default)" : "var(--accent)",
                       color: "var(--text-inverse)",
                       border: "none",
                       borderRadius: "var(--radius-sm)",
@@ -2106,8 +2150,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               {activeAnalysis.publishedAssetId && (
                 <div style={{
                   padding: "0.5rem 1.25rem",
-                  background: "rgba(139,69,19,0.05)",
-                  borderBottom: "1px solid var(--border)",
+                  background: "rgba(249,115,22,0.05)",
+                  borderBottom: "1px solid var(--border-default)",
                   fontSize: "0.8125rem",
                   color: "var(--accent)",
                 }}>
@@ -2124,7 +2168,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               }}>
                 {activeAnalysis.sections.map((section) => (
                   <article key={section.id} style={{
-                    border: "1px solid var(--border)",
+                    border: "1px solid var(--border-default)",
                     borderRadius: "var(--radius-sm)",
                     overflow: "hidden",
                   }}>
@@ -2133,8 +2177,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                       alignItems: "center",
                       gap: "0.75rem",
                       padding: "0.75rem 1rem",
-                      background: "var(--bg-card)",
-                      borderBottom: "1px solid var(--border)",
+                      background: "var(--bg-surface)",
+                      borderBottom: "1px solid var(--border-default)",
                     }}>
                       <span style={{
                         display: "flex",
@@ -2175,7 +2219,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                           padding: "0.25rem 0.5rem",
                           background: "transparent",
                           color: "var(--accent)",
-                          border: "1px solid var(--border)",
+                          border: "1px solid var(--border-default)",
                           borderRadius: "var(--radius-sm)",
                           fontSize: "0.75rem",
                           cursor: loading ? "not-allowed" : "pointer",
@@ -2200,12 +2244,12 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                       color: "var(--text-primary)",
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-word",
-                      background: "var(--bg-primary)",
+                      background: "var(--bg-base)",
                     }}>
                       {section.editedContent || section.aiContent || "暂无内容。"}
                     </pre>
                     {editingSectionKey === section.sectionKey && (
-                      <div style={{ padding: "1rem", borderTop: "1px solid var(--border)", display: "grid", gap: "0.75rem" }}>
+                      <div style={{ padding: "1rem", borderTop: "1px solid var(--border-default)", display: "grid", gap: "0.75rem" }}>
                         <label style={{ display: "grid", gap: "0.375rem" }}>
                           <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>分区修改内容</span>
                           <textarea
@@ -2214,9 +2258,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                             style={{
                               minHeight: "180px",
                               padding: "0.75rem",
-                              border: "1px solid var(--border)",
+                              border: "1px solid var(--border-default)",
                               borderRadius: "var(--radius-sm)",
-                              background: "var(--bg-primary)",
+                              background: "var(--bg-base)",
                               color: "var(--text-primary)",
                               lineHeight: 1.7,
                             }}
@@ -2229,9 +2273,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                             onChange={(event) => setSectionNotes(event.target.value)}
                             style={{
                               padding: "0.5rem 0.75rem",
-                              border: "1px solid var(--border)",
+                              border: "1px solid var(--border-default)",
                               borderRadius: "var(--radius-sm)",
-                              background: "var(--bg-primary)",
+                              background: "var(--bg-base)",
                               color: "var(--text-primary)",
                             }}
                           />
@@ -2241,7 +2285,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                             padding: "0.5rem 0.75rem",
                             background: "transparent",
                             color: "var(--text-secondary)",
-                            border: "1px solid var(--border)",
+                            border: "1px solid var(--border-default)",
                             borderRadius: "var(--radius-sm)",
                           }}>
                             取消
@@ -2282,9 +2326,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
 
         <div className="imitation-plan-result" style={{
           gridColumn: "1 / -1",
-          border: "1px solid var(--border)",
+          border: "1px solid var(--border-default)",
           borderRadius: "var(--radius-md)",
-          background: "var(--bg-primary)",
+          background: "var(--bg-base)",
           overflow: "hidden",
         }}>
           <div style={{
@@ -2293,8 +2337,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             justifyContent: "space-between",
             gap: "1rem",
             padding: "1rem 1.25rem",
-            borderBottom: "1px solid var(--border)",
-            background: "var(--bg-card)",
+            borderBottom: "1px solid var(--border-default)",
+            background: "var(--bg-surface)",
           }}>
             <div>
               <strong style={{ fontSize: "1rem", color: "var(--text-primary)" }}>仿写方案</strong>
@@ -2308,9 +2352,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 disabled={!activePlan || loading}
                 style={{
                   padding: "0.375rem 0.75rem",
-                  background: !activePlan || loading ? "var(--border)" : "transparent",
+                  background: !activePlan || loading ? "var(--border-default)" : "transparent",
                   color: !activePlan || loading ? "var(--text-muted)" : "var(--text-secondary)",
-                  border: "1px solid var(--border)",
+                  border: "1px solid var(--border-default)",
                   borderRadius: "var(--radius-sm)",
                   fontSize: "0.8125rem",
                   cursor: !activePlan || loading ? "not-allowed" : "pointer",
@@ -2323,7 +2367,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 disabled={!activePlan || loading}
                 style={{
                   padding: "0.375rem 0.75rem",
-                  background: !activePlan || loading ? "var(--border)" : "var(--accent)",
+                  background: !activePlan || loading ? "var(--border-default)" : "var(--accent)",
                   color: "var(--text-inverse)",
                   border: "none",
                   borderRadius: "var(--radius-sm)",
@@ -2337,7 +2381,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           </div>
 
           {imitationPlans.length > 0 && (
-            <div style={{ display: "flex", gap: "0.5rem", padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--border)", overflowX: "auto" }}>
+            <div style={{ display: "flex", gap: "0.5rem", padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--border-default)", overflowX: "auto" }}>
               {imitationPlans.map((plan) => (
                 <button
                   key={plan.id}
@@ -2345,9 +2389,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                   style={{
                     flex: "0 0 auto",
                     padding: "0.5rem 0.75rem",
-                    background: activePlan?.id === plan.id ? "rgba(139,69,19,0.08)" : "transparent",
+                    background: activePlan?.id === plan.id ? "rgba(249,115,22,0.08)" : "transparent",
                     color: "var(--text-primary)",
-                    border: activePlan?.id === plan.id ? "1px solid var(--border)" : "1px solid transparent",
+                    border: activePlan?.id === plan.id ? "1px solid var(--border-default)" : "1px solid transparent",
                     borderRadius: "var(--radius-sm)",
                     fontSize: "0.8125rem",
                     cursor: "pointer",
@@ -2361,11 +2405,11 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
 
           {activePlan ? (
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "1rem", padding: "1.25rem" }}>
-              <section style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "0.9375rem" }}>8 分区仿写落点</h3>
+              <section style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "0.9375rem" }}>8 分区仿写落点</h3>
                 <div style={{ display: "grid", gap: "0.75rem", padding: "1rem", maxHeight: "420px", overflowY: "auto" }}>
                   {activePlan.sectionPlans.map((section) => (
-                    <article key={section.sectionKey} style={{ borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem" }}>
+                    <article key={section.sectionKey} style={{ borderBottom: "1px solid var(--border-default)", paddingBottom: "0.75rem" }}>
                       <strong style={{ display: "block", marginBottom: "0.375rem", color: "var(--text-primary)" }}>{section.title}</strong>
                       <p style={{ margin: "0 0 0.5rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>{section.localApplication}</p>
                       <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "var(--text-muted)", fontSize: "0.8125rem", lineHeight: 1.6 }}>
@@ -2376,14 +2420,14 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 </div>
               </section>
               <section style={{ display: "grid", gap: "1rem" }}>
-                <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                  <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "0.9375rem" }}>创作蓝图</h3>
+                <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                  <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "0.9375rem" }}>创作蓝图</h3>
                   <pre style={{ margin: 0, padding: "1rem", maxHeight: "220px", overflow: "auto", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.8125rem", lineHeight: 1.6 }}>
                     {JSON.stringify(activePlan.blueprint, null, 2)}
                   </pre>
                 </article>
-                <article style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                  <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-card)", borderBottom: "1px solid var(--border)", fontSize: "0.9375rem" }}>样章草稿</h3>
+                <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                  <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "0.9375rem" }}>样章草稿</h3>
                   <div style={{ padding: "1rem", maxHeight: "220px", overflow: "auto" }}>
                     {activePlan.sampleDrafts.map((sample) => (
                       <article key={sample.chapterTitle} style={{ marginBottom: "1rem" }}>
