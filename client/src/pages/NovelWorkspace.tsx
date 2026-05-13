@@ -9,7 +9,6 @@ import MemoryPanel from "../components/MemoryPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import StylePanel from "../components/StylePanel";
 import { AIPanel } from "../components/layout/AIPanel";
-import { Tabs } from "../components/ui/Tabs";
 import "../styles/pages/workspace.css";
 
 type WorkspaceTab =

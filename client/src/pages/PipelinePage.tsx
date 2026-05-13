@@ -407,13 +407,11 @@ const PipelinePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="pipeline-stages" style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "1rem",
-        }}>
+        <div className="pipeline-stages">
           {pipeline.stages.map((stage, index) => (
-            <div key={stage.id} className={`pipeline-stage ${stage.status === "in_progress" ? "active" : stage.status}`}>
+            <React.Fragment key={stage.id}>
+              {index > 0 && <div className="pipeline-connector">→</div>}
+              <div className={`pipeline-stage ${stage.status === "in_progress" ? "active" : stage.status}`}>
               <div className="pipeline-stage-header">
                 <div className="pipeline-stage-dot" />
                 <span className="pipeline-stage-name">{stage.name}</span>
@@ -463,6 +461,7 @@ const PipelinePage: React.FC = () => {
                 </div>
               )}
             </div>
+            </React.Fragment>
           ))}
         </div>
 
