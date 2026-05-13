@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useAIConfigs, useDefaultConfig, useCreateConfig, useDeleteConfig, useTestConfig } from "../hooks/useConfig";
+import { useAIConfigs, useCreateConfig, useDeleteConfig, useTestConfig } from "../hooks/useConfig";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -18,7 +18,6 @@ const PROVIDERS = [
 
 const Settings: React.FC = () => {
   const { data: configs, isLoading } = useAIConfigs();
-  const { data: defaultConfig } = useDefaultConfig();
   const createConfig = useCreateConfig();
   const deleteConfig = useDeleteConfig();
   const testConfig = useTestConfig();
@@ -29,11 +28,13 @@ const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const selectedProvider = PROVIDERS.find((p) => p.value === provider);
 
   const handleSubmit = async () => {
     if (!apiKey.trim()) return;
+    setCreateError(null);
     try {
       await createConfig.mutateAsync({
         provider,
@@ -46,8 +47,13 @@ const Settings: React.FC = () => {
       setApiKey("");
       setBaseUrl("");
     } catch (error) {
-      console.error("创建配置失败:", error);
+      setCreateError(error instanceof Error ? error.message : "创建配置失败");
     }
+  };
+
+  const handleDelete = async (id: string, providerName: string) => {
+    if (!window.confirm(`确定要删除 ${providerName} 的配置吗？`)) return;
+    deleteConfig.mutate(id);
   };
 
   const handleTest = async (id: string) => {
@@ -83,7 +89,7 @@ const Settings: React.FC = () => {
                 <Button size="sm" variant="ghost" onClick={() => handleTest(config.id)}>
                   测试连接
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => deleteConfig.mutate(config.id)}>
+                <Button size="sm" variant="ghost" onClick={() => handleDelete(config.id, config.provider)}>
                   删除
                 </Button>
               </div>
@@ -126,9 +132,9 @@ const Settings: React.FC = () => {
         )}
 
         {/* 添加按钮 */}
-        <div className="config-add" onClick={() => setShowForm(true)}>
+        <button className="config-add" onClick={() => setShowForm(true)}>
           + 添加更多提供商
-        </div>
+        </button>
       </div>
 
       {/* 添加配置弹窗 */}
@@ -183,8 +189,13 @@ const Settings: React.FC = () => {
             onChange={(e) => setBaseUrl(e.target.value)}
           />
 
+          {createError && (
+            <div style={{ padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "rgba(239,68,68,0.1)", color: "var(--error)", fontSize: "var(--text-sm)" }}>
+              {createError}
+            </div>
+          )}
           <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end", marginTop: "var(--space-2)" }}>
-            <Button variant="secondary" onClick={() => setShowForm(false)}>取消</Button>
+            <Button variant="secondary" onClick={() => { setShowForm(false); setCreateError(null); }}>取消</Button>
             <Button variant="primary" onClick={handleSubmit} loading={createConfig.isPending} disabled={!apiKey.trim()}>
               保存
             </Button>

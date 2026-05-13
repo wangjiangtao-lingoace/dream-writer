@@ -81,11 +81,14 @@
 }
 
 .config-add {
+  width: 100%;
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   text-align: center;
   color: var(--text-muted);
+  background: none;
+  font: inherit;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
