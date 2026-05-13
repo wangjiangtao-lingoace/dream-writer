@@ -42,74 +42,77 @@ router.post("/:novelId/batch-generate", async (req, res, next) => {
       error?: string;
     }> = [];
 
-    // 逐章生成
-    for (let i = 0; i < count; i++) {
-      const order = startOrder + i;
-      try {
-        // 创建新章节
-        const chapter = await prisma.chapter.create({
-          data: {
-            novelId,
-            order,
-            title: `第${order}章`,
-            summary: "",
-            status: "planned",
-          },
-        });
+    // 单章生成逻辑
+    const generateChapter = async (order: number): Promise<typeof results[number]> => {
+      const chapter = await prisma.chapter.create({
+        data: {
+          novelId,
+          order,
+          title: `第${order}章`,
+          summary: "",
+          status: "planned",
+        },
+      });
 
-        // 生成正文
-        const content = await generateChapterContent({ novelId, chapterId: chapter.id });
+      const content = await generateChapterContent({ novelId, chapterId: chapter.id });
 
-        // 去 AI 味处理
-        let finalContent = content;
-        if (autoStyle && content) {
-          finalContent = await generateStyledContent(content, novelId);
-        }
-
-        // 更新章节
-        await prisma.chapter.update({
-          where: { id: chapter.id },
-          data: {
-            content: finalContent,
-            wordCount: finalContent.replace(/\s/g, "").length,
-            status: "drafted",
-          },
-        });
-
-        // 记录爽点和情绪
-        await recordPleasurePoint(novelId, {
-          chapterOrder: order,
-          type: "auto_generated",
-          intensity: 5,
-          description: "自动生成章节",
-        });
-
-        await recordEmotionCurve(novelId, {
-          chapterOrder: order,
-          emotionType: "neutral",
-          intensity: 5,
-        });
-
-        // 自动管理记忆
-        await autoManageMemories(novelId, order);
-
-        // 更新剧情状态
-        await updateStoryState(novelId, {
-          currentChapter: order,
-        });
-
-        results.push({
-          chapter: order,
-          status: "success",
-          wordCount: finalContent.replace(/\s/g, "").length,
-        });
-      } catch (error) {
-        results.push({
-          chapter: order,
-          status: "error",
-          error: error instanceof Error ? error.message : "生成失败",
-        });
+      let finalContent = content;
+      if (autoStyle && content) {
+        finalContent = await generateStyledContent(content, novelId);
       }
+
+      await prisma.chapter.update({
+        where: { id: chapter.id },
+        data: {
+          content: finalContent,
+          wordCount: finalContent.replace(/\s/g, "").length,
+          status: "drafted",
+        },
+      });
+
+      await recordPleasurePoint(novelId, {
+        chapterOrder: order,
+        type: "auto_generated",
+        intensity: 5,
+        description: "自动生成章节",
+      });
+
+      await recordEmotionCurve(novelId, {
+        chapterOrder: order,
+        emotionType: "neutral",
+        intensity: 5,
+      });
+
+      await autoManageMemories(novelId, order);
+
+      await updateStoryState(novelId, {
+        currentChapter: order,
+      });
+
+      return {
+        chapter: order,
+        status: "success",
+        wordCount: finalContent.replace(/\s/g, "").length,
+      };
+    };
+
+    // 分批并行生成，并发限制为 3
+    const concurrencyLimit = 3;
+    for (let i = 0; i < count; i += concurrencyLimit) {
+      const batch: number[] = [];
+      for (let j = i; j < Math.min(i + concurrencyLimit, count); j++) {
+        batch.push(startOrder + j);
+      }
+      const batchResults = await Promise.all(
+        batch.map((order) =>
+          generateChapter(order).catch((error): typeof results[number] => ({
+            chapter: order,
+            status: "error",
+            error: error instanceof Error ? error.message : "生成失败",
+          }))
+        )
+      );
+      results.push(...batchResults);
     }
 
     const successCount = results.filter((r) => r.status === "success").length;
