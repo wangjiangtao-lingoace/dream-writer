@@ -8,6 +8,7 @@ import NovelWorkspace from "@/pages/NovelWorkspace";
 import PipelinePage from "@/pages/PipelinePage";
 import GeneralKnowledge from "@/pages/GeneralKnowledge";
 import AnalyzeCreate from "@/pages/AnalyzeCreate";
+import Settings from "@/pages/Settings";
 
 const routes: RouteObject[] = [
   {
@@ -22,6 +23,7 @@ const routes: RouteObject[] = [
       { path: "novel/:id/:tab", element: <NovelWorkspace /> },
       { path: "novel/:id/pipeline", element: <PipelinePage /> },
       { path: "knowledge", element: <GeneralKnowledge /> },
+      { path: "settings", element: <Settings /> },
     ],
   },
 ];
