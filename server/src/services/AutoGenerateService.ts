@@ -25,29 +25,15 @@ const DEFAULT_CONFIG: AutoGenerateConfig = {
   pauseOnIssue: true,
 };
 
-// 自动生成状态
-interface AutoGenerateStatus {
-  novelId: string;
-  status: "idle" | "running" | "paused" | "completed" | "error";
-  currentVolume: number;
-  currentChapter: number;
-  totalChapters: number;
-  completedChapters: number;
-  errors: Array<{ chapter: number; error: string }>;
-  startTime: Date;
-  lastUpdateTime: Date;
-}
-
-// 全局状态存储
-const autoGenerateStatuses = new Map<string, AutoGenerateStatus>();
+// 自动生成状态（数据库持久化）
 
 // 自动生成全书
 export async function startAutoGenerate(
   novelId: string,
   config: Partial<AutoGenerateConfig> = {}
-): Promise<AutoGenerateStatus> {
+) {
   const fullConfig = { ...DEFAULT_CONFIG, ...config };
-  
+
   // 检查小说是否存在
   const novel = await prisma.novel.findUnique({
     where: { id: novelId },
@@ -61,29 +47,47 @@ export async function startAutoGenerate(
     throw new Error("小说不存在。");
   }
 
-  // 初始化状态
-  const status: AutoGenerateStatus = {
-    novelId,
-    status: "running",
-    currentVolume: 1,
-    currentChapter: 1,
-    totalChapters: fullConfig.volumeCount * fullConfig.chaptersPerVolume,
-    completedChapters: novel.chapters.length,
-    errors: [],
-    startTime: new Date(),
-    lastUpdateTime: new Date(),
-  };
-
-  autoGenerateStatuses.set(novelId, status);
+  // 初始化状态（数据库持久化）
+  const status = await prisma.autoGenerateStatus.upsert({
+    where: { novelId },
+    update: {
+      status: "running",
+      currentVolume: 1,
+      currentChapter: 1,
+      totalChapters: fullConfig.volumeCount * fullConfig.chaptersPerVolume,
+      completedChapters: novel.chapters.length,
+      errors: "[]",
+      startedAt: new Date(),
+    },
+    create: {
+      novelId,
+      status: "running",
+      currentVolume: 1,
+      currentChapter: 1,
+      totalChapters: fullConfig.volumeCount * fullConfig.chaptersPerVolume,
+      completedChapters: novel.chapters.length,
+      errors: "[]",
+      startedAt: new Date(),
+    },
+  });
 
   // 异步执行生成
-  executeAutoGenerate(novelId, fullConfig).catch((error) => {
-    const currentStatus = autoGenerateStatuses.get(novelId);
+  executeAutoGenerate(novelId, fullConfig).catch(async (error) => {
+    const currentStatus = await prisma.autoGenerateStatus.findUnique({
+      where: { novelId },
+    });
     if (currentStatus) {
-      currentStatus.status = "error";
-      currentStatus.errors.push({
+      const errors = JSON.parse(currentStatus.errors || "[]");
+      errors.push({
         chapter: currentStatus.currentChapter,
         error: error.message,
+      });
+      await prisma.autoGenerateStatus.update({
+        where: { novelId },
+        data: {
+          status: "error",
+          errors: JSON.stringify(errors),
+        },
       });
     }
   });
@@ -93,7 +97,9 @@ export async function startAutoGenerate(
 
 // 执行自动生成
 async function executeAutoGenerate(novelId: string, config: AutoGenerateConfig) {
-  const status = autoGenerateStatuses.get(novelId);
+  let status = await prisma.autoGenerateStatus.findUnique({
+    where: { novelId },
+  });
   if (!status) return;
 
   try {
@@ -104,8 +110,11 @@ async function executeAutoGenerate(novelId: string, config: AutoGenerateConfig) 
 
     // 2. 逐章生成
     for (let vol = status.currentVolume; vol <= config.volumeCount; vol++) {
-      status.currentVolume = vol;
-      
+      await prisma.autoGenerateStatus.update({
+        where: { novelId },
+        data: { currentVolume: vol },
+      });
+
       const volume = await prisma.volume.findFirst({
         where: { novelId, sortOrder: vol },
       });
@@ -119,18 +128,26 @@ async function executeAutoGenerate(novelId: string, config: AutoGenerateConfig) 
 
       // 逐章生成正文
       for (let chap = 1; chap <= config.chaptersPerVolume; chap++) {
-        status.currentChapter = chap;
-        status.lastUpdateTime = new Date();
+        await prisma.autoGenerateStatus.update({
+          where: { novelId },
+          data: { currentChapter: chap },
+        });
 
         // 检查是否暂停
-        if (status.status === "paused") {
+        const currentStatus = await prisma.autoGenerateStatus.findUnique({
+          where: { novelId },
+        });
+        if (currentStatus?.status === "paused") {
           return;
         }
 
         // 生成章节
         await generateSingleChapter(novelId, volume.id, vol, chap, config);
 
-        status.completedChapters++;
+        await prisma.autoGenerateStatus.update({
+          where: { novelId },
+          data: { completedChapters: { increment: 1 } },
+        });
 
         // 自动管理记忆
         await autoManageMemories(novelId, (vol - 1) * config.chaptersPerVolume + chap);
@@ -143,13 +160,28 @@ async function executeAutoGenerate(novelId: string, config: AutoGenerateConfig) 
       }
     }
 
-    status.status = "completed";
-  } catch (error) {
-    status.status = "error";
-    status.errors.push({
-      chapter: status.currentChapter,
-      error: error instanceof Error ? error.message : "未知错误",
+    await prisma.autoGenerateStatus.update({
+      where: { novelId },
+      data: { status: "completed" },
     });
+  } catch (error) {
+    const currentStatus = await prisma.autoGenerateStatus.findUnique({
+      where: { novelId },
+    });
+    if (currentStatus) {
+      const errors = JSON.parse(currentStatus.errors || "[]");
+      errors.push({
+        chapter: currentStatus.currentChapter,
+        error: error instanceof Error ? error.message : "未知错误",
+      });
+      await prisma.autoGenerateStatus.update({
+        where: { novelId },
+        data: {
+          status: "error",
+          errors: JSON.stringify(errors),
+        },
+      });
+    }
     throw error;
   }
 }
@@ -382,25 +414,37 @@ async function generateChapterWithAI(
 }
 
 // 获取自动生成状态
-export function getAutoGenerateStatus(novelId: string): AutoGenerateStatus | null {
-  return autoGenerateStatuses.get(novelId) || null;
+export async function getAutoGenerateStatus(novelId: string) {
+  return prisma.autoGenerateStatus.findUnique({
+    where: { novelId },
+  });
 }
 
 // 暂停自动生成
-export function pauseAutoGenerate(novelId: string): boolean {
-  const status = autoGenerateStatuses.get(novelId);
+export async function pauseAutoGenerate(novelId: string): Promise<boolean> {
+  const status = await prisma.autoGenerateStatus.findUnique({
+    where: { novelId },
+  });
   if (status && status.status === "running") {
-    status.status = "paused";
+    await prisma.autoGenerateStatus.update({
+      where: { novelId },
+      data: { status: "paused" },
+    });
     return true;
   }
   return false;
 }
 
 // 恢复自动生成
-export function resumeAutoGenerate(novelId: string): boolean {
-  const status = autoGenerateStatuses.get(novelId);
+export async function resumeAutoGenerate(novelId: string): Promise<boolean> {
+  const status = await prisma.autoGenerateStatus.findUnique({
+    where: { novelId },
+  });
   if (status && status.status === "paused") {
-    status.status = "running";
+    await prisma.autoGenerateStatus.update({
+      where: { novelId },
+      data: { status: "running" },
+    });
     // 重新执行
     executeAutoGenerate(novelId, DEFAULT_CONFIG).catch(() => {});
     return true;
@@ -409,11 +453,14 @@ export function resumeAutoGenerate(novelId: string): boolean {
 }
 
 // 停止自动生成
-export function stopAutoGenerate(novelId: string): boolean {
-  const status = autoGenerateStatuses.get(novelId);
+export async function stopAutoGenerate(novelId: string): Promise<boolean> {
+  const status = await prisma.autoGenerateStatus.findUnique({
+    where: { novelId },
+  });
   if (status) {
-    status.status = "idle";
-    autoGenerateStatuses.delete(novelId);
+    await prisma.autoGenerateStatus.delete({
+      where: { novelId },
+    });
     return true;
   }
   return false;

@@ -17,6 +17,12 @@ model Novel {
   outline     String?
   genre       String?
   coverImage  String?   // 封面图路径
+  synopsis    String?   // 故事简介/梗概
+  targetWordCount Int   @default(300000) // 目标总字数
+  chapterWordMin  Int   @default(2000)  // 章节最小字数
+  chapterWordMax  Int   @default(4000)  // 章节最大字数
+  volumeCount     Int   @default(1)     // 卷数
+  chaptersPerVol  Int   @default(20)    // 每卷章节数
   status      String   @default("drafting")
   chapters    Chapter[]
   characters  Character[]
@@ -587,6 +593,22 @@ model PipelineJob {
   
   @@index([novelId])
   @@index([status])
+}
+
+// 24. 自动生成状态
+model AutoGenerateStatus {
+  id               String   @id @default(cuid())
+  novelId          String   @unique
+  status           String   @default("idle") // idle/running/paused/completed/error
+  currentVolume    Int      @default(1)
+  currentChapter   Int      @default(1)
+  totalChapters    Int      @default(0)
+  completedChapters Int     @default(0)
+  errors           String   @default("[]") // JSON: Array<{ chapter: number; error: string }>
+  startedAt        DateTime?
+  updatedAt        DateTime @updatedAt
+
+  @@index([novelId])
 }
 
 // 23. 阶段结果
