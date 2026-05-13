@@ -177,6 +177,11 @@ export class LlmInvokeService {
         }
       }
     }
+    // 处理 buffer 中剩余数据
+    if (buffer.trim()) {
+      const text = extractOpenAIStreamDelta(buffer.trim());
+      if (text) yield text;
+    }
   }
 
   private async *streamFallbackRaw(prompt: string): AsyncGenerator<string> {
@@ -233,6 +238,11 @@ export class LlmInvokeService {
           yield text;
         }
       }
+    }
+    // 处理 buffer 中剩余数据
+    if (buffer.trim()) {
+      const text = extractOpenAIStreamDelta(buffer.trim());
+      if (text) yield text;
     }
   }
 

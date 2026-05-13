@@ -43,6 +43,7 @@ model Novel {
   imitationPlans ImitationPlan[]
   assetUsageRecords AssetUsageRecord[]
   pipelineJob PipelineJob?
+  autoGenerateStatus AutoGenerateStatus?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -599,6 +600,7 @@ model PipelineJob {
 model AutoGenerateStatus {
   id               String   @id @default(cuid())
   novelId          String   @unique
+  novel            Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
   status           String   @default("idle") // idle/running/paused/completed/error
   currentVolume    Int      @default(1)
   currentChapter   Int      @default(1)
