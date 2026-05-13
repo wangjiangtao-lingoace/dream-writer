@@ -71,6 +71,27 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
+// 获取分类统计
+router.get("/stats/categories", async (req: Request, res: Response) => {
+  try {
+    const stats = await prisma.generalKnowledge.groupBy({
+      by: ["category"],
+      _count: {
+        id: true,
+      },
+    });
+
+    const result = stats.map((stat) => ({
+      category: stat.category,
+      count: stat._count.id,
+    }));
+
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 获取单个通用知识库条目
 router.get("/:id", async (req: Request, res: Response) => {
   try {
@@ -116,27 +137,6 @@ router.delete("/:id", async (req: Request, res: Response) => {
       where: { id },
     });
     res.json({ success: true, message: "条目已删除" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 获取分类统计
-router.get("/stats/categories", async (req: Request, res: Response) => {
-  try {
-    const stats = await prisma.generalKnowledge.groupBy({
-      by: ["category"],
-      _count: {
-        id: true,
-      },
-    });
-
-    const result = stats.map((stat) => ({
-      category: stat.category,
-      count: stat._count.id,
-    }));
-
-    res.json({ success: true, data: result });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
