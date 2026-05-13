@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "./ui/CommonComponents";
 
 interface StyleProfile {
   id: string;
@@ -38,6 +39,7 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
   const [testResult, setTestResult] = useState("");
   const [extractText, setExtractText] = useState("");
   const [extractedStyle, setExtractedStyle] = useState<Partial<StyleProfile> | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "默认风格",
@@ -100,14 +102,16 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("确定删除此风格配置？")) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await api(`/api/styles/${id}`, { method: "DELETE" });
+      await api(`/api/styles/${deleteTarget}`, { method: "DELETE" });
       onNotice("风格配置已删除。");
       await loadProfiles();
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "删除风格配置失败。");
+    } finally {
+      setDeleteTarget(null);
     }
   }
 
@@ -237,23 +241,22 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
     setShowForm(false);
   }
 
-  const povLabel = (v: string) => {
-    switch (v) {
-      case "first_person": return "第一人称";
-      case "third_person": return "第三人称";
-      case "mixed": return "混合视角";
-      default: return v;
-    }
+  const translateStyleValue = (field: string, value: string): string => {
+    const map: Record<string, Record<string, string>> = {
+      narrativePov: { first_person: "第一人称", third_person: "第三人称", mixed: "混合视角" },
+      tense: { past: "过去时", present: "现在时" },
+      pacing: { slow: "慢节奏", balanced: "适中", fast: "快节奏" },
+      sentenceLength: { short: "短句为主", medium: "中等", long: "长句为主", mixed: "混合" },
+      vocabulary: { modern: "现代白话", classical: "古典文雅", mixed: "混合" },
+      dialogueRatio: { low: "少对话", balanced: "适中", high: "多对话" },
+      emotionIntensity: { low: "克制内敛", medium: "适中", high: "强烈饱满" },
+      humorLevel: { none: "严肃", low: "偶尔轻松", medium: "适度幽默", high: "多幽默" },
+    };
+    return map[field]?.[value] || value;
   };
 
-  const pacingLabel = (v: string) => {
-    switch (v) {
-      case "slow": return "慢节奏";
-      case "balanced": return "适中";
-      case "fast": return "快节奏";
-      default: return v;
-    }
-  };
+  const povLabel = (v: string) => translateStyleValue("narrativePov", v);
+  const pacingLabel = (v: string) => translateStyleValue("pacing", v);
 
   return (
     <section className="style-panel">
@@ -350,14 +353,14 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
               <h4 style={{ fontSize: "0.9375rem", marginBottom: "0.75rem" }}>提取的风格特征</h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.75rem" }}>
                 {extractedStyle.name && <div><strong>风格名称：</strong>{extractedStyle.name}</div>}
-                {extractedStyle.narrativePov && <div><strong>叙事视角：</strong>{extractedStyle.narrativePov}</div>}
-                {extractedStyle.tense && <div><strong>时态：</strong>{extractedStyle.tense}</div>}
-                {extractedStyle.pacing && <div><strong>节奏：</strong>{extractedStyle.pacing}</div>}
-                {extractedStyle.sentenceLength && <div><strong>句子长度：</strong>{extractedStyle.sentenceLength}</div>}
-                {extractedStyle.vocabulary && <div><strong>词汇风格：</strong>{extractedStyle.vocabulary}</div>}
-                {extractedStyle.dialogueRatio && <div><strong>对话比例：</strong>{extractedStyle.dialogueRatio}</div>}
-                {extractedStyle.emotionIntensity && <div><strong>情感强度：</strong>{extractedStyle.emotionIntensity}</div>}
-                {extractedStyle.humorLevel && <div><strong>幽默程度：</strong>{extractedStyle.humorLevel}</div>}
+                {extractedStyle.narrativePov && <div><strong>叙事视角：</strong>{translateStyleValue("narrativePov", extractedStyle.narrativePov)}</div>}
+                {extractedStyle.tense && <div><strong>时态：</strong>{translateStyleValue("tense", extractedStyle.tense)}</div>}
+                {extractedStyle.pacing && <div><strong>节奏：</strong>{translateStyleValue("pacing", extractedStyle.pacing)}</div>}
+                {extractedStyle.sentenceLength && <div><strong>句子长度：</strong>{translateStyleValue("sentenceLength", extractedStyle.sentenceLength)}</div>}
+                {extractedStyle.vocabulary && <div><strong>词汇风格：</strong>{translateStyleValue("vocabulary", extractedStyle.vocabulary)}</div>}
+                {extractedStyle.dialogueRatio && <div><strong>对话比例：</strong>{translateStyleValue("dialogueRatio", extractedStyle.dialogueRatio)}</div>}
+                {extractedStyle.emotionIntensity && <div><strong>情感强度：</strong>{translateStyleValue("emotionIntensity", extractedStyle.emotionIntensity)}</div>}
+                {extractedStyle.humorLevel && <div><strong>幽默程度：</strong>{translateStyleValue("humorLevel", extractedStyle.humorLevel)}</div>}
               </div>
               {extractedStyle.description && (
                 <div style={{ marginTop: "0.75rem" }}>
@@ -561,14 +564,14 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
               <div className="style-tags">
                 <span>{povLabel(profile.narrativePov)}</span>
                 <span>{pacingLabel(profile.pacing)}</span>
-                <span>{profile.sentenceLength === "short" ? "短句" : profile.sentenceLength === "long" ? "长句" : "混合"}</span>
+                <span>{translateStyleValue("sentenceLength", profile.sentenceLength)}</span>
               </div>
               <div className="card-actions">
                 {!profile.isDefault && (
                   <button type="button" onClick={() => handleSetDefault(profile.id)}>设为默认</button>
                 )}
                 <button type="button" onClick={() => handleEdit(profile)}>编辑</button>
-                <button type="button" onClick={() => handleDelete(profile.id)}>删除</button>
+                <button type="button" onClick={() => setDeleteTarget(profile.id)}>删除</button>
               </div>
             </article>
           ))
@@ -593,6 +596,17 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
           </div>
         )}
       </div>
+      {deleteTarget && (
+        <ConfirmDialog
+          title="删除风格配置"
+          message="确定删除此风格配置？此操作不可撤销。"
+          confirmText="删除"
+          cancelText="取消"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          variant="danger"
+        />
+      )}
     </section>
   );
 }

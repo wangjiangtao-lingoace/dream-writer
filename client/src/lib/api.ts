@@ -43,3 +43,11 @@ api.put = <T>(url: string, data?: any, init?: RequestInit): Promise<T> => {
 api.delete = <T>(url: string, init?: RequestInit): Promise<T> => {
   return api<T>(url, { ...init, method: "DELETE" });
 };
+
+api.patch = <T>(url: string, data?: any, init?: RequestInit): Promise<T> => {
+  return api<T>(url, {
+    ...init,
+    method: "PATCH",
+    body: data ? JSON.stringify(data) : undefined,
+  });
+};

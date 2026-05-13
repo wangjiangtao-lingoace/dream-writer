@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { toast } from "../components/ui/toast";
+import { ConfirmDialog } from "../components/ui/CommonComponents";
 
 interface KnowledgeItem {
   id: string;
@@ -26,6 +28,8 @@ const GeneralKnowledge: React.FC = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadItems();
@@ -55,7 +59,7 @@ const GeneralKnowledge: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!formData.title.trim() || !formData.content.trim()) {
-      alert("标题和内容为必填项");
+      toast.error("标题和内容为必填项");
       return;
     }
 
@@ -85,14 +89,32 @@ const GeneralKnowledge: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除这条知识吗？")) return;
+  const handleDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.delete(`/api/general-knowledge/${id}`);
+      await api.delete(`/api/general-knowledge/${deleteTarget}`);
       loadItems();
     } catch (error) {
       console.error("删除失败:", error);
+    } finally {
+      setDeleteTarget(null);
     }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const getCategoryLabel = (category: string) => {
@@ -233,9 +255,27 @@ const GeneralKnowledge: React.FC = () => {
                 </div>
                 <h3>{item.title}</h3>
                 <div className="card-content">
-                  {item.content.length > 200
+                  {item.content.length > 200 && !expandedIds.has(item.id)
                     ? item.content.substring(0, 200) + "..."
                     : item.content}
+                  {item.content.length > 200 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(item.id)}
+                      style={{
+                        display: "inline",
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent)",
+                        cursor: "pointer",
+                        fontSize: "0.8125rem",
+                        padding: 0,
+                        marginLeft: "0.25rem",
+                      }}
+                    >
+                      {expandedIds.has(item.id) ? "收起" : "展开"}
+                    </button>
+                  )}
                 </div>
                 {item.tags && (
                   <div className="card-tags">
@@ -256,6 +296,18 @@ const GeneralKnowledge: React.FC = () => {
           </div>
         )}
       </main>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="删除知识"
+          message="确定要删除这条知识吗？此操作不可撤销。"
+          confirmText="删除"
+          cancelText="取消"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          variant="danger"
+        />
+      )}
     </div>
   );
 };

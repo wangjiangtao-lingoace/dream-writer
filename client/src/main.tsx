@@ -4,10 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import AppRouter from "./router";
 import { Toaster } from "./components/ui/toast";
-import "./styles/variables.css";
-import "./styles/index.css";
-import "./styles/pages.css";
-import "./styles/workbench-modern.css";
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/components.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

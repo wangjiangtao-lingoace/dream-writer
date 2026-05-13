@@ -8,7 +8,6 @@ import VolumeEditor from "../components/VolumeEditor";
 import MemoryPanel from "../components/MemoryPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import StylePanel from "../components/StylePanel";
-import "../styles/workspace-ancient.css";
 
 type WorkspaceTab =
   | "dashboard"
@@ -57,6 +56,8 @@ const NovelWorkspace: React.FC = () => {
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [editingOutline, setEditingOutline] = useState(false);
+  const [outlineDraft, setOutlineDraft] = useState("");
 
   useEffect(() => {
     if (id) {
@@ -98,6 +99,22 @@ const NovelWorkspace: React.FC = () => {
 
   const handleNotice = (msg: string) => {
     setNotice(msg);
+  };
+
+  const handleSave = async () => {
+    if (!novel) return;
+    try {
+      await api.put(`/api/novels/${id}`, {
+        title: novel.title,
+        genre: novel.genre,
+        inspiration: novel.inspiration,
+        outline: novel.outline,
+      });
+      setNotice("保存成功");
+    } catch (error) {
+      console.error("保存失败:", error);
+      alert("保存失败，请重试");
+    }
   };
 
   const tabGroups: TabGroup[] = [
@@ -289,12 +306,32 @@ const NovelWorkspace: React.FC = () => {
           <div className="outline-panel">
             <div className="panel-header">
               <h2>作品大纲</h2>
-              <button className="btn-edit">
+              <button className="btn-edit" onClick={() => {
+                if (editingOutline) {
+                  // 保存大纲
+                  api.put(`/api/novels/${id}`, { outline: outlineDraft })
+                    .then(() => {
+                      setNovel(prev => prev ? { ...prev, outline: outlineDraft } : null);
+                      setEditingOutline(false);
+                      setNotice("大纲已保存");
+                    })
+                    .catch(() => alert("保存失败"));
+                } else {
+                  setOutlineDraft(novel.outline || "");
+                  setEditingOutline(true);
+                }
+              }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  {editingOutline ? (
+                    <path d="M20 6L9 17l-5-5" />
+                  ) : (
+                    <>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </>
+                  )}
                 </svg>
-                编辑
+                {editingOutline ? "保存" : "编辑"}
               </button>
             </div>
             <div className="outline-content">
@@ -321,7 +358,27 @@ const NovelWorkspace: React.FC = () => {
               </div>
               <div className="outline-section">
                 <h3>故事大纲</h3>
-                <p>{novel.outline || "暂无大纲，请点击编辑按钮添加"}</p>
+                {editingOutline ? (
+                  <textarea
+                    value={outlineDraft}
+                    onChange={(e) => setOutlineDraft(e.target.value)}
+                    placeholder="请输入故事大纲..."
+                    rows={10}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      background: "var(--bg-primary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-md)",
+                      color: "var(--text-primary)",
+                      fontSize: "1rem",
+                      resize: "vertical",
+                      minHeight: "200px",
+                    }}
+                  />
+                ) : (
+                  <p>{novel.outline || "暂无大纲，请点击编辑按钮添加"}</p>
+                )}
               </div>
             </div>
           </div>
@@ -424,7 +481,7 @@ const NovelWorkspace: React.FC = () => {
             </svg>
             流程
           </button>
-          <button className="btn-save" style={{
+          <button className="btn-save" onClick={handleSave} style={{
             display: "inline-flex",
             alignItems: "center",
             gap: "0.375rem",

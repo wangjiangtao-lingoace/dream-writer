@@ -22,6 +22,12 @@ const novelCreateSchema = z.object({
   inspiration: z.string().trim().optional(),
   outline: z.string().trim().optional(),
   genre: z.string().trim().optional(),
+  synopsis: z.string().trim().optional(),
+  targetWordCount: z.number().int().min(10000).max(10000000).optional(),
+  chapterWordMin: z.number().int().min(500).max(10000).optional(),
+  chapterWordMax: z.number().int().min(1000).max(20000).optional(),
+  volumeCount: z.number().int().min(1).max(100).optional(),
+  chaptersPerVol: z.number().int().min(1).max(200).optional(),
 });
 
 const novelUpdateSchema = z.object({
@@ -29,6 +35,12 @@ const novelUpdateSchema = z.object({
   inspiration: z.string().nullable().optional(),
   outline: z.string().nullable().optional(),
   genre: z.string().nullable().optional(),
+  synopsis: z.string().nullable().optional(),
+  targetWordCount: z.number().int().min(10000).max(10000000).nullable().optional(),
+  chapterWordMin: z.number().int().min(500).max(10000).nullable().optional(),
+  chapterWordMax: z.number().int().min(1000).max(20000).nullable().optional(),
+  volumeCount: z.number().int().min(1).max(100).nullable().optional(),
+  chaptersPerVol: z.number().int().min(1).max(200).nullable().optional(),
   status: z.string().trim().min(1).optional(),
 });
 
@@ -279,7 +291,11 @@ router.get("/:id", async (req, res, next) => {
 router.put("/:id", async (req, res, next) => {
   try {
     const { id } = idSchema.parse(req.params);
-    const input = novelUpdateSchema.parse(req.body);
+    const parsed = novelUpdateSchema.parse(req.body);
+    // 转换 null 为 undefined（Prisma 更新不接受 null）
+    const input = Object.fromEntries(
+      Object.entries(parsed).map(([k, v]) => [k, v === null ? undefined : v])
+    );
     res.json({ success: true, data: await novelService.updateNovel(id, input) });
   } catch (error) {
     next(error);

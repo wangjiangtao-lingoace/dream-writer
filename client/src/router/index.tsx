@@ -8,7 +8,6 @@ import NovelWorkspace from "@/pages/NovelWorkspace";
 import PipelinePage from "@/pages/PipelinePage";
 import GeneralKnowledge from "@/pages/GeneralKnowledge";
 import AnalyzeCreate from "@/pages/AnalyzeCreate";
-import "../styles/layout.css";
 
 const routes: RouteObject[] = [
   {

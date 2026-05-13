@@ -29,6 +29,7 @@ import searchRouter from "./routes/search";
 import volumeOutlinesRouter from "./routes/volumeOutlines";
 import aiEnhancedRouter from "./routes/aiEnhanced";
 import imitationPlansRouter from "./routes/imitationPlans";
+import consistencyResultsRouter from "./routes/consistencyResults";
 import { prisma } from "./db/prisma";
 
 dotenv.config();
@@ -46,6 +47,7 @@ const REQUIRED_TABLES = [
   "KnowledgeAsset",
   "Memory",
   "AssetUsageRecord",
+  "ConsistencyCheckResult",
 ];
 let databaseHealth = {
   checked: false,
@@ -138,6 +140,7 @@ app.use("/api/search", searchRouter);
 app.use("/api/novels", volumeOutlinesRouter);
 app.use("/api/ai", aiEnhancedRouter);
 app.use("/api/imitation-plans", imitationPlansRouter);
+app.use("/api/consistency-results", consistencyResultsRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ success: false, error: `Not Found: ${req.method} ${req.path}` });

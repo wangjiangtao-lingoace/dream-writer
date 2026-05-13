@@ -1,7 +1,20 @@
-import { toast } from "sonner";
+import { toast, Toaster as SonnerToaster } from "sonner";
 
 export { toast };
 
 export function Toaster() {
-  return null; // 暂时简化，后续可以添加实际的toast组件
+  return (
+    <SonnerToaster
+      position="top-right"
+      richColors
+      closeButton
+      toastOptions={{
+        style: {
+          background: "var(--bg-card)",
+          color: "var(--text-primary)",
+          border: "1px solid var(--border)",
+        },
+      }}
+    />
+  );
 }

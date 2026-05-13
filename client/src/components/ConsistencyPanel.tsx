@@ -32,28 +32,38 @@ interface ConsistencyPanelProps {
   onNotice: (msg: string) => void;
 }
 
-const STORAGE_KEY_PREFIX = "consistency_result_";
-
-function loadPersistedResults(novelId: string): ConsistencyResult[] {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${novelId}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistResults(novelId: string, results: ConsistencyResult[]) {
-  localStorage.setItem(`${STORAGE_KEY_PREFIX}${novelId}`, JSON.stringify(results));
-}
-
 export default function ConsistencyPanel({ novelId, chapters, onNotice }: ConsistencyPanelProps) {
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [results, setResults] = useState<ConsistencyResult[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // 从后端加载校验结果
   useEffect(() => {
-    setResults(loadPersistedResults(novelId));
+    const loadResults = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get<any[]>(`/api/consistency-results/${novelId}`);
+        if (response && Array.isArray(response)) {
+          // 转换后端数据格式为前端格式
+          const formattedResults: ConsistencyResult[] = response.map((r: any) => ({
+            id: r.id,
+            chapterId: r.chapterId,
+            overall_score: r.overallScore,
+            summary: r.summary,
+            checkedAt: r.checkedAt,
+            issues: [], // issues 需要单独加载
+          }));
+          setResults(formattedResults);
+        }
+      } catch (error) {
+        console.error("加载校验结果失败:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadResults();
   }, [novelId]);
 
   const activeResult = selectedChapterId
@@ -73,13 +83,15 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
       });
 
       let parsed: ConsistencyResult;
+      let issues: ConsistencyIssue[] = [];
       try {
         const data = JSON.parse(response.content) as Omit<ConsistencyResult, "chapterId" | "checkedAt">;
+        issues = (data.issues || []).map((issue) => ({ ...issue, status: "pending" as const }));
         parsed = {
           ...data,
           chapterId: selectedChapterId,
           checkedAt: new Date().toISOString(),
-          issues: (data.issues || []).map((issue) => ({ ...issue, status: "pending" as const })),
+          issues,
         };
       } catch {
         parsed = {
@@ -91,9 +103,18 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
         };
       }
 
+      // 保存到后端
+      await api.post("/api/consistency-results", {
+        novelId,
+        chapterId: selectedChapterId,
+        overallScore: parsed.overall_score,
+        summary: parsed.summary,
+        issues: issues,
+      });
+
+      // 更新本地状态
       const updated = [parsed, ...results.filter((r) => r.chapterId !== selectedChapterId)];
       setResults(updated);
-      persistResults(novelId, updated);
       onNotice(`校验完成，发现 ${parsed.issues?.length || 0} 个问题。`);
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "校验失败。");
@@ -102,25 +123,41 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
     }
   }
 
-  function updateIssueStatus(chapterId: string, issueIndex: number, status: "fixed" | "ignored") {
-    const updated = results.map((r) => {
-      if (r.chapterId !== chapterId) return r;
-      return {
-        ...r,
-        issues: r.issues.map((issue, i) =>
-          i === issueIndex ? { ...issue, status } : issue
-        ),
-      };
-    });
-    setResults(updated);
-    persistResults(novelId, updated);
+  async function updateIssueStatus(chapterId: string, issueIndex: number, status: "fixed" | "ignored") {
+    try {
+      // 调用后端 API 更新状态
+      await api.patch(`/api/consistency-results/${novelId}/${chapterId}/issues/${issueIndex}`, {
+        status: status === "fixed" ? "resolved" : "ignored",
+      });
+
+      // 更新本地状态
+      const updated = results.map((r) => {
+        if (r.chapterId !== chapterId) return r;
+        return {
+          ...r,
+          issues: r.issues.map((issue, i) =>
+            i === issueIndex ? { ...issue, status } : issue
+          ),
+        };
+      });
+      setResults(updated);
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "更新状态失败。");
+    }
   }
 
-  function clearResult(chapterId: string) {
-    const updated = results.filter((r) => r.chapterId !== chapterId);
-    setResults(updated);
-    persistResults(novelId, updated);
-    onNotice("已清除该章节的校验结果。");
+  async function clearResult(chapterId: string) {
+    try {
+      // 调用后端 API 删除结果
+      await api.delete(`/api/consistency-results/${novelId}/${chapterId}`);
+
+      // 更新本地状态
+      const updated = results.filter((r) => r.chapterId !== chapterId);
+      setResults(updated);
+      onNotice("已清除该章节的校验结果。");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "清除失败。");
+    }
   }
 
   const severityLabel = (severity: string) => {

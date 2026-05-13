@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "./ui/CommonComponents";
 
 interface Memory {
   id: string;
@@ -93,6 +94,7 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
   const [showStoryState, setShowStoryState] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
   const [form, setForm] = useState({
     type: "world",
@@ -145,8 +147,16 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
     }
   }, [novelId]);
 
-  async function handleCompress() {
-    if (!confirm("确定要压缩记忆？这将合并相似记忆并减少总数量。")) return;
+  function requestCompress() {
+    setConfirmAction({
+      title: "压缩记忆",
+      message: "确定要压缩记忆？这将合并相似记忆并减少总数量。",
+      onConfirm: doCompress,
+    });
+  }
+
+  async function doCompress() {
+    setConfirmAction(null);
     setCompressing(true);
     try {
       const result = await api<{ compressed: number }>(`/api/memory-compression/${novelId}/consolidate`, {
@@ -214,8 +224,16 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("确定删除此记忆？")) return;
+  function requestDelete(id: string) {
+    setConfirmAction({
+      title: "删除记忆",
+      message: "确定删除此记忆？此操作不可撤销。",
+      onConfirm: () => doDelete(id),
+    });
+  }
+
+  async function doDelete(id: string) {
+    setConfirmAction(null);
     try {
       await api(`/api/memories/${id}`, { method: "DELETE" });
       onNotice("记忆已删除。");
@@ -384,7 +402,7 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
         <button
           type="button"
-          onClick={handleCompress}
+          onClick={requestCompress}
           disabled={compressing}
           style={{ opacity: compressing ? 0.6 : 1 }}
         >
@@ -514,8 +532,34 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
                 <span style={getLevelBadgeStyle(memory.level)}>
                   {levelLabel(memory.level)}
                 </span>
-                <span className="memory-importance" title={`重要程度: ${memory.importance}`}>
-                  {"★".repeat(Math.min(memory.importance, 5))}
+                <span
+                  className="memory-importance"
+                  title={`重要程度: ${memory.importance}/10`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    fontSize: "0.75rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  <span style={{
+                    display: "inline-block",
+                    width: "4rem",
+                    height: "0.375rem",
+                    borderRadius: "9999px",
+                    background: "var(--border)",
+                    overflow: "hidden",
+                  }}>
+                    <span style={{
+                      display: "block",
+                      width: `${memory.importance * 10}%`,
+                      height: "100%",
+                      borderRadius: "9999px",
+                      background: memory.importance >= 8 ? "#ef4444" : memory.importance >= 5 ? "#f59e0b" : "#22c55e",
+                    }} />
+                  </span>
+                  {memory.importance}/10
                 </span>
               </header>
               <pre className="memory-content">{memory.content}</pre>
@@ -526,12 +570,23 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
               )}
               <div className="card-actions">
                 <button type="button" onClick={() => handleEdit(memory)}>编辑</button>
-                <button type="button" onClick={() => handleDelete(memory.id)}>删除</button>
+                <button type="button" onClick={() => requestDelete(memory.id)}>删除</button>
               </div>
             </article>
           ))
         )}
       </div>
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmText="确认"
+          cancelText="取消"
+          onConfirm={confirmAction.onConfirm}
+          onCancel={() => setConfirmAction(null)}
+          variant="danger"
+        />
+      )}
     </section>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "./ui/CommonComponents";
 
 interface Character {
   id: string;
@@ -26,6 +27,8 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [activeRoleFilter, setActiveRoleFilter] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     role: "",
@@ -89,16 +92,23 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("确定删除此人物？")) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await api(`/api/characters/${novelId}/${id}`, { method: "DELETE" });
+      await api(`/api/characters/${novelId}/${deleteTarget}`, { method: "DELETE" });
       onNotice("人物已删除。");
       await loadCharacters();
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "删除人物失败。");
+    } finally {
+      setDeleteTarget(null);
     }
   }
+
+  const filteredCharacters = useMemo(() => {
+    if (!activeRoleFilter) return characters;
+    return characters.filter((c) => c.role === activeRoleFilter);
+  }, [characters, activeRoleFilter]);
 
   function handleEdit(char: Character) {
     setEditingId(char.id);
@@ -257,33 +267,42 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
         gap: "0.5rem",
         marginBottom: "1rem",
       }}>
-        <span style={{
-          padding: "0.25rem 0.75rem",
-          fontSize: "0.8125rem",
-          borderRadius: "9999px",
-          background: "rgba(139,69,19,0.08)",
-          color: "var(--accent)",
-          border: "1px solid var(--border)",
-        }}>
+        <button
+          type="button"
+          onClick={() => setActiveRoleFilter(null)}
+          style={{
+            padding: "0.25rem 0.75rem",
+            fontSize: "0.8125rem",
+            borderRadius: "9999px",
+            background: activeRoleFilter === null ? "var(--accent)" : "rgba(139,69,19,0.08)",
+            color: activeRoleFilter === null ? "var(--text-inverse)" : "var(--accent)",
+            border: "1px solid var(--border)",
+            cursor: "pointer",
+          }}
+        >
           全部 ({characters.length})
-        </span>
+        </button>
         {ROLE_OPTIONS.map((role) => {
           const count = characters.filter((c) => c.role === role).length;
           if (count === 0) return null;
+          const isActive = activeRoleFilter === role;
           return (
-            <span
+            <button
               key={role}
+              type="button"
+              onClick={() => setActiveRoleFilter(isActive ? null : role)}
               style={{
                 padding: "0.25rem 0.75rem",
                 fontSize: "0.8125rem",
                 borderRadius: "9999px",
-                background: `${roleColorMap[role] || "#546e7a"}15`,
-                color: roleColorMap[role] || "#546e7a",
+                background: isActive ? (roleColorMap[role] || "#546e7a") : `${roleColorMap[role] || "#546e7a"}15`,
+                color: isActive ? "#fff" : (roleColorMap[role] || "#546e7a"),
                 border: `1px solid ${roleColorMap[role] || "#546e7a"}40`,
+                cursor: "pointer",
               }}
             >
               {role} ({count})
-            </span>
+            </button>
           );
         })}
       </div>
@@ -296,10 +315,10 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
       }}>
         {loading ? (
           <p className="empty-note">加载中...</p>
-        ) : characters.length === 0 ? (
-          <p className="empty-note">还没有人物。创建第一个人物卡吧。</p>
+        ) : filteredCharacters.length === 0 ? (
+          <p className="empty-note">{activeRoleFilter ? `没有"${activeRoleFilter}"类型的人物。` : "还没有人物。创建第一个人物卡吧。"}</p>
         ) : (
-          characters.map((char) => (
+          filteredCharacters.map((char) => (
             <article
               key={char.id}
               className="character-card"
@@ -370,12 +389,23 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
                 justifyContent: "flex-end",
               }}>
                 <button type="button" onClick={() => handleEdit(char)}>编辑</button>
-                <button type="button" onClick={() => handleDelete(char.id)}>删除</button>
+                <button type="button" onClick={() => setDeleteTarget(char.id)}>删除</button>
               </div>
             </article>
           ))
         )}
       </div>
+      {deleteTarget && (
+        <ConfirmDialog
+          title="删除人物"
+          message="确定删除此人物？此操作不可撤销。"
+          confirmText="删除"
+          cancelText="取消"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          variant="danger"
+        />
+      )}
     </section>
   );
 }

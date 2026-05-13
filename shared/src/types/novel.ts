@@ -115,6 +115,16 @@ export interface Novel {
   id: string;
   title: string;
   description?: string | null;
+  inspiration?: string | null;
+  outline?: string | null;
+  genre?: string | null;
+  coverImage?: string | null;
+  synopsis?: string | null;
+  targetWordCount?: number | null;
+  chapterWordMin?: number | null;
+  chapterWordMax?: number | null;
+  volumeCount?: number | null;
+  chaptersPerVol?: number | null;
   targetAudience?: string | null;
   bookSellingPoint?: string | null;
   competingFeel?: string | null;
@@ -138,7 +148,6 @@ export interface Novel {
   sourceKnowledgeDocumentId?: string | null;
   continuationBookAnalysisId?: string | null;
   continuationBookAnalysisSections?: BookAnalysisSectionKey[] | null;
-  outline?: string | null;
   structuredOutline?: string | null;
   volumes?: VolumePlan[];
   volumeSource?: "volume" | "legacy" | "empty";

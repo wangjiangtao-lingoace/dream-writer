@@ -71,10 +71,11 @@ router.get("/:novelId/:id", async (req, res, next) => {
 
 router.put("/:novelId/:id", async (req, res, next) => {
   try {
+    const { novelId } = novelIdSchema.parse(req.params);
     const { id } = idSchema.parse(req.params);
     const input = characterUpdateSchema.parse(req.body);
     const character = await prisma.character.update({
-      where: { id },
+      where: { id, novelId },
       data: input,
     });
     res.json({ success: true, data: character });
@@ -85,8 +86,9 @@ router.put("/:novelId/:id", async (req, res, next) => {
 
 router.delete("/:novelId/:id", async (req, res, next) => {
   try {
+    const { novelId } = novelIdSchema.parse(req.params);
     const { id } = idSchema.parse(req.params);
-    await prisma.character.delete({ where: { id } });
+    await prisma.character.delete({ where: { id, novelId } });
     res.json({ success: true, data: null });
   } catch (error) {
     next(error);

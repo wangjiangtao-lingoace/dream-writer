@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 
@@ -22,6 +22,19 @@ const AnalyzeCreate: React.FC = () => {
   const [step, setStep] = useState<"input" | "searching" | "preview" | "creating">("input");
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
 
   const handleSearch = async () => {
     if (!title.trim()) {
@@ -53,6 +66,7 @@ const AnalyzeCreate: React.FC = () => {
 
     setLoading(true);
     setStatus("正在创建拆书任务...");
+    abortControllerRef.current = new AbortController();
 
     try {
       // 1. 创建拆书任务
@@ -63,26 +77,59 @@ const AnalyzeCreate: React.FC = () => {
       });
       setAnalysisId(analysis.id);
 
-      // 2. 等待拆书完成
+      // 2. 等待拆书完成（非阻塞轮询）
       setStatus("深度拆解中...");
       let attempts = 0;
-      while (attempts < 30) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const status = await api.get<any>(`/api/book-analysis/${analysis.id}`);
-        if (status.status === "succeeded") break;
-        if (status.status === "failed") throw new Error("拆书失败");
-        attempts++;
-      }
+      const maxAttempts = 30;
+
+      await new Promise<void>((resolve, reject) => {
+        pollingRef.current = setInterval(async () => {
+          try {
+            if (abortControllerRef.current?.signal.aborted) {
+              stopPolling();
+              reject(new Error("已取消"));
+              return;
+            }
+
+            attempts++;
+            const status = await api.get<any>(`/api/book-analysis/${analysis.id}`);
+
+            if (status.status === "succeeded") {
+              stopPolling();
+              resolve();
+            } else if (status.status === "failed") {
+              stopPolling();
+              reject(new Error("拆书失败"));
+            } else if (attempts >= maxAttempts) {
+              stopPolling();
+              reject(new Error("拆书超时"));
+            }
+          } catch (error) {
+            stopPolling();
+            reject(error);
+          }
+        }, 2000);
+      });
 
       setStatus("分析完成！");
       setStep("creating");
     } catch (error: any) {
-      console.error("分析失败:", error);
-      alert(error.message || "分析失败，请重试");
+      if (error.message !== "已取消") {
+        console.error("分析失败:", error);
+        alert(error.message || "分析失败，请重试");
+      }
     } finally {
       setLoading(false);
       setStatus("");
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleCancelAnalyze = () => {
+    stopPolling();
+    setLoading(false);
+    setStatus("");
+    setStep("preview");
   };
 
   const handleCreateNovel = async () => {
@@ -369,6 +416,21 @@ const AnalyzeCreate: React.FC = () => {
             >
               重新搜索
             </button>
+            {loading && (
+              <button
+                onClick={handleCancelAnalyze}
+                style={{
+                  padding: "0.75rem 2rem",
+                  background: "var(--error, #c62828)",
+                  border: "none",
+                  borderRadius: "var(--radius-md)",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                取消
+              </button>
+            )}
             <button
               onClick={handleAnalyze}
               disabled={loading || searchResult.status === "no_source_found"}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { ConfirmDialog } from "./ui/CommonComponents";
 
 interface ChapterOutline {
   id: string;
@@ -49,6 +50,8 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
   const [showChapterForm, setShowChapterForm] = useState(false);
   const [editingVolumeId, setEditingVolumeId] = useState<string | null>(null);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [generatePrompt, setGeneratePrompt] = useState<{ type: "volume" | "chapter"; count: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
   const [volumeForm, setVolumeForm] = useState({
     title: "",
@@ -151,8 +154,16 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     }
   }
 
-  async function handleDeleteVolume(id: string) {
-    if (!confirm("确定删除此卷？所有章纲也会被删除。")) return;
+  function requestDeleteVolume(id: string) {
+    setConfirmAction({
+      title: "删除卷",
+      message: "确定删除此卷？所有章纲也会被删除。",
+      onConfirm: () => doDeleteVolume(id),
+    });
+  }
+
+  async function doDeleteVolume(id: string) {
+    setConfirmAction(null);
     try {
       await api(`/api/volumes/${id}`, { method: "DELETE" });
       onNotice("卷纲已删除。");
@@ -165,8 +176,16 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     }
   }
 
-  async function handleDeleteChapter(id: string) {
-    if (!confirm("确定删除此章纲？")) return;
+  function requestDeleteChapter(id: string) {
+    setConfirmAction({
+      title: "删除章纲",
+      message: "确定删除此章纲？此操作不可撤销。",
+      onConfirm: () => doDeleteChapter(id),
+    });
+  }
+
+  async function doDeleteChapter(id: string) {
+    setConfirmAction(null);
     try {
       await api(`/api/volumes/chapters/${id}`, { method: "DELETE" });
       onNotice("章纲已删除。");
@@ -176,16 +195,33 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     }
   }
 
-  async function handleGenerateVolumes() {
-    const volumeCount = prompt("要生成几卷？", "5");
-    if (!volumeCount) return;
-    
+  function handlePromptGenerate(type: "volume" | "chapter") {
+    setGeneratePrompt({ type, count: type === "volume" ? "5" : "10" });
+  }
+
+  async function handleConfirmGenerate() {
+    if (!generatePrompt) return;
+    const count = parseInt(generatePrompt.count);
+    if (isNaN(count) || count < 1) {
+      onNotice("请输入有效的数量。");
+      return;
+    }
+    setGeneratePrompt(null);
+
+    if (generatePrompt.type === "volume") {
+      await doGenerateVolumes(count);
+    } else {
+      await doGenerateChapters(count);
+    }
+  }
+
+  async function doGenerateVolumes(volumeCount: number) {
     setGenerating(true);
     onNotice("正在生成卷纲，请稍候...");
     try {
       const result = await api<{ content: string }>("/api/ai/volume-outline", {
         method: "POST",
-        body: JSON.stringify({ novelId, volumeCount: parseInt(volumeCount) }),
+        body: JSON.stringify({ novelId, volumeCount }),
       });
       
       // 尝试解析并创建卷纲
@@ -212,21 +248,18 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     }
   }
 
-  async function handleGenerateChapters() {
+  async function doGenerateChapters(chapterCount: number) {
     if (!activeVolumeId) {
       onNotice("请先选择一个卷。");
       return;
     }
-    
-    const chapterCount = prompt("要生成几个章纲？", "10");
-    if (!chapterCount) return;
-    
+
     setGenerating(true);
     onNotice("正在生成章纲，请稍候...");
     try {
       const result = await api<{ content: string }>("/api/ai/chapter-outline", {
         method: "POST",
-        body: JSON.stringify({ novelId, volumeId: activeVolumeId, chapterCount: parseInt(chapterCount) }),
+        body: JSON.stringify({ novelId, volumeId: activeVolumeId, chapterCount }),
       });
       
       // 尝试解析并创建章纲
@@ -308,10 +341,10 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
           <p>分卷规划剧情，每卷包含多个章纲，控制节奏和爽点。</p>
         </div>
         <div className="desk-actions">
-          <button type="button" onClick={handleGenerateVolumes} disabled={isBusy}>
+          <button type="button" onClick={() => handlePromptGenerate("volume")} disabled={isBusy}>
             {generating ? "生成中..." : "AI 生成卷纲"}
           </button>
-          <button type="button" onClick={handleGenerateChapters} disabled={!activeVolumeId || isBusy}>
+          <button type="button" onClick={() => handlePromptGenerate("chapter")} disabled={!activeVolumeId || isBusy}>
             {generating ? "生成中..." : "AI 生成章纲"}
           </button>
           <button type="button" onClick={() => setShowVolumeForm(!showVolumeForm)}>
@@ -322,6 +355,71 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
           </button>
         </div>
       </header>
+
+      {/* 数量输入提示 */}
+      {generatePrompt && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "0.75rem 1rem",
+          marginBottom: "1rem",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <span style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>
+            {generatePrompt.type === "volume" ? "要生成几卷？" : "要生成几个章纲？"}
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={generatePrompt.count}
+            onChange={(e) => setGeneratePrompt({ ...generatePrompt, count: e.target.value })}
+            style={{
+              width: "5rem",
+              padding: "0.375rem 0.5rem",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--bg-primary)",
+              color: "var(--text-primary)",
+              fontSize: "0.875rem",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleConfirmGenerate}
+            disabled={generating}
+            style={{
+              padding: "0.375rem 1rem",
+              background: "var(--accent)",
+              color: "var(--text-inverse)",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.875rem",
+              cursor: "pointer",
+            }}
+          >
+            确定
+          </button>
+          <button
+            type="button"
+            onClick={() => setGeneratePrompt(null)}
+            style={{
+              padding: "0.375rem 1rem",
+              background: "transparent",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.875rem",
+              cursor: "pointer",
+            }}
+          >
+            取消
+          </button>
+        </div>
+      )}
 
       {/* 统计信息 */}
       <div className="volume-stats">
@@ -525,7 +623,7 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
                 {vol.turningPoints && <p className="vol-turning-points" style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: "0.25rem 0 0" }}>转折点: {vol.turningPoints.substring(0, 50)}{vol.turningPoints.length > 50 ? "..." : ""}</p>}
                 <div className="card-actions">
                   <button type="button" onClick={(e) => { e.stopPropagation(); handleEditVolume(vol); }}>编辑</button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteVolume(vol.id); }}>删除</button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); requestDeleteVolume(vol.id); }}>删除</button>
                 </div>
               </article>
             ))
@@ -551,12 +649,24 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
               {chap.hook && <p className="chap-field"><span>钩子：</span>{chap.hook}</p>}
               <div className="card-actions">
                 <button type="button" onClick={() => handleEditChapter(chap)}>编辑</button>
-                <button type="button" onClick={() => handleDeleteChapter(chap.id)}>删除</button>
+                <button type="button" onClick={() => requestDeleteChapter(chap.id)}>删除</button>
               </div>
             </article>
           ))}
         </div>
       </div>
+
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmText="确认"
+          cancelText="取消"
+          onConfirm={confirmAction.onConfirm}
+          onCancel={() => setConfirmAction(null)}
+          variant="danger"
+        />
+      )}
     </section>
   );
 }

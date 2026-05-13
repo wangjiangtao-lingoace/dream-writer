@@ -1,7 +1,7 @@
 {
   "name": "dream-writer",
   "version": "1.0.0",
-  "description": "古色古香AI小说创作助手 - 传统线装书风格的智能写作平台",
+  "description": "AI小说创作助手 - 传统线装书风格的智能写作平台",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {

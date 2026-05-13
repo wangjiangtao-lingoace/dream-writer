@@ -25,9 +25,18 @@ const BookShelf: React.FC = () => {
   const [hoveredBook, setHoveredBook] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
 
   useEffect(() => {
     loadNovels();
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -91,7 +100,7 @@ const BookShelf: React.FC = () => {
   );
 
   const shelfRows: NovelListItem[][] = [];
-  const booksPerRow = typeof window !== "undefined" && window.innerWidth < 640 ? 2 : typeof window !== "undefined" && window.innerWidth < 1024 ? 3 : 5;
+  const booksPerRow = windowWidth < 640 ? 2 : windowWidth < 1024 ? 3 : 5;
   for (let i = 0; i < filteredNovels.length; i += booksPerRow) {
     shelfRows.push(filteredNovels.slice(i, i + booksPerRow));
   }

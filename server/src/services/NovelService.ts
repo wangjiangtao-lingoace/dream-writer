@@ -5,6 +5,12 @@ export interface CreateNovelInput {
   inspiration?: string;
   outline?: string;
   genre?: string;
+  synopsis?: string;
+  targetWordCount?: number;
+  chapterWordMin?: number;
+  chapterWordMax?: number;
+  volumeCount?: number;
+  chaptersPerVol?: number;
 }
 
 export interface UpdateNovelInput {
@@ -12,6 +18,12 @@ export interface UpdateNovelInput {
   inspiration?: string | null;
   outline?: string | null;
   genre?: string | null;
+  synopsis?: string | null;
+  targetWordCount?: number;
+  chapterWordMin?: number;
+  chapterWordMax?: number;
+  volumeCount?: number;
+  chaptersPerVol?: number;
   status?: string;
 }
 
@@ -54,6 +66,12 @@ export class NovelService {
         inspiration: input.inspiration || null,
         outline: input.outline || null,
         genre: input.genre || null,
+        synopsis: input.synopsis || null,
+        targetWordCount: input.targetWordCount || 300000,
+        chapterWordMin: input.chapterWordMin || 2000,
+        chapterWordMax: input.chapterWordMax || 4000,
+        volumeCount: input.volumeCount || 1,
+        chaptersPerVol: input.chaptersPerVol || 20,
       },
       include: { chapters: { orderBy: { order: "asc" } } },
     });

@@ -1,88 +1,5 @@
 import React from "react";
 
-interface LoadingSpinnerProps {
-  size?: "small" | "medium" | "large";
-  text?: string;
-  overlay?: boolean;
-}
-
-export function LoadingSpinner({ size = "medium", text, overlay = false }: LoadingSpinnerProps) {
-  const sizeClass = `loading-${size}`;
-  
-  if (overlay) {
-    return (
-      <div className="loading-overlay">
-        <div className="loading-content">
-          <div className={`loading-spinner ${sizeClass}`} />
-          {text && <p className="loading-text">{text}</p>}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="loading-container">
-      <div className={`loading-spinner ${sizeClass}`} />
-      {text && <p className="loading-text">{text}</p>}
-    </div>
-  );
-}
-
-interface ProgressBarProps {
-  value: number;
-  max?: number;
-  showLabel?: boolean;
-  variant?: "default" | "success" | "warning" | "error";
-}
-
-export function ProgressBar({ value, max = 100, showLabel = true, variant = "default" }: ProgressBarProps) {
-  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
-  
-  return (
-    <div className="progress-bar-container">
-      <div className="progress-bar-track">
-        <div
-          className={`progress-bar-fill progress-bar-${variant}`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-      {showLabel && (
-        <span className="progress-bar-label">{Math.round(percentage)}%</span>
-      )}
-    </div>
-  );
-}
-
-interface StatusBadgeProps {
-  status: string;
-  variant?: "default" | "success" | "warning" | "error" | "info";
-}
-
-export function StatusBadge({ status, variant = "default" }: StatusBadgeProps) {
-  return (
-    <span className={`status-badge status-badge-${variant}`}>
-      {status}
-    </span>
-  );
-}
-
-interface TooltipProps {
-  content: string;
-  children: React.ReactNode;
-  position?: "top" | "bottom" | "left" | "right";
-}
-
-export function Tooltip({ content, children, position = "top" }: TooltipProps) {
-  return (
-    <div className="tooltip-container">
-      {children}
-      <div className={`tooltip-content tooltip-${position}`}>
-        {content}
-      </div>
-    </div>
-  );
-}
-
 interface ConfirmDialogProps {
   title: string;
   message: string;
@@ -103,56 +20,65 @@ export function ConfirmDialog({
   variant = "danger",
 }: ConfirmDialogProps) {
   return (
-    <div className="confirm-overlay">
-      <div className="confirm-dialog">
-        <h3 className="confirm-title">{title}</h3>
-        <p className="confirm-message">{message}</p>
-        <div className="confirm-actions">
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.4)",
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-card, #fff)",
+          border: "1px solid var(--border, #e5e7eb)",
+          borderRadius: "var(--radius-md, 8px)",
+          padding: "1.5rem",
+          maxWidth: "28rem",
+          width: "90%",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+        }}
+      >
+        <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.125rem", color: "var(--text-primary, #111)" }}>{title}</h3>
+        <p style={{ margin: "0 0 1.25rem", fontSize: "0.875rem", color: "var(--text-secondary, #666)", lineHeight: 1.6 }}>{message}</p>
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
           <button
             type="button"
-            className="confirm-button confirm-cancel"
             onClick={onCancel}
+            style={{
+              padding: "0.5rem 1rem",
+              background: "transparent",
+              color: "var(--text-secondary, #666)",
+              border: "1px solid var(--border, #e5e7eb)",
+              borderRadius: "var(--radius-sm, 4px)",
+              fontSize: "0.875rem",
+              cursor: "pointer",
+            }}
           >
             {cancelText}
           </button>
           <button
             type="button"
-            className={`confirm-button confirm-${variant}`}
             onClick={onConfirm}
+            style={{
+              padding: "0.5rem 1rem",
+              background: variant === "danger" ? "#dc2626" : "var(--accent, #8b4513)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "var(--radius-sm, 4px)",
+              fontSize: "0.875rem",
+              cursor: "pointer",
+            }}
           >
             {confirmText}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-interface EmptyStateProps {
-  icon?: string;
-  title: string;
-  description?: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
-}
-
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
-  return (
-    <div className="empty-state">
-      {icon && <div className="empty-state-icon">{icon}</div>}
-      <h3 className="empty-state-title">{title}</h3>
-      {description && <p className="empty-state-description">{description}</p>}
-      {action && (
-        <button
-          type="button"
-          className="empty-state-action"
-          onClick={action.onClick}
-        >
-          {action.label}
-        </button>
-      )}
     </div>
   );
 }

@@ -36,6 +36,7 @@ model Novel {
   pleasurePoints PleasurePoint[]
   emotionCurve EmotionCurve[]
   consistencyIssues ConsistencyIssue[]
+  consistencyCheckResults ConsistencyCheckResult[]
   mainlines   Mainline[]
   hooks       Hook[]
   worldviews  Worldview[]
@@ -353,6 +354,22 @@ model ConsistencyIssue {
   updatedAt   DateTime @updatedAt
 
   @@index([novelId, status])
+}
+
+// 13b. 一致性校验结果汇总
+model ConsistencyCheckResult {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterId   String
+  overallScore Int     @default(0)
+  summary     String   @default("")
+  checkedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, chapterId])
+  @@index([novelId, checkedAt])
 }
 
 // 14. 记忆系统
