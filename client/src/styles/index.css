@@ -1,5 +1,4 @@
 /* Dream Writer - 全局样式 */
-@import './ancient-theme.css';
 
 * {
   margin: 0;
@@ -9,15 +8,15 @@
 
 html {
   font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: 'Georgia', 'Songti SC', 'SimSun', serif;
-  background-color: var(--ancient-paper-bg);
-  color: var(--ancient-ink-color);
-  line-height: 1.8;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-primary, #f8f1e4);
+  color: var(--text-primary, #25180f);
+  line-height: 1.6;
 }
 
 #root {
@@ -26,21 +25,47 @@ body {
 
 /* 滚动条样式 */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--ancient-paper-light);
-  border-radius: 6px;
+  background: var(--bg-secondary, #fffaf0);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--ancient-seal-color);
-  border-radius: 6px;
-  border: 2px solid var(--ancient-paper-light);
+  background: var(--border, #d8b27a);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ancient-accent-color);
+  background: var(--border-dark, #c8a26a);
+}
+
+/* 通用链接样式 */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 通用按钮重置 */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: inherit;
+}
+
+/* 通用输入框样式 */
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* 选择文本样式 */
+::selection {
+  background: rgba(149, 31, 23, 0.2);
+  color: var(--text-primary, #25180f);
 }

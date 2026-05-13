@@ -3,7 +3,7 @@ import {
   isBuiltinLLMProvider,
   type BuiltinLLMProvider,
   type LLMProvider,
-} from "@ai-novel/shared/types/llm";
+} from "@dream-writer/shared/types/llm";
 
 export interface ProviderConfig {
   name: string;
@@ -139,6 +139,16 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envBaseURLKey: "OLLAMA_BASE_URL",
     envModelKey: "OLLAMA_MODEL",
     requiresApiKey: false,
+  },
+  mimo: {
+    name: "MiMo",
+    baseURL: "https://token-plan-sgp.xiaomimimo.com/v1",
+    defaultModel: "mimo-v2.5-pro",
+    models: ["mimo-v2.5-pro", "mimo-v2.5-flash"],
+    envKey: "MIMO_API_KEY",
+    envBaseURLKey: "MIMO_BASE_URL",
+    envModelKey: "MIMO_MODEL",
+    maxTokens: 8192,
   },
 };
 

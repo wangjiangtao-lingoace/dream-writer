@@ -20,9 +20,6 @@ function resolveDatabaseUrl(databaseUrl?: string) {
 
 export default defineConfig({
   schema: path.join(configDir, "prisma", "schema.prisma"),
-  migrations: {
-    seed: "ts-node-dev --transpile-only src/db/seed.ts",
-  },
   datasource: {
     url: resolveDatabaseUrl(process.env.DATABASE_URL),
   },

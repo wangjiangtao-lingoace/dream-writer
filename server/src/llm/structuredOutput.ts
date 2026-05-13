@@ -1,5 +1,5 @@
 import { toJSONSchema, type ZodType } from "zod";
-import type { LLMProvider } from "@ai-novel/shared/types/llm";
+import type { LLMProvider } from "@dream-writer/shared/types/llm";
 import { isBuiltInProvider } from "./providers";
 
 export type StructuredExecutionMode = "plain" | "structured";

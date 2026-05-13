@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import type { BaseMessageChunk } from "@langchain/core/messages";
-import type { SSEFrame } from "@ai-novel/shared/types/api";
+import type { SSEFrame } from "@dream-writer/shared/types/api";
 
 export type WritableSSEFrame = Extract<
   SSEFrame,

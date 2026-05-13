@@ -1,260 +1,157 @@
 import { Router } from "express";
-import type { ApiResponse } from "@ai-novel/shared/types/api";
 import { z } from "zod";
-import { llmProviderSchema } from "../llm/providerSchema";
-import { authMiddleware } from "../middleware/auth";
-import { validate } from "../middleware/validate";
-import { bookAnalysisService } from "../services/bookAnalysis/BookAnalysisService";
+import { BookAnalysisService } from "../services/BookAnalysisService";
+import { imitationPlanService } from "../services/ImitationPlanService";
 
 const router = Router();
+const service = new BookAnalysisService();
 
-const providerSchema = llmProviderSchema;
-const bookAnalysisStatusSchema = z.enum(["draft", "queued", "running", "succeeded", "failed", "cancelled", "archived"]);
-const sectionKeySchema = z.enum([
-  "overview",
-  "plot_structure",
-  "timeline",
-  "character_system",
-  "worldbuilding",
-  "themes",
-  "style_technique",
-  "market_highlights",
-]);
-
-const analysisParamsSchema = z.object({
+const idSchema = z.object({ id: z.string().trim().min(1) });
+const sectionSchema = z.object({
   id: z.string().trim().min(1),
-});
-
-const analysisSectionParamsSchema = z.object({
-  id: z.string().trim().min(1),
-  sectionKey: sectionKeySchema,
-});
-
-const listQuerySchema = z.object({
-  keyword: z.string().trim().optional(),
-  status: bookAnalysisStatusSchema.optional(),
-  documentId: z.string().trim().optional(),
+  sectionKey: z.string().trim().min(1),
 });
 
 const createSchema = z.object({
-  documentId: z.string().trim().min(1),
-  versionId: z.string().trim().optional(),
-  provider: providerSchema.optional(),
-  model: z.string().trim().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().int().min(256).max(32768).optional(),
-  includeTimeline: z.boolean().optional().default(false),
+  title: z.string().trim().min(1, "拆书标题不能为空。"),
+  sourceTitle: z.string().trim().optional(),
+  sourceText: z.string().trim().optional(),
+  novelId: z.string().trim().min(1).nullable().optional(),
 });
 
-const publishSchema = z.object({
-  novelId: z.string().trim().min(1),
+const oneClickSchema = z.object({
+  title: z.string().trim().min(1, "拆书标题不能为空。"),
+  sourceTitle: z.string().trim().optional(),
+  sourceText: z.string().trim().min(80, "原文至少需要 80 个字，才能进行有效拆书。"),
+  novelId: z.string().trim().min(1, "一键拆书创作需要先选择作品。"),
 });
 
-const sectionUpdateSchema = z.object({
+const listQuerySchema = z.object({
+  novelId: z.string().trim().min(1).optional(),
+  scope: z.enum(["novel", "global", "all"]).optional(),
+});
+
+const updateSectionSchema = z.object({
   editedContent: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   frozen: z.boolean().optional(),
-}).refine(
-  (value) => value.editedContent !== undefined || value.notes !== undefined || value.frozen !== undefined,
-  {
-    message: "At least one field must be provided.",
-  },
-);
-
-const sectionOptimizePreviewSchema = z.object({
-  currentDraft: z.string(),
-  instruction: z.string().trim().min(1),
+  usedForImitation: z.boolean().optional(),
 });
 
-const statusUpdateSchema = z.object({
-  status: z.enum(["archived"]),
+const publishSchema = z.object({
+  novelId: z.string().trim().min(1).nullable().optional(),
 });
 
-const exportQuerySchema = z.object({
-  format: z.enum(["markdown", "json"]).default("markdown"),
-});
-
-router.use(authMiddleware);
-
-router.get("/", validate({ query: listQuerySchema }), async (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     const query = listQuerySchema.parse(req.query);
-    const data = await bookAnalysisService.listAnalyses(query);
-    res.status(200).json({
-      success: true,
-      data,
-      message: "Book analyses loaded.",
-    } satisfies ApiResponse<typeof data>);
+    res.json({ success: true, data: await service.listBookAnalyses(query) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/", validate({ body: createSchema }), async (req, res, next) => {
+router.post("/", async (req, res, next) => {
   try {
-    const body = req.body as z.infer<typeof createSchema>;
-    const data = await bookAnalysisService.createAnalysis(body);
+    const input = createSchema.parse(req.body);
+    res.status(201).json({ success: true, data: await service.createBookAnalysis(input) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/one-click", async (req, res, next) => {
+  try {
+    const input = oneClickSchema.parse(req.body);
+    const analysis = await service.createBookAnalysis(input);
+    if (!analysis) {
+      throw new Error("拆书创建失败。");
+    }
+
+    const materializedAnalysis = await service.materializeToKnowledge(analysis.id, input.novelId);
+    const imitationPlan = await imitationPlanService.createFromBookAnalysis(analysis.id, input.novelId);
+    const materializedPlan = await imitationPlanService.materialize(imitationPlan.id);
+    const pipelineJob = await imitationPlanService.applyToPipeline(imitationPlan.id, {
+      autoContinue: true,
+      autoDraftChapters: 3,
+      volumeCount: 1,
+      chaptersPerVolume: 3,
+      targetWordCount: 1800,
+      sourcePolicy: "verified_only",
+    });
+
     res.status(201).json({
       success: true,
-      data,
-      message: "Book analysis created.",
-    } satisfies ApiResponse<typeof data>);
+      data: {
+        analysis,
+        materializedAnalysis,
+        imitationPlan: materializedPlan,
+        pipelineJob,
+      },
+    });
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/:id", validate({ params: analysisParamsSchema }), async (req, res, next) => {
+router.get("/:id", async (req, res, next) => {
   try {
-    const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-    const data = await bookAnalysisService.getAnalysisById(id);
-    if (!data) {
-      res.status(404).json({
-        success: false,
-        error: "Book analysis not found.",
-      } satisfies ApiResponse<null>);
+    const { id } = idSchema.parse(req.params);
+    const analysis = await service.getBookAnalysis(id);
+    if (!analysis) {
+      res.status(404).json({ success: false, error: "拆书任务不存在。" });
       return;
     }
-    res.status(200).json({
-      success: true,
-      data,
-      message: "Book analysis loaded.",
-    } satisfies ApiResponse<typeof data>);
+    res.json({ success: true, data: analysis });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/:id/rebuild", validate({ params: analysisParamsSchema }), async (req, res, next) => {
+router.post("/:id/rebuild", async (req, res, next) => {
   try {
-    const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-    const data = await bookAnalysisService.rebuildAnalysis(id);
-    res.status(202).json({
-      success: true,
-      data,
-      message: "Book analysis rebuild queued.",
-    } satisfies ApiResponse<typeof data>);
+    const { id } = idSchema.parse(req.params);
+    res.json({ success: true, data: await service.rebuildBookAnalysis(id) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/:id/copy", validate({ params: analysisParamsSchema }), async (req, res, next) => {
+router.patch("/:id/sections/:sectionKey", async (req, res, next) => {
   try {
-    const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-    const data = await bookAnalysisService.copyAnalysis(id);
-    res.status(201).json({
-      success: true,
-      data,
-      message: "Book analysis copied.",
-    } satisfies ApiResponse<typeof data>);
+    const { id, sectionKey } = sectionSchema.parse(req.params);
+    const input = updateSectionSchema.parse(req.body);
+    res.json({ success: true, data: await service.updateSection(id, sectionKey, input) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post(
-  "/:id/publish",
-  validate({ params: analysisParamsSchema, body: publishSchema }),
-  async (req, res, next) => {
-    try {
-      const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-      const body = req.body as z.infer<typeof publishSchema>;
-      const data = await bookAnalysisService.publishToNovelKnowledge(id, body.novelId);
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Book analysis published to novel knowledge.",
-      } satisfies ApiResponse<typeof data>);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.post(
-  "/:id/sections/:sectionKey/optimize-preview",
-  validate({ params: analysisSectionParamsSchema, body: sectionOptimizePreviewSchema }),
-  async (req, res, next) => {
-    try {
-      const { id, sectionKey } = req.params as z.infer<typeof analysisSectionParamsSchema>;
-      const body = req.body as z.infer<typeof sectionOptimizePreviewSchema>;
-      const data = await bookAnalysisService.optimizeSectionPreview(id, sectionKey, body);
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Book analysis section optimize preview generated.",
-      } satisfies ApiResponse<typeof data>);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.post(
-  "/:id/sections/:sectionKey/regenerate",
-  validate({ params: analysisSectionParamsSchema }),
-  async (req, res, next) => {
-    try {
-      const { id, sectionKey } = req.params as z.infer<typeof analysisSectionParamsSchema>;
-      const data = await bookAnalysisService.regenerateSection(id, sectionKey);
-      res.status(202).json({
-        success: true,
-        data,
-        message: "Book analysis section regeneration queued.",
-      } satisfies ApiResponse<typeof data>);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.patch(
-  "/:id/sections/:sectionKey",
-  validate({ params: analysisSectionParamsSchema, body: sectionUpdateSchema }),
-  async (req, res, next) => {
-    try {
-      const { id, sectionKey } = req.params as z.infer<typeof analysisSectionParamsSchema>;
-      const body = req.body as z.infer<typeof sectionUpdateSchema>;
-      const data = await bookAnalysisService.updateSection(id, sectionKey, body);
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Book analysis section updated.",
-      } satisfies ApiResponse<typeof data>);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.patch(
-  "/:id",
-  validate({ params: analysisParamsSchema, body: statusUpdateSchema }),
-  async (req, res, next) => {
-    try {
-      const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-      const body = req.body as z.infer<typeof statusUpdateSchema>;
-      const data = await bookAnalysisService.updateAnalysisStatus(id, body.status);
-      res.status(200).json({
-        success: true,
-        data,
-        message: "Book analysis updated.",
-      } satisfies ApiResponse<typeof data>);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.get("/:id/export", validate({ params: analysisParamsSchema, query: exportQuerySchema }), async (req, res, next) => {
+router.post("/:id/publish", async (req, res, next) => {
   try {
-    const { id } = req.params as z.infer<typeof analysisParamsSchema>;
-    const query = exportQuerySchema.parse(req.query);
-    const data = await bookAnalysisService.buildExportContent(id, query.format);
-    res.setHeader("Content-Type", data.contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(data.fileName)}"`);
-    res.status(200).send(data.content);
+    const { id } = idSchema.parse(req.params);
+    const input = publishSchema.parse(req.body);
+    res.json({ success: true, data: await service.publishToKnowledge(id, input.novelId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/materialize", async (req, res, next) => {
+  try {
+    const { id } = idSchema.parse(req.params);
+    const input = publishSchema.parse(req.body);
+    res.json({ success: true, data: await service.materializeToKnowledge(id, input.novelId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/imitation-plan", async (req, res, next) => {
+  try {
+    const { id } = idSchema.parse(req.params);
+    const input = publishSchema.parse(req.body);
+    res.status(201).json({ success: true, data: await imitationPlanService.createFromBookAnalysis(id, input.novelId) });
   } catch (error) {
     next(error);
   }

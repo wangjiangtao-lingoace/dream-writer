@@ -2,7 +2,7 @@ import {
   isBuiltinLLMProvider,
   type BuiltinLLMProvider,
   type LLMProvider,
-} from "@ai-novel/shared/types/llm";
+} from "@dream-writer/shared/types/llm";
 import {
   canUseForcedJsonOutput,
   resolveStructuredOutputProfile,
@@ -158,6 +158,10 @@ export function getJsonCapability(provider: LLMProvider, model?: string, baseURL
     },
     ollama: {
       supportsJsonObject: false,
+      supportsJsonSchema: false,
+    },
+    mimo: {
+      supportsJsonObject: true,
       supportsJsonSchema: false,
     },
   };

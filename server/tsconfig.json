@@ -8,9 +8,12 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@ai-novel/shared/*": ["../shared/dist/*"]
+      "@dream-writer/shared/*": ["../shared/dist/*"]
     },
     "types": ["node"],
+    "allowImportingTsExtensions": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noEmit": false
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],

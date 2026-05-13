@@ -1,0 +1,149 @@
+import { prisma } from "../db/prisma";
+
+export interface CreateNovelInput {
+  title: string;
+  inspiration?: string;
+  outline?: string;
+  genre?: string;
+}
+
+export interface UpdateNovelInput {
+  title?: string;
+  inspiration?: string | null;
+  outline?: string | null;
+  genre?: string | null;
+  status?: string;
+}
+
+function countWords(content: string): number {
+  const compact = content.replace(/\s/g, "");
+  return compact.length;
+}
+
+export class NovelService {
+  listNovels() {
+    return prisma.novel.findMany({
+      orderBy: { updatedAt: "desc" },
+      include: {
+        _count: { select: { chapters: true, characters: true, assets: true } },
+        chapters: {
+          orderBy: { order: "asc" },
+          take: 1,
+          select: { id: true, title: true, order: true, status: true, updatedAt: true },
+        },
+      },
+    });
+  }
+
+  getNovel(id: string) {
+    return prisma.novel.findUnique({
+      where: { id },
+      include: {
+        chapters: { orderBy: { order: "asc" } },
+        characters: { orderBy: { updatedAt: "desc" } },
+        assets: { orderBy: { updatedAt: "desc" } },
+      },
+    });
+  }
+
+  async createNovel(input: CreateNovelInput) {
+    // 不自动创建章节，让用户手动创建或通过 AI 生成
+    return prisma.novel.create({
+      data: {
+        title: input.title,
+        inspiration: input.inspiration || null,
+        outline: input.outline || null,
+        genre: input.genre || null,
+      },
+      include: { chapters: { orderBy: { order: "asc" } } },
+    });
+  }
+
+  updateNovel(id: string, input: UpdateNovelInput) {
+    return prisma.novel.update({
+      where: { id },
+      data: input,
+      include: { chapters: { orderBy: { order: "asc" } } },
+    });
+  }
+
+  deleteNovel(id: string) {
+    return prisma.novel.delete({ where: { id } });
+  }
+
+  async createChapter(novelId: string, input: { title: string; summary?: string; order?: number }) {
+    // 自动计算下一个序号（确保顺序递增）
+    const last = await prisma.chapter.findFirst({
+      where: { novelId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    
+    const nextOrder = (last?.order ?? 0) + 1;
+    
+    // 如果指定了序号，检查是否有效
+    if (input.order !== undefined) {
+      // 指定的序号必须大于当前最大序号
+      if (input.order <= (last?.order ?? 0)) {
+        throw new Error(`章节序号必须大于当前最大序号 ${last?.order ?? 0}`);
+      }
+    }
+    
+    return prisma.chapter.create({
+      data: {
+        novelId,
+        order: input.order ?? nextOrder,
+        title: input.title,
+        summary: input.summary || null,
+        status: "planned",
+      },
+    });
+  }
+
+  updateChapter(
+    novelId: string,
+    chapterId: string,
+    input: { title?: string; summary?: string | null; content?: string; status?: string; source?: string },
+  ) {
+    return prisma.chapter.update({
+      where: { id: chapterId, novelId },
+      data: {
+        ...input,
+        wordCount: typeof input.content === "string" ? countWords(input.content) : undefined,
+      },
+    });
+  }
+
+  async deleteChapter(novelId: string, chapterId: string) {
+    // 先获取要删除的章节
+    const chapter = await prisma.chapter.findUnique({
+      where: { id: chapterId, novelId },
+    });
+    
+    if (!chapter) {
+      throw new Error("章节不存在。");
+    }
+    
+    // 删除章节
+    await prisma.chapter.delete({ where: { id: chapterId } });
+    
+    // 重新排列后续章节的序号
+    const subsequentChapters = await prisma.chapter.findMany({
+      where: {
+        novelId,
+        order: { gt: chapter.order },
+      },
+      orderBy: { order: "asc" },
+    });
+    
+    // 更新后续章节的序号
+    for (const ch of subsequentChapters) {
+      await prisma.chapter.update({
+        where: { id: ch.id },
+        data: { order: ch.order - 1 },
+      });
+    }
+    
+    return { success: true };
+  }
+}

@@ -1,4 +1,4 @@
-import type { LLMProvider } from "@ai-novel/shared/types/llm";
+import type { LLMProvider } from "@dream-writer/shared/types/llm";
 import {
   isBuiltInProvider,
   providerRequiresApiKey,

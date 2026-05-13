@@ -1,5 +1,5 @@
 import type { BaseMessageChunk } from "@langchain/core/messages";
-import type { LLMProvider } from "@ai-novel/shared/types/llm";
+import type { LLMProvider } from "@dream-writer/shared/types/llm";
 
 const THINK_OPEN_TAG = "<think>";
 const THINK_CLOSE_TAG = "</think>";

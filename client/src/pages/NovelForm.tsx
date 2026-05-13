@@ -1,0 +1,321 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../lib/api";
+
+const NovelForm: React.FC = () => {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    title: "",
+    genre: "",
+    inspiration: "",
+  });
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string>("");
+  const [creating, setCreating] = useState(false);
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title.trim()) {
+      alert("请输入作品标题");
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const novel = await api.post<{ id: string }>("/api/novels", formData);
+
+      if (coverFile && novel?.id) {
+        const formDataUpload = new FormData();
+        formDataUpload.append("cover", coverFile);
+        await fetch(`/api/upload/cover?novelId=${novel.id}`, {
+          method: "POST",
+          body: formDataUpload,
+        });
+      }
+
+      if (novel?.id) {
+        navigate(`/novel/${novel.id}`);
+      }
+    } catch (error) {
+      console.error("创建作品失败:", error);
+      alert("创建作品失败，请重试");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="novel-form-page" style={{
+      minHeight: "100vh",
+      background: "var(--bg-primary)",
+      backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4a574' fill-opacity='0.05'%3E%3Cpath d='M50 0L51 100H49L50 0z' /%3E%3Cpath d='M0 50H100V52H0z' /%3E%3C/g%3E%3C/svg%3E\")",
+    }}>
+      <header className="form-header" style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "1rem",
+        padding: "1.5rem 2rem",
+        borderBottom: "1px solid var(--border)",
+        background: "var(--bg-card)",
+      }}>
+        <button className="btn-back" onClick={() => navigate("/create")} style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.5rem 1rem",
+          background: "transparent",
+          color: "var(--text-secondary)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-md)",
+          fontSize: "0.875rem",
+          cursor: "pointer",
+        }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          返回
+        </button>
+        <h1 style={{
+          fontFamily: "var(--font-serif)",
+          fontSize: "1.5rem",
+          color: "var(--text-primary)",
+          letterSpacing: "0.05em",
+        }}>创建新作品</h1>
+      </header>
+
+      <main className="form-content" style={{
+        display: "flex",
+        justifyContent: "center",
+        padding: "3rem 2rem",
+      }}>
+        <form onSubmit={handleSubmit} className="novel-form" style={{
+          display: "grid",
+          gridTemplateColumns: "280px 1fr",
+          gap: "2rem",
+          maxWidth: "960px",
+          width: "100%",
+        }}>
+          <div className="form-cover">
+            <div
+              className="cover-upload"
+              onClick={() => document.getElementById("cover-input")?.click()}
+              style={{
+                width: "280px",
+                height: "380px",
+                borderRadius: "var(--radius-lg)",
+                border: "2px dashed var(--border)",
+                background: "var(--bg-card)",
+                cursor: "pointer",
+                overflow: "hidden",
+                position: "relative",
+                transition: "all var(--transition-normal)",
+              }}
+            >
+              {coverPreview ? (
+                <img src={coverPreview} alt="封面预览" style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }} />
+              ) : (
+                <div className="cover-placeholder" style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  gap: "1rem",
+                  color: "var(--text-muted)",
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "3rem", height: "3rem", opacity: 0.5 }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  <span style={{ fontSize: "0.875rem" }}>点击上传封面</span>
+                  <span className="cover-hint" style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>支持 JPG、PNG 格式</span>
+                </div>
+              )}
+            </div>
+            <input
+              id="cover-input"
+              type="file"
+              accept="image/*"
+              onChange={handleCoverChange}
+              style={{ display: "none" }}
+            />
+          </div>
+
+          <div className="form-fields" style={{
+            background: "var(--bg-card)",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border)",
+            padding: "2rem",
+          }}>
+            <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="title" style={{
+                display: "block",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                marginBottom: "0.5rem",
+              }}>作品标题</label>
+              <input
+                id="title"
+                name="title"
+                type="text"
+                value={formData.title}
+                onChange={handleInputChange}
+                placeholder="请输入作品标题"
+                maxLength={50}
+                required
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  fontSize: "1rem",
+                  outline: "none",
+                }}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="genre" style={{
+                display: "block",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                marginBottom: "0.5rem",
+              }}>作品类型</label>
+              <select
+                id="genre"
+                name="genre"
+                value={formData.genre}
+                onChange={handleInputChange}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  fontSize: "1rem",
+                  outline: "none",
+                }}
+              >
+                <option value="">请选择类型</option>
+                <option value="都市玄幻">都市玄幻</option>
+                <option value="仙侠修真">仙侠修真</option>
+                <option value="历史架空">历史架空</option>
+                <option value="科幻未来">科幻未来</option>
+                <option value="悬疑推理">悬疑推理</option>
+                <option value="都市言情">都市言情</option>
+                <option value="游戏竞技">游戏竞技</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: "2rem" }}>
+              <label htmlFor="inspiration" style={{
+                display: "block",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                marginBottom: "0.5rem",
+              }}>创作灵感</label>
+              <textarea
+                id="inspiration"
+                name="inspiration"
+                value={formData.inspiration}
+                onChange={handleInputChange}
+                placeholder="描述你的创作灵感和故事梗概..."
+                rows={6}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  fontSize: "1rem",
+                  outline: "none",
+                  resize: "vertical",
+                  minHeight: "120px",
+                }}
+              />
+            </div>
+
+            <div className="form-actions" style={{
+              display: "flex",
+              justifyContent: "flex-end",
+            }}>
+              <button
+                type="submit"
+                className="btn-submit"
+                disabled={creating}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.75rem 2rem",
+                  background: creating ? "var(--text-muted)" : "var(--accent)",
+                  color: "var(--text-inverse)",
+                  border: "none",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "1rem",
+                  cursor: creating ? "not-allowed" : "pointer",
+                }}
+              >
+                {creating ? (
+                  <>
+                    <span className="btn-loading" style={{
+                      width: "1rem",
+                      height: "1rem",
+                      border: "2px solid rgba(255,255,255,0.3)",
+                      borderTopColor: "white",
+                      borderRadius: "50%",
+                      animation: "spin 1s linear infinite",
+                    }}></span>
+                    创建中...
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1.25rem", height: "1.25rem" }}>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    开始创作
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+      </main>
+    </div>
+  );
+};
+
+export default NovelForm;
