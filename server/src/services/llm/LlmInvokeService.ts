@@ -38,10 +38,6 @@ function resolveModelConfig(): ResolvedModelConfig | null {
   if (providerRequiresApiKey(provider) && !apiKey) {
     return null;
   }
-  if (provider === "anthropic") {
-    return null;
-  }
-
   return { provider, model, baseURL, apiKey };
 }
 
