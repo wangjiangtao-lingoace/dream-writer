@@ -20,6 +20,7 @@ export const AppLayout: React.FC = () => {
         <TopBar
           actions={
             <button
+              aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               style={{
                 background: "transparent",

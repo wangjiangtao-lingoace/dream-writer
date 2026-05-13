@@ -104,6 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
               key={item.key}
               onClick={() => navigate(item.path)}
               title={collapsed ? item.label : undefined}
+              aria-current={isActive(item.path) ? "page" : undefined}
               style={{
                 display: "flex",
                 alignItems: "center",

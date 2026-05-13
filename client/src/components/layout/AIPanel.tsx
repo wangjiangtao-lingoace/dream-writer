@@ -30,6 +30,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
 
   return (
     <aside
+      aria-label="AI 助手"
       style={{
         width: "var(--ai-panel-width)",
         height: "100%",

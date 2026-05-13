@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { api } from "../lib/api";
 
 interface UseAIOptions {
@@ -11,6 +11,11 @@ interface UseAIOptions {
 export const useAI = (options: UseAIOptions = {}) => {
   const { novelId, chapterId, onSuccess, onError } = options;
 
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   const generateContent = useCallback(
     async (prompt: string) => {
       try {
@@ -19,15 +24,15 @@ export const useAI = (options: UseAIOptions = {}) => {
           chapterId,
           prompt,
         });
-        onSuccess?.(response.content);
+        onSuccessRef.current?.(response.content);
         return response.content;
       } catch (error) {
         const msg = error instanceof Error ? error.message : "生成失败";
-        onError?.(msg);
+        onErrorRef.current?.(msg);
         throw error;
       }
     },
-    [novelId, chapterId, onSuccess, onError]
+    [novelId, chapterId]
   );
 
   const checkConsistency = useCallback(
@@ -41,20 +46,22 @@ export const useAI = (options: UseAIOptions = {}) => {
         return response;
       } catch (error) {
         const msg = error instanceof Error ? error.message : "检查失败";
-        onError?.(msg);
+        onErrorRef.current?.(msg);
         throw error;
       }
     },
-    [novelId, chapterId, onError]
+    [novelId, chapterId]
   );
 
   const streamContent = useCallback(
     async (prompt: string, onChunk: (chunk: string) => void) => {
+      const controller = new AbortController();
       try {
         const response = await fetch("/api/ai/chapter-content/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ novelId, chapterId, prompt }),
+          signal: controller.signal,
         });
 
         if (!response.ok) throw new Error("流式请求失败");
@@ -70,12 +77,14 @@ export const useAI = (options: UseAIOptions = {}) => {
           onChunk(chunk);
         }
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
         const msg = error instanceof Error ? error.message : "流式生成失败";
-        onError?.(msg);
+        onErrorRef.current?.(msg);
         throw error;
       }
+      return () => controller.abort();
     },
-    [novelId, chapterId, onError]
+    [novelId, chapterId]
   );
 
   return { generateContent, checkConsistency, streamContent };
