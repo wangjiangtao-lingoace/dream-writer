@@ -340,7 +340,7 @@ AI 面板根据以下因素动态调整推荐：
 
 - **服务端状态**：TanStack Query（已有）
 - **AI 面板状态**：React Context（当前操作、输出内容、加载状态）
-- **用户配置**：localStorage（API Key、模型选择）
+- **AI 配置**：后端数据库存储（见 5.5）
 - **UI 状态**：React useState（侧边栏折叠、面板展开）
 
 ### 5.4 AI 流式输出
@@ -348,6 +348,48 @@ AI 面板根据以下因素动态调整推荐：
 - 前端：EventSource / fetch + ReadableStream
 - 后端：SSE（Server-Sent Events）
 - 渲染：逐字渲染 + 光标动画
+
+### 5.5 后端：AI 配置管理（BYOK）
+
+**数据库表**：
+
+```prisma
+model AIConfig {
+  id        String   @id @default(cuid())
+  provider  String   // deepseek, openai, anthropic, qwen, glm, kimi, gemini, mimo
+  model     String   // deepseek-chat, gpt-4o, etc.
+  apiKey    String   // 加密存储
+  baseUrl   String?  // 自定义端点（可选）
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, model])
+}
+```
+
+**API 端点**：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/ai-config` | 获取所有配置 |
+| GET | `/api/ai-config/default` | 获取当前默认配置 |
+| POST | `/api/ai-config` | 创建配置 |
+| PUT | `/api/ai-config/:id` | 更新配置 |
+| DELETE | `/api/ai-config/:id` | 删除配置 |
+| POST | `/api/ai-config/:id/test` | 测试连接 |
+
+**LlmInvokeService 改动**：
+
+读取 API Key 优先级：
+1. 请求头 `X-LLM-Provider` + `X-LLM-API-Key`（前端指定）
+2. 数据库 `AIConfig` 表中 `isDefault=true` 的配置
+3. `.env` 环境变量（兼容私有部署）
+
+**安全性**：
+- API Key 在数据库中加密存储（AES-256）
+- 前端不存储 Key，只存储 provider + model
+- 传输使用 HTTPS
 
 ---
 
@@ -387,7 +429,20 @@ client/src/
 │   └── AIContext.tsx       ← AI 面板状态
 └── hooks/
     ├── useAI.ts            ← AI 操作 hook
-    └── useConfig.ts        ← 用户配置 hook
+    └── useConfig.ts        ← AI 配置 hook
+
+server/src/
+├── routes/
+│   ├── aiConfig.ts         ← 新增：AI 配置 CRUD
+│   └── ai.ts               ← 修改：支持请求头指定 provider
+├── services/
+│   └── llm/
+│       └── LlmInvokeService.ts  ← 修改：读取优先级逻辑
+└── utils/
+    └── crypto.ts            ← 新增：API Key 加密/解密
+
+server/prisma/
+└── schema.prisma            ← 新增：AIConfig 表
 ```
 
 ---
@@ -397,9 +452,10 @@ client/src/
 | 风险 | 缓解措施 |
 |------|----------|
 | 全面重构工作量大 | 分阶段交付：先基础设施，再核心页面 |
-| AI Key 安全 | localStorage 存储，不传后端，不提交到 git |
-| 现有功能回归 | 保留 API 层不变，只改前端 UI |
+| API Key 安全 | 数据库加密存储（AES-256），前端不持有 Key |
+| 现有功能回归 | 保留 .env 兼容，数据库无配置时回退到环境变量 |
 | 流式输出兼容 | 测试所有 LLM provider 的流式支持 |
+| 加密密钥管理 | 加密密钥通过环境变量 `AI_CONFIG_SECRET` 提供 |
 
 ---
 
@@ -411,4 +467,7 @@ client/src/
 4. API Key 配置流程完整（首次弹窗 + 横幅 + 设置页）
 5. 所有页面在新主题下正常渲染
 6. Pipeline 阶段流实时更新
-7. `pnpm typecheck` + `pnpm build` 通过
+7. 后端 AIConfig 表正常工作，API Key 加密存储
+8. LlmInvokeService 正确按优先级读取配置（请求头 > DB > .env）
+9. 测试连接功能正常
+10. `pnpm typecheck` + `pnpm build` 通过
