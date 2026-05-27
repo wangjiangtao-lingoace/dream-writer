@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
+import { getRagIngestService } from "../services/RagIngestService";
 
 const router = Router();
 
@@ -50,6 +51,13 @@ router.post("/", async (req, res, next) => {
   try {
     const input = assetCreateSchema.parse(req.body);
     const asset = await prisma.knowledgeAsset.create({ data: input });
+    // fire-and-forget RAG ingest
+    getRagIngestService()?.ingestText({
+      ownerType: "knowledge_asset",
+      ownerId: asset.id,
+      novelId: asset.novelId ?? undefined,
+      text: asset.content,
+    }).catch(console.error);
     res.status(201).json({ success: true, data: asset });
   } catch (error) {
     next(error);
@@ -63,6 +71,13 @@ router.post("/novel/:novelId", async (req, res, next) => {
     const asset = await prisma.knowledgeAsset.create({
       data: { ...input, novelId },
     });
+    // fire-and-forget RAG ingest
+    getRagIngestService()?.ingestText({
+      ownerType: "knowledge_asset",
+      ownerId: asset.id,
+      novelId,
+      text: asset.content,
+    }).catch(console.error);
     res.status(201).json({ success: true, data: asset });
   } catch (error) {
     next(error);
@@ -87,10 +102,30 @@ router.put("/:id", async (req, res, next) => {
   try {
     const { id } = idSchema.parse(req.params);
     const input = assetUpdateSchema.parse(req.body);
+    const existing = await prisma.knowledgeAsset.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: "知识资产不存在。" });
+      return;
+    }
+    // 校验 novelId 归属：query 参数传入时必须匹配
+    const scope = req.query.novelId as string | undefined;
+    if (scope !== undefined && existing.novelId !== scope) {
+      res.status(403).json({ success: false, error: "无权操作该知识资产。" });
+      return;
+    }
     const asset = await prisma.knowledgeAsset.update({
       where: { id },
       data: input,
     });
+    // fire-and-forget RAG ingest (only when content changed)
+    if (input.content !== undefined) {
+      getRagIngestService()?.ingestText({
+        ownerType: "knowledge_asset",
+        ownerId: asset.id,
+        novelId: asset.novelId ?? undefined,
+        text: asset.content,
+      }).catch(console.error);
+    }
     res.json({ success: true, data: asset });
   } catch (error) {
     next(error);
@@ -100,6 +135,17 @@ router.put("/:id", async (req, res, next) => {
 router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = idSchema.parse(req.params);
+    const existing = await prisma.knowledgeAsset.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: "知识资产不存在。" });
+      return;
+    }
+    // 校验 novelId 归属：query 参数传入时必须匹配
+    const scope = req.query.novelId as string | undefined;
+    if (scope !== undefined && existing.novelId !== scope) {
+      res.status(403).json({ success: false, error: "无权操作该知识资产。" });
+      return;
+    }
     await prisma.knowledgeAsset.delete({ where: { id } });
     res.json({ success: true, data: null });
   } catch (error) {

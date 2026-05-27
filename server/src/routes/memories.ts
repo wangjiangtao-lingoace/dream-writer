@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
+import { getRagIngestService } from "../services/RagIngestService";
 
 const router = Router();
 
@@ -138,7 +139,15 @@ router.post("/:novelId", async (req, res, next) => {
         novelId,
       },
     });
-    
+
+    // fire-and-forget RAG ingest
+    getRagIngestService()?.ingestText({
+      ownerType: "memory",
+      ownerId: memory.id,
+      novelId,
+      text: memory.content,
+    }).catch(console.error);
+
     res.status(201).json({ success: true, data: memory });
   } catch (error) {
     next(error);
@@ -209,7 +218,17 @@ router.put("/:id", async (req, res, next) => {
       where: { id },
       data,
     });
-    
+
+    // fire-and-forget RAG ingest (only when content changed)
+    if (data.content !== undefined) {
+      getRagIngestService()?.ingestText({
+        ownerType: "memory",
+        ownerId: memory.id,
+        novelId: memory.novelId,
+        text: memory.content,
+      }).catch(console.error);
+    }
+
     res.json({ success: true, data: memory });
   } catch (error) {
     next(error);

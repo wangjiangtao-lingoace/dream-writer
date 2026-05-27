@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../db/prisma";
+import { getRagIngestService } from "../services/RagIngestService";
 
 const router = Router();
 
@@ -65,6 +66,12 @@ router.post("/", async (req: Request, res: Response) => {
         tags,
       },
     });
+    // fire-and-forget RAG ingest
+    getRagIngestService()?.ingestText({
+      ownerType: "general_knowledge",
+      ownerId: item.id,
+      text: content,
+    }).catch(console.error);
     res.json({ success: true, data: item });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -123,6 +130,14 @@ router.put("/:id", async (req: Request, res: Response) => {
         tags,
       },
     });
+    // fire-and-forget RAG ingest (only when content changed)
+    if (content !== undefined) {
+      getRagIngestService()?.ingestText({
+        ownerType: "general_knowledge",
+        ownerId: item.id,
+        text: item.content,
+      }).catch(console.error);
+    }
     res.json({ success: true, data: item });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
