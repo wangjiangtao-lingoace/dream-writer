@@ -1,0 +1,511 @@
+import { prisma } from "../../db/prisma";
+import { parseLlmJson } from "../../utils/parseJson";
+import { getRagIngestService } from "../RagIngestService";
+import { PipelineConfig } from "../PipelineService";
+
+// ===== PhaseContext: 依赖注入容器 =====
+
+export interface PhaseContext {
+  llmService: {
+    completeText: (opts: { system?: string; prompt: string; temperature?: number; maxTokens?: number }) => Promise<string | null>;
+  };
+  selfReview: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>;
+  savePhaseResult: (jobId: string, phase: string, step: string, input: any, output: any) => Promise<void>;
+  getPhaseOutput: (jobId: string, phase: string, step: string) => Promise<any>;
+  confirmPhaseResults: (jobId: string, phase: string) => Promise<void>;
+  updateJobProgress: (jobId: string, phase: string, step: string) => Promise<void>;
+  saveToKnowledgeBase: (novelId: string, category: string, title: string, content: any) => Promise<void>;
+  persistGeneratedAssets: (novelId: string, category: string, content: any) => Promise<void>;
+  buildWorkspaceAssetContext: (novelId: string, jobId?: string) => Promise<string>;
+  buildBookAnalysisContext: (novelId: string, config: PipelineConfig, jobId?: string) => Promise<string>;
+  buildImitationPlanContext: (novelId: string, config: PipelineConfig, jobId?: string) => Promise<string>;
+  safeJson: (value: string | null | undefined, fallback: any) => any;
+  countWords: (content: string) => number;
+  formatNovelOutline: (outline: any) => string;
+  buildFallbackWorldview: (outline: any) => any;
+  buildFallbackStyle: (outline: any, config: PipelineConfig) => any;
+  buildFallbackChapterDraft: (input: {
+    novel: { title: string; genre?: string | null };
+    order: number;
+    title: string;
+    summary: string;
+    previousChapters: Array<{ order: number; title: string; content: string }>;
+  }) => string;
+}
+
+// ===== 通用工具函数 =====
+
+export function safeJson(value: string | null | undefined, fallback: any) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+export function countWords(content: string) {
+  return content.replace(/\s/g, "").length;
+}
+
+export function formatNovelOutline(outline: any) {
+  return [
+    `# ${outline.title || "故事大纲"}`,
+    "",
+    outline.genre ? `类型：${outline.genre}` : "",
+    outline.theme ? `主题：${outline.theme}` : "",
+    outline.hook ? `开篇钩子：${outline.hook}` : "",
+    outline.coreSetting ? `核心设定：${outline.coreSetting}` : "",
+    outline.mainConflict ? `主要冲突：${outline.mainConflict}` : "",
+    "",
+    "## 主角",
+    outline.protagonist ? JSON.stringify(outline.protagonist, null, 2) : "",
+    "",
+    "## 反派",
+    outline.antagonist ? JSON.stringify(outline.antagonist, null, 2) : "",
+    "",
+    "## 剧情结构",
+    outline.plotStructure ? JSON.stringify(outline.plotStructure, null, 2) : "",
+    "",
+    "## 亮点",
+    ...(Array.isArray(outline.highlights) ? outline.highlights.map((item: string) => `- ${item}`) : []),
+  ].filter(Boolean).join("\n");
+}
+
+export function buildFallbackWorldview(outline: any) {
+  return {
+    name: `${outline.genre || "当前作品"}世界观`,
+    summary: outline.coreSetting || outline.theme || "围绕当前作品主线建立的基础世界观。",
+    rules: outline.mainConflict || "世界规则必须为人物选择、案件推进、资源争夺和情感冲突服务。",
+    geography: "以主角当前活动区域为核心，逐步扩展王府、京城、朝堂、边境等关键场景。",
+    factions: "主角阵营、男主势力、反派家族、朝堂官僚、民间线索网络。",
+    history: "前史围绕旧案、家族利益和权力更替展开，作为后续伏笔来源。",
+    powerSystem: "现实制度、身份等级、医学/验尸知识、权谋资源共同构成冲突系统。",
+    specialElements: ["身份压迫", "专业知识降维", "案件证据链", "权谋反转"],
+  };
+}
+
+export function buildFallbackStyle(outline: any, config: PipelineConfig) {
+  return {
+    name: `${outline.genre || config.genre || "默认"}风格`,
+    description: `服务于${outline.genre || config.genre || "当前类型"}的节奏型写法。`,
+    toneAndAtmosphere: "快节奏推进，情绪有压迫感，关键时刻有释放。",
+    emotionalRhythm: "三章一个小高潮，十章一个大高潮，紧张与舒缓交替。",
+    contrastPatterns: "强弱反差：主角表面弱势实际有底牌；明暗对比：表面平静暗藏危机。",
+    humorStyle: "无",
+    tensionTechniques: "信息不对称：读者知道危险但角色不知道；限时压力制造紧迫感。",
+    suspenseTechniques: "每章末尾留一个未解问题；关键信息分段揭露。",
+    narrativePov: "third_person",
+    tense: "past",
+    pacing: "fast",
+    sentenceRhythm: "短句为主制造紧张，长句铺垫制造氛围。",
+    vocabularyLevel: "现代白话，避免生僻字。",
+    dialogueStyle: "简洁有力，潜台词丰富。",
+    chapterOpeningStyle: "直接进入冲突或悬念，不要大段铺垫。",
+    chapterEndingStyle: "必须留钩子，让读者想看下一章。",
+    writingRules: [
+      "每章必须有一个情绪高点（爽点/泪点/笑点）。",
+      "少解释设定，多用行动、证据、对话推进。",
+      "专业判断必须给出可见证据，避免无根据开挂。",
+    ],
+    avoidList: [
+      "不要用「他心想」开头的大段内心独白。",
+      "不要用「突然」作为转折词。",
+      "避免大段旁白式设定解释。",
+    ],
+  };
+}
+
+export function buildFallbackChapterDraft(input: {
+  novel: { title: string; genre?: string | null };
+  order: number;
+  title: string;
+  summary: string;
+  previousChapters: Array<{ order: number; title: string; content: string }>;
+}) {
+  const lead = input.previousChapters.length
+    ? "前一章留下的线索还没有冷却，新的压力已经压到门前。"
+    : "天色还未亮，旧局已经先一步醒来。";
+  return [
+    `第${input.order}章 ${input.title}`,
+    "",
+    lead,
+    "",
+    `这一章围绕「${input.summary}」展开。主角没有直接冲撞命运，而是先确认手里还剩下什么筹码：能问的人、能查的物、能利用的规则，以及必须付出的代价。`,
+    "",
+    "她把所有情绪都压在沉默下面，只留下最具体的问题。谁在说谎，谁怕被牵连，哪一条规矩看似铁板一块，其实留下了可以落脚的缝隙。",
+    "",
+    "到章末，她得到的不是彻底胜利，而是一口来之不易的喘息。也正因为这口喘息，下一场更大的试探有了入口。",
+  ].join("\n");
+}
+
+// ===== Phase 结果管理 =====
+
+export async function getPhaseOutput(jobId: string, phase: string, step: string): Promise<any> {
+  const result = await prisma.phaseResult.findUnique({
+    where: { jobId_phase_step: { jobId, phase, step } },
+  });
+  if (!result) throw new Error(`未找到 ${phase}/${step} 的生成结果，请先完成该步骤。`);
+  return JSON.parse(result.output);
+}
+
+export async function savePhaseResult(
+  jobId: string,
+  phase: string,
+  step: string,
+  input: any,
+  output: any,
+  selfReviewFn: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>,
+) {
+  const review = await selfReviewFn(output, step);
+
+  await prisma.phaseResult.upsert({
+    where: { jobId_phase_step: { jobId, phase, step } },
+    create: {
+      jobId,
+      phase,
+      step,
+      input: JSON.stringify(input),
+      output: JSON.stringify(output),
+      selfScore: review.score,
+      selfComment: review.comment,
+      issues: JSON.stringify(review.issues),
+      status: "completed",
+    },
+    update: {
+      input: JSON.stringify(input),
+      output: JSON.stringify(output),
+      selfScore: review.score,
+      selfComment: review.comment,
+      issues: JSON.stringify(review.issues),
+      status: "completed",
+    },
+  });
+}
+
+export async function confirmPhaseResults(jobId: string, phase: string) {
+  await prisma.phaseResult.updateMany({
+    where: { jobId, phase, status: "completed" },
+    data: {
+      status: "confirmed",
+      confirmedByUser: false,
+    },
+  });
+}
+
+export async function updateJobProgress(jobId: string, phase: string, step: string) {
+  const job = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+  if (!job) return;
+
+  await prisma.pipelineJob.update({
+    where: { id: jobId },
+    data: {
+      currentPhase: phase,
+      currentStep: step,
+      completedSteps: job.completedSteps + 1,
+      progress: Math.round(((job.completedSteps + 1) / job.totalSteps) * 100),
+    },
+  });
+}
+
+// ===== 资产持久化 =====
+
+export async function saveToKnowledgeBase(novelId: string, category: string, title: string, content: any) {
+  const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  await persistGeneratedAssets(novelId, category, content);
+
+  const existing = await prisma.knowledgeAsset.findFirst({
+    where: { novelId, category, title },
+  });
+
+  let assetId: string;
+  if (existing) {
+    await prisma.knowledgeAsset.update({
+      where: { id: existing.id },
+      data: { content: contentStr, updatedAt: new Date() },
+    });
+    assetId = existing.id;
+  } else {
+    const created = await prisma.knowledgeAsset.create({
+      data: {
+        novelId,
+        title,
+        category,
+        content: contentStr,
+        tags: `auto-generated,${category}`,
+      },
+    });
+    assetId = created.id;
+  }
+
+  const memory = await prisma.memory.create({
+    data: {
+      novelId,
+      type: category.includes("character") ? "character" : category.includes("world") ? "world" : category.includes("style") ? "style" : "plot",
+      category: `pipeline:${category}`,
+      title,
+      content: contentStr,
+      importance: category === "outline" || category === "chapter_draft" ? 8 : 7,
+      metadata: JSON.stringify({ source: "pipeline", category }),
+    },
+  });
+
+  const ragService = getRagIngestService();
+  if (ragService) {
+    ragService.ingestText({
+      ownerType: "knowledge_asset",
+      ownerId: assetId,
+      novelId,
+      text: contentStr,
+    }).catch(console.error);
+    ragService.ingestText({
+      ownerType: "memory",
+      ownerId: memory.id,
+      novelId,
+      text: contentStr,
+    }).catch(console.error);
+  }
+}
+
+export async function persistGeneratedAssets(novelId: string, category: string, content: any) {
+  try {
+    if (category === "outline" && content && Object.keys(content).length) {
+      await prisma.novel.update({
+        where: { id: novelId },
+        data: {
+          genre: content.genre || undefined,
+          outline: formatNovelOutline(content),
+        },
+      });
+    }
+
+    if (category === "worldview" && content?.name) {
+      await prisma.worldview.upsert({
+        where: { novelId_name: { novelId, name: content.name } },
+        create: {
+          novelId,
+          name: content.name,
+          summary: content.summary || "",
+          rules: content.rules || "",
+          geography: content.geography || "",
+          factions: content.factions || "",
+          history: content.history || "",
+          powerSystem: typeof content.powerSystem === "string" ? content.powerSystem : JSON.stringify(content.powerSystem || {}),
+        },
+        update: {
+          summary: content.summary || "",
+          rules: content.rules || "",
+          geography: content.geography || "",
+          factions: content.factions || "",
+          history: content.history || "",
+          powerSystem: typeof content.powerSystem === "string" ? content.powerSystem : JSON.stringify(content.powerSystem || {}),
+        },
+      });
+    }
+
+    if (category === "worldview" && !content?.name) {
+      const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+      const fallback = buildFallbackWorldview({
+        genre: novel?.genre,
+        coreSetting: novel?.outline,
+        mainConflict: novel?.outline,
+      });
+      await persistGeneratedAssets(novelId, "worldview", fallback);
+    }
+
+    if (category === "style") {
+      const style = content && Object.keys(content).length
+        ? content
+        : buildFallbackStyle({}, {});
+      const existing = await prisma.styleProfile.findFirst({
+        where: { novelId, isDefault: true },
+      });
+      const enhancedStyle = {
+        toneAndAtmosphere: style.toneAndAtmosphere || "",
+        emotionalRhythm: style.emotionalRhythm || "",
+        contrastPatterns: style.contrastPatterns || "",
+        humorStyle: style.humorStyle || "",
+        tensionTechniques: style.tensionTechniques || "",
+        suspenseTechniques: style.suspenseTechniques || "",
+        sentenceRhythm: style.sentenceRhythm || "",
+        dialogueStyle: style.dialogueStyle || "",
+        chapterOpeningStyle: style.chapterOpeningStyle || "",
+        chapterEndingStyle: style.chapterEndingStyle || "",
+        writingRules: Array.isArray(style.writingRules) ? style.writingRules : [],
+        avoidList: Array.isArray(style.avoidList) ? style.avoidList : [],
+      };
+      const data = {
+        name: style.name || "默认写作风格",
+        description: style.description || "由自动创作流程生成的默认风格。",
+        narrativePov: style.narrativePov || "third_person",
+        tense: style.tense || "past",
+        pacing: style.pacing || "balanced",
+        sentenceLength: style.sentenceRhythm || style.sentenceLength || "mixed",
+        vocabulary: style.vocabularyLevel || style.vocabulary || "modern",
+        dialogueRatio: style.dialogueStyle ? "balanced" : (style.dialogueRatio || "balanced"),
+        emotionIntensity: style.emotionIntensity || "medium",
+        humorLevel: style.humorStyle ? "medium" : (style.humorLevel || "low"),
+        customRules: JSON.stringify(enhancedStyle),
+        isDefault: true,
+      };
+      if (existing) {
+        await prisma.styleProfile.update({ where: { id: existing.id }, data });
+      } else {
+        await prisma.styleProfile.create({ data: { novelId, ...data } });
+      }
+    }
+
+    if (category === "character" && Array.isArray(content?.characters)) {
+      for (const character of content.characters.slice(0, 12)) {
+        if (!character?.name) continue;
+        await prisma.character.upsert({
+          where: { novelId_name: { novelId, name: character.name } },
+          create: {
+            novelId,
+            name: character.name,
+            role: character.role || "",
+            identity: character.identity || "",
+            motivation: character.motivation || "",
+            appearance: character.appearance || "",
+            background: character.background || "",
+            relationsText: character.relationsText || "",
+            arcSummary: character.arc || character.personality || "",
+          },
+          update: {
+            role: character.role || "",
+            identity: character.identity || "",
+            motivation: character.motivation || "",
+            appearance: character.appearance || "",
+            background: character.background || "",
+            relationsText: character.relationsText || "",
+            arcSummary: character.arc || character.personality || "",
+          },
+        });
+      }
+    }
+
+    if (category === "volume" && Array.isArray(content?.volumes)) {
+      for (const [index, volume] of content.volumes.entries()) {
+        await prisma.volume.upsert({
+          where: { novelId_sortOrder: { novelId, sortOrder: index + 1 } },
+          create: {
+            novelId,
+            sortOrder: index + 1,
+            title: volume.title || `第${index + 1}卷`,
+            goal: volume.goal || "",
+            conflict: volume.conflict || "",
+            emotion: volume.emotion || "",
+            newChars: JSON.stringify(volume.newChars || []),
+            mapName: volume.mapName || "",
+            endHook: volume.endHook || "",
+          },
+          update: {
+            title: volume.title || `第${index + 1}卷`,
+            goal: volume.goal || "",
+            conflict: volume.conflict || "",
+            emotion: volume.emotion || "",
+            newChars: JSON.stringify(volume.newChars || []),
+            mapName: volume.mapName || "",
+            endHook: volume.endHook || "",
+          },
+        });
+      }
+    }
+
+    if (category === "chapter_outline" && Array.isArray(content?.chapterOutlines)) {
+      let globalOrder = 1;
+      for (const [volumeIndex, group] of content.chapterOutlines.entries()) {
+        const volume = await prisma.volume.findFirst({
+          where: { novelId, sortOrder: volumeIndex + 1 },
+        }) ?? await prisma.volume.create({
+          data: { novelId, sortOrder: volumeIndex + 1, title: `第${volumeIndex + 1}卷` },
+        });
+        for (const chapter of (group.chapters || []).slice(0, 30)) {
+          await prisma.chapterOutline.upsert({
+            where: { novelId_sortOrder: { novelId, sortOrder: globalOrder } },
+            create: {
+              novelId,
+              volumeId: volume.id,
+              sortOrder: globalOrder,
+              title: chapter.title || `第${globalOrder}章`,
+              goal: chapter.goal || "",
+              conflict: chapter.conflict || "",
+              emotion: chapter.emotion || "",
+              hook: chapter.hook || "",
+              pleasurePoint: chapter.pleasurePoint || "",
+            },
+            update: {
+              volumeId: volume.id,
+              title: chapter.title || `第${globalOrder}章`,
+              goal: chapter.goal || "",
+              conflict: chapter.conflict || "",
+              emotion: chapter.emotion || "",
+              hook: chapter.hook || "",
+              pleasurePoint: chapter.pleasurePoint || "",
+            },
+          });
+          globalOrder += 1;
+        }
+      }
+    }
+
+    if (category === "mainline_hook") {
+      for (const [index, mainline] of (content?.mainlines || []).entries()) {
+        await prisma.mainline.create({
+          data: {
+            novelId,
+            title: mainline.title || `主线${index + 1}`,
+            description: mainline.description || "",
+            sortOrder: index + 1,
+            priority: 8,
+          },
+        });
+      }
+      for (const hook of (content?.hooks || []).slice(0, 20)) {
+        await prisma.hook.create({
+          data: {
+            novelId,
+            title: hook.title || "未命名钩子",
+            description: hook.description || "",
+            type: hook.type || "suspense",
+            intensity: Math.max(1, Math.min(10, Number(hook.intensity || 5))),
+            status: "active",
+          },
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("持久化 Pipeline 结构化资产失败:", error);
+  }
+}
+
+// ===== 创建 PhaseContext =====
+
+export function createPhaseContext(
+  llmService: { completeText: (opts: { system?: string; prompt: string; temperature?: number; maxTokens?: number }) => Promise<string | null> },
+  selfReviewFn: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>,
+  buildWorkspaceAssetContextFn: (novelId: string, jobId?: string) => Promise<string>,
+  buildBookAnalysisContextFn: (novelId: string, config: PipelineConfig, jobId?: string) => Promise<string>,
+  buildImitationPlanContextFn: (novelId: string, config: PipelineConfig, jobId?: string) => Promise<string>,
+): PhaseContext {
+  return {
+    llmService,
+    selfReview: selfReviewFn,
+    savePhaseResult: (jobId, phase, step, input, output) =>
+      savePhaseResult(jobId, phase, step, input, output, selfReviewFn),
+    getPhaseOutput,
+    confirmPhaseResults,
+    updateJobProgress,
+    saveToKnowledgeBase,
+    persistGeneratedAssets,
+    buildWorkspaceAssetContext: buildWorkspaceAssetContextFn,
+    buildBookAnalysisContext: buildBookAnalysisContextFn,
+    buildImitationPlanContext: buildImitationPlanContextFn,
+    safeJson,
+    countWords,
+    formatNovelOutline,
+    buildFallbackWorldview,
+    buildFallbackStyle,
+    buildFallbackChapterDraft,
+  };
+}
