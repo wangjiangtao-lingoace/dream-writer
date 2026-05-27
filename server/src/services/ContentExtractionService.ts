@@ -475,42 +475,93 @@ export class ContentExtractionService {
 
   /**
    * 从小说站点特定容器（如 <div class="intro">, <div class="bookinfo">）提取简介
+   * 使用 indexOf + 括号计数替代正则，避免嵌套标签导致的灾难性回溯
    */
   private extractNovelSiteSynopsis(html: string, titleVariants?: string[]): string | null {
-    // 匹配常见小说站点简介容器
-    const containerPatterns = [
-      /<div[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*class=["'][^"']*bookinfo[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*class=["'][^"']*book-info[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*class=["'][^"']*synopsis[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*class=["'][^"']*book-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*class=["'][^"']*jj_intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*id=["'][^"']*introtext[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*id=["'][^"']*bookintro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<div[^>]*id=["'][^"']*book_intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>/i,
-    ];
+    // class/id 关键词列表（与原有正则保持一致）
+    const classKeywords = ["intro", "bookinfo", "book-info", "synopsis", "book-desc", "jj_intro"];
+    const idKeywords = ["introtext", "bookintro", "book_intro"];
 
-    for (const pattern of containerPatterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        const text = match[1]
-          .replace(/<[^>]+>/g, "")
-          .replace(/&nbsp;/g, " ")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&amp;/g, "&")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\s+/g, " ")
-          .trim();
+    // 限制搜索范围为前 50KB，避免在超大页面上做无意义扫描
+    const searchHtml = html.length > 50 * 1024 ? html.slice(0, 50 * 1024) : html;
 
-        if (text.length >= 20) {
-          // 按中文字符密度评分，过滤UI文本
-          const chineseChars = text.match(/[一-鿿]/g) || [];
-          const chineseDensity = chineseChars.length / Math.max(text.length, 1);
-          if (chineseDensity > 0.3) {
-            return text;
+    // 搜索 <div> 和 <p> 标签
+    const tagNames = ["div", "p"];
+
+    for (const tagName of tagNames) {
+      const openTagPattern = new RegExp(`<${tagName}[^>]*>`, "gi");
+      let tagMatch: RegExpExecArray | null;
+
+      while ((tagMatch = openTagPattern.exec(searchHtml)) !== null) {
+        const openTag = tagMatch[0];
+        const openTagLower = openTag.toLowerCase();
+
+        // 检查 class 或 id 是否包含目标关键词
+        const hasClass = classKeywords.some((kw) => {
+          const classMatch = openTagLower.match(/class=["']([^"']*)["']/i);
+          return classMatch && classMatch[1].includes(kw);
+        });
+        const hasId = idKeywords.some((kw) => {
+          const idMatch = openTagLower.match(/id=["']([^"']*)["']/i);
+          return idMatch && idMatch[1].includes(kw);
+        });
+
+        if (!hasClass && !hasId) continue;
+
+        // 找到匹配的开始标签，用括号计数找到对应的闭合标签
+        const contentStart = tagMatch.index + openTag.length;
+        const closeTag = `</${tagName}>`;
+        let depth = 1;
+        let pos = contentStart;
+
+        while (depth > 0 && pos < searchHtml.length) {
+          const nextOpen = searchHtml.indexOf(`<${tagName}`, pos);
+          const nextClose = searchHtml.indexOf(closeTag, pos);
+
+          if (nextClose === -1) break; // 没有找到闭合标签
+
+          if (nextOpen !== -1 && nextOpen < nextClose) {
+            // 确认是完整的开标签（后面跟 > 或 空格）
+            const charAfterTag = searchHtml[nextOpen + tagName.length + 1];
+            if (charAfterTag === ">" || charAfterTag === " " || charAfterTag === "/" || charAfterTag === "\t" || charAfterTag === "\n") {
+              // 检查是否是自闭合标签
+              const selfCloseEnd = searchHtml.indexOf("/>", nextOpen);
+              const tagEnd = searchHtml.indexOf(">", nextOpen);
+              if (selfCloseEnd !== -1 && selfCloseEnd < tagEnd && selfCloseEnd === tagEnd - 1) {
+                // 自闭合标签，不增加深度
+                pos = tagEnd + 1;
+              } else {
+                depth++;
+                pos = nextOpen + tagName.length + 1;
+              }
+            } else {
+              pos = nextOpen + tagName.length + 1;
+            }
+          } else {
+            depth--;
+            if (depth === 0) {
+              // 找到了匹配的闭合标签
+              const innerHtml = searchHtml.slice(contentStart, nextClose);
+              const text = innerHtml
+                .replace(/<[^>]+>/g, "")
+                .replace(/&nbsp;/g, " ")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&amp;/g, "&")
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/\s+/g, " ")
+                .trim();
+
+              if (text.length >= 20) {
+                const chineseChars = text.match(/[一-鿿]/g) || [];
+                const chineseDensity = chineseChars.length / Math.max(text.length, 1);
+                if (chineseDensity > 0.3) {
+                  return text;
+                }
+              }
+            }
+            pos = nextClose + closeTag.length;
           }
         }
       }

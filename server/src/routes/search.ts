@@ -324,9 +324,10 @@ const ALL_VERIFIED_DOMAINS = [...TIER1_DOMAINS, ...TIER2_DOMAINS, ...TIER3_DOMAI
 function getVerifiedSourceTier(url: string): number {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    if (TIER1_DOMAINS.some((d) => hostname.includes(d))) return 1;
-    if (TIER2_DOMAINS.some((d) => hostname.includes(d))) return 2;
-    if (TIER3_DOMAINS.some((d) => hostname.includes(d))) return 3;
+    const matchesDomain = (d: string) => hostname === d || hostname.endsWith("." + d);
+    if (TIER1_DOMAINS.some(matchesDomain)) return 1;
+    if (TIER2_DOMAINS.some(matchesDomain)) return 2;
+    if (TIER3_DOMAINS.some(matchesDomain)) return 3;
     return 0;
   } catch {
     return 0;
