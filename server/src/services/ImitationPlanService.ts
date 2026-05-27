@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { parseLlmJson } from "../utils/parseJson";
 import { LlmInvokeService } from "./llm/LlmInvokeService";
 import { pipelineService, type PipelineConfig } from "./PipelineService";
 
@@ -6,28 +7,6 @@ const llmService = new LlmInvokeService();
 
 function sectionContent(section: { editedContent?: string | null; aiContent?: string | null }): string {
   return section.editedContent?.trim() || section.aiContent?.trim() || "";
-}
-
-function parseJson(text: string | null): any {
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    const block = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (block) {
-      try {
-        return JSON.parse(block[1].trim());
-      } catch {}
-    }
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(text.slice(start, end + 1));
-      } catch {}
-    }
-    return null;
-  }
 }
 
 function safeJson(value: string | null, fallback: any) {
@@ -195,7 +174,7 @@ export class ImitationPlanService {
 }`,
     ].join("\n");
 
-    const generated = parseJson(await llmService.completeText({ prompt, temperature: 0.62, maxTokens: 3600 }));
+    const generated = parseLlmJson(await llmService.completeText({ prompt, temperature: 0.62, maxTokens: 3600 }));
     const plan = generated?.sectionPlans && generated?.blueprint && generated?.chapterTemplate
       ? generated
       : buildFallbackPlan(novel, analysis);

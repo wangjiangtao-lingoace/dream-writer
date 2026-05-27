@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { parseLlmJson } from "../utils/parseJson";
 import { LlmInvokeService } from "./llm/LlmInvokeService";
 import { getRagIngestService } from "./RagIngestService";
 import { getRagRetrieveService } from "./RagRetrieveService";
@@ -255,7 +256,7 @@ ${inspiration}
 注意：只有内容确实足够详细时才标记为 true。如果只是一笔带过或非常模糊，应标记为 false。`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1000 });
-    const parsed = this.parseJson(result);
+    const parsed = parseLlmJson(result) || {};
     return {
       hasOutline: !!parsed.hasOutline,
       hasCharacters: !!parsed.hasCharacters,
@@ -416,7 +417,7 @@ ${config.genre || "自动判断"}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 拆解人物
@@ -452,7 +453,7 @@ ${inspiration}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 拆解世界观
@@ -483,7 +484,7 @@ ${inspiration}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1500 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 拆解风格
@@ -524,7 +525,7 @@ ${inspiration}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1500 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 拆解卷结构
@@ -572,7 +573,7 @@ ${inspiration}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 3000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // Phase 2: 生成资产（世界观/人物/风格）→ 暂停审核
@@ -1079,7 +1080,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 注意：输出的每个字段都应该尽量详细，保留原文的生动表达，不要压缩成干巴巴的概括。`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 生成世界观
@@ -1123,7 +1124,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 1500 });
-    const parsed = this.parseJson(result);
+    const parsed = parseLlmJson(result) || {};
     return Object.keys(parsed).length ? parsed : this.buildFallbackWorldview(outline);
   }
 
@@ -1172,7 +1173,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 2000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 生成风格
@@ -1231,7 +1232,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.6, maxTokens: 2000 });
-    const parsed = this.parseJson(result);
+    const parsed = parseLlmJson(result) || {};
     return Object.keys(parsed).length ? parsed : this.buildFallbackStyle(outline, config);
   }
 
@@ -1251,7 +1252,7 @@ ${JSON.stringify(content, null, 2)}
 }`;
 
     const result = await this.llmService.completeText({ prompt, temperature: 0.3, maxTokens: 1000 });
-    const review = this.parseJson(result);
+    const review = parseLlmJson(result) || {};
     return {
       score: review.score || 7,
       comment: review.comment || "",
@@ -1272,7 +1273,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
 请返回修复后的完整JSON格式内容（结构与原内容相同）：`;
 
     const result = await this.llmService.completeText({ prompt, temperature: 0.5, maxTokens: 2000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 确认阶段结果
@@ -1535,7 +1536,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - turningPoint 和 climax 必须是具体的事件描述`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 生成章纲
@@ -1587,7 +1588,7 @@ ${JSON.stringify(style, null, 2)}
 }`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   // 生成主线和钩子
@@ -1640,7 +1641,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 3. 每个描述都要具体，不要泛泛而谈`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 2000 });
-    const parsed = this.parseJson(result);
+    const parsed = parseLlmJson(result) || {};
     // 兜底：如果解析失败，返回基本结构
     if (!parsed.mainlines && !parsed.hooks) {
       console.warn("主线钩子解析失败，LLM返回:", result?.substring(0, 200));
@@ -1759,7 +1760,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - 所有钩子和伏笔的 plannedResolveChapter/plannedPayoffChapter 必须是有效的章节编号`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 6000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   /**
@@ -1856,7 +1857,7 @@ ${Array.isArray(characters?.characters) ? characters.characters.map((c: any) => 
 - 情绪曲线的章节编号必须在 1-${totalChapters} 范围内`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   /**
@@ -2088,7 +2089,7 @@ ${planSummary}
 passed = overallScore >= 6`;
 
     const result = await this.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
-    return this.parseJson(result);
+    return parseLlmJson(result) || {};
   }
 
   private async executeWritingPhase(jobId: string) {
@@ -2164,8 +2165,8 @@ passed = overallScore >= 6`;
     const blueprint = this.safeJson(plan?.blueprint, {});
     const chapterTemplate = this.safeJson(plan?.chapterTemplate, {});
     const sampleDrafts = this.safeJson(plan?.sampleDrafts, []);
-    const outline = outlineResult ? this.parseJson(outlineResult.output) : {};
-    const chapterOutline = chapterOutlineResult ? this.parseJson(chapterOutlineResult.output) : {};
+    const outline = outlineResult ? parseLlmJson(outlineResult.output) || {} : {};
+    const chapterOutline = chapterOutlineResult ? parseLlmJson(chapterOutlineResult.output) || {} : {};
     const enhancedFields = styleProfile ? this.safeJson(styleProfile.customRules, {}) : {};
     const style = styleProfile ? {
       name: styleProfile.name,
@@ -2183,7 +2184,7 @@ passed = overallScore >= 6`;
           where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${v}` } },
         });
         if (volRes) {
-          const parsed = this.parseJson(volRes.output);
+          const parsed = parseLlmJson(volRes.output) || {};
           for (const ch of (parsed?.chapters || [])) {
             enrichedChaptersMap.set(globalOrder, ch);
             globalOrder++;
@@ -2787,7 +2788,7 @@ ${input.previousChapters.length
     for (const result of job.phaseResults) {
       const target = categoryByStep[result.step];
       if (!target) continue;
-      const output = this.parseJson(result.output);
+      const output = parseLlmJson(result.output) || {};
       await this.persistGeneratedAssets(novelId, target.category, output);
     }
 
@@ -3172,35 +3173,6 @@ ${input.previousChapters.length
       "## 样章草稿",
       plan.sampleDrafts,
     ].join("\n");
-  }
-
-  // 解析JSON（带容错）
-  private parseJson(text: string | null): any {
-    if (!text) return {};
-    try {
-      // 尝试直接解析
-      return JSON.parse(text);
-    } catch {
-      // 尝试提取JSON块
-      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[1].trim());
-        } catch {}
-      }
-      
-      // 尝试找到第一个{和最后一个}
-      const start = text.indexOf("{");
-      const end = text.lastIndexOf("}");
-      if (start !== -1 && end !== -1) {
-        try {
-          return JSON.parse(text.substring(start, end + 1));
-        } catch {}
-      }
-
-      console.error("JSON parse failed:", text.substring(0, 200));
-      return {};
-    }
   }
 
   // 获取流程状态
