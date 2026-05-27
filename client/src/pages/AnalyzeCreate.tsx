@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { toast } from "../components/ui/toast";
 
 interface SearchResult {
   title: string;
@@ -58,7 +59,7 @@ const AnalyzeCreate: React.FC = () => {
         setTitle(json.data.filename.replace(/\.[^.]+$/, ""));
       }
     } catch (error: any) {
-      alert(error.message || "文件上传失败，请重试");
+      toast.error(error.message || "文件上传失败，请重试");
     } finally {
       setFileUploading(false);
       // 清空 input 以便重复选择同一文件
@@ -94,7 +95,7 @@ const AnalyzeCreate: React.FC = () => {
 
   const handleSearch = async () => {
     if (!title.trim()) {
-      alert("请输入作品标题");
+      toast.error("请输入作品标题");
       return;
     }
 
@@ -109,7 +110,7 @@ const AnalyzeCreate: React.FC = () => {
       setStep("preview");
     } catch (error: any) {
       console.error("搜索失败:", error);
-      alert(error.message || "搜索失败，请重试");
+      toast.error(error.message || "搜索失败，请重试");
       setStep("input");
     } finally {
       setLoading(false);
@@ -122,7 +123,7 @@ const AnalyzeCreate: React.FC = () => {
     const { sourceText, sourceTitle } = resolveSourceMaterial();
 
     if (!sourceText || sourceText.length < 80) {
-      alert("请粘贴至少80字的原文内容，或等待搜索结果");
+      toast.error("请粘贴至少80字的原文内容，或等待搜索结果");
       return;
     }
 
@@ -178,7 +179,7 @@ const AnalyzeCreate: React.FC = () => {
     } catch (error: any) {
       if (error.message !== "已取消") {
         console.error("分析失败:", error);
-        alert(error.message || "分析失败，请重试");
+        toast.error(error.message || "分析失败，请重试");
       }
     } finally {
       setLoading(false);
@@ -222,7 +223,7 @@ const AnalyzeCreate: React.FC = () => {
       setTimeout(() => navigate(`/novel/${novel.id}`), 1000);
     } catch (error: any) {
       console.error("创建失败:", error);
-      alert(error.message || "创建失败，请重试");
+      toast.error(error.message || "创建失败，请重试");
     } finally {
       setLoading(false);
       setStatus("");

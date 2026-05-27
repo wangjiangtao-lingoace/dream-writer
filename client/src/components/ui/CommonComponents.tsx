@@ -10,6 +10,12 @@ interface ConfirmDialogProps {
   variant?: "danger" | "warning" | "info";
 }
 
+const VARIANT_STYLES: Record<string, { bg: string; hover: string }> = {
+  danger: { bg: "var(--error)", hover: "#dc2626" },
+  warning: { bg: "var(--warning)", hover: "#ca8a04" },
+  info: { bg: "var(--accent)", hover: "var(--accent-hover)" },
+};
+
 export function ConfirmDialog({
   title,
   message,
@@ -19,6 +25,8 @@ export function ConfirmDialog({
   onCancel,
   variant = "danger",
 }: ConfirmDialogProps) {
+  const vStyle = VARIANT_STYLES[variant] || VARIANT_STYLES.danger;
+
   return (
     <div
       style={{
@@ -28,35 +36,36 @@ export function ConfirmDialog({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.4)",
+        background: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(4px)",
       }}
       onClick={onCancel}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "var(--bg-card, #fff)",
-          border: "1px solid var(--border, #e5e7eb)",
-          borderRadius: "var(--radius-md, 8px)",
-          padding: "1.5rem",
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-lg)",
+          padding: "var(--space-6)",
           maxWidth: "28rem",
           width: "90%",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+          boxShadow: "var(--shadow-lg)",
         }}
       >
-        <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.125rem", color: "var(--text-primary, #111)" }}>{title}</h3>
-        <p style={{ margin: "0 0 1.25rem", fontSize: "0.875rem", color: "var(--text-secondary, #666)", lineHeight: 1.6 }}>{message}</p>
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+        <h3 style={{ margin: "0 0 var(--space-2)", fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--text-primary)" }}>{title}</h3>
+        <p style={{ margin: "0 0 var(--space-5)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.6 }}>{message}</p>
+        <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
           <button
             type="button"
             onClick={onCancel}
             style={{
-              padding: "0.5rem 1rem",
-              background: "transparent",
-              color: "var(--text-secondary, #666)",
-              border: "1px solid var(--border, #e5e7eb)",
-              borderRadius: "var(--radius-sm, 4px)",
-              fontSize: "0.875rem",
+              padding: "var(--space-2) var(--space-4)",
+              background: "var(--bg-elevated)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-md)",
+              fontSize: "var(--text-sm)",
               cursor: "pointer",
             }}
           >
@@ -66,12 +75,13 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             style={{
-              padding: "0.5rem 1rem",
-              background: variant === "danger" ? "#dc2626" : "var(--accent, #8b4513)",
+              padding: "var(--space-2) var(--space-4)",
+              background: vStyle.bg,
               color: "#fff",
               border: "none",
-              borderRadius: "var(--radius-sm, 4px)",
-              fontSize: "0.875rem",
+              borderRadius: "var(--radius-md)",
+              fontSize: "var(--text-sm)",
+              fontWeight: 500,
               cursor: "pointer",
             }}
           >

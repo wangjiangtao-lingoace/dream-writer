@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
+import { toast } from "../ui/toast";
 
 const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [hooks, setHooks] = useState<any[]>([]);
@@ -32,7 +33,7 @@ const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
 
   const handleCreate = async () => {
     if (!formData.title.trim()) {
-      alert("请输入钩子标题");
+      toast.error("请输入钩子标题");
       return;
     }
     try {
@@ -80,11 +81,11 @@ const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           await api.post(`/api/novels/${novelId}/hooks`, hook);
         }
         await loadHooks();
-        alert(`已生成 ${result.hooks.length} 个钩子`);
+        toast.success(`已生成 ${result.hooks.length} 个钩子`);
       }
     } catch (error) {
       console.error("AI生成钩子失败:", error);
-      alert("AI生成钩子失败，请重试");
+      toast.error("AI生成钩子失败，请重试");
     } finally {
       setGenerating(false);
     }

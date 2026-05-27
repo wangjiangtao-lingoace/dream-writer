@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
+import { toast } from "../ui/toast";
 
 const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [mainlines, setMainlines] = useState<any[]>([]);
@@ -27,7 +28,7 @@ const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
 
   const handleCreate = async () => {
     if (!formData.title.trim()) {
-      alert("请输入主线标题");
+      toast.error("请输入主线标题");
       return;
     }
     try {
@@ -70,11 +71,11 @@ const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           await api.post(`/api/novels/${novelId}/mainlines`, mainline);
         }
         await loadMainlines();
-        alert(`已生成 ${result.mainlines.length} 条主线`);
+        toast.success(`已生成 ${result.mainlines.length} 条主线`);
       }
     } catch (error) {
       console.error("AI生成主线失败:", error);
-      alert("AI生成主线失败，请重试");
+      toast.error("AI生成主线失败，请重试");
     } finally {
       setGenerating(false);
     }

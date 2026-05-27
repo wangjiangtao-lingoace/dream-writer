@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { toast } from "../components/ui/toast";
 import CharacterCard from "../components/CharacterCard";
 import WorldviewEditor from "../components/WorldviewEditor";
 import WorldviewViewer from "../components/WorldviewViewer";
@@ -71,7 +72,7 @@ const NovelWorkspace: React.FC = () => {
       setWorldviews(worldviewsData);
     } catch (error) {
       console.error("加载作品失败:", error);
-      alert("作品不存在或加载失败");
+      toast.error("作品不存在或加载失败");
       navigate("/");
     } finally {
       setLoading(false);
@@ -99,7 +100,7 @@ const NovelWorkspace: React.FC = () => {
       setNotice("保存成功");
     } catch (error) {
       console.error("保存失败:", error);
-      alert("保存失败，请重试");
+      toast.error("保存失败，请重试");
     }
   };
 
@@ -300,7 +301,7 @@ const NovelWorkspace: React.FC = () => {
                       setEditingOutline(false);
                       setNotice("大纲已保存");
                     })
-                    .catch(() => alert("保存失败"));
+                    .catch(() => toast.error("保存失败"));
                 } else {
                   setOutlineDraft(novel.outline || "");
                   setEditingOutline(true);
@@ -350,7 +351,7 @@ const NovelWorkspace: React.FC = () => {
                             setEditingInspiration(false);
                             setNotice("灵感已保存");
                           })
-                          .catch(() => alert("保存失败"));
+                          .catch(() => toast.error("保存失败"));
                       } else {
                         setInspirationDraft(novel.inspiration || "");
                         setEditingInspiration(true);

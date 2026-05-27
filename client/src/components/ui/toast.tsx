@@ -10,9 +10,11 @@ export function Toaster() {
       closeButton
       toastOptions={{
         style: {
-          background: "var(--bg-card)",
+          background: "var(--bg-surface)",
           color: "var(--text-primary)",
-          border: "1px solid var(--border)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-lg)",
+          fontSize: "var(--text-sm)",
         },
       }}
     />

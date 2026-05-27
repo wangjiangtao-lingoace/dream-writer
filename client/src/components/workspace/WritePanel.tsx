@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
+import { toast } from "../ui/toast";
 import { translateChapterStatus, translateChapterSource } from "../../utils/translate";
 
 const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }> = ({ novelId, activeChapterId }) => {
@@ -57,7 +58,7 @@ const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }>
         `/api/novels/${novelId}/chapters/${activeChapter.id}`,
         activeChapter
       );
-      alert("保存成功");
+      toast.success("保存成功");
     } catch (error) {
       console.error("保存章节失败:", error);
     }
