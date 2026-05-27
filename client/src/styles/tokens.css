@@ -17,11 +17,11 @@
   --text-muted: #6b6b76;
   --text-disabled: #3a3a42;
 
-  /* 主色：琥珀橙 */
-  --accent: #f97316;
-  --accent-hover: #fb923c;
-  --accent-muted: rgba(249, 115, 22, 0.15);
-  --accent-glow: rgba(249, 115, 22, 0.4);
+  /* 主色：靛蓝 */
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-muted: rgba(99, 102, 241, 0.15);
+  --accent-glow: rgba(99, 102, 241, 0.4);
 
   /* 语义色 */
   --success: #22c55e;
@@ -58,7 +58,7 @@
   --shadow-glow: 0 0 16px var(--accent-glow);
 
   /* 字体 */
-  --font-sans: "Noto Sans SC", "PingFang SC", -apple-system, sans-serif;
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", monospace;
 
   /* 字号 */
@@ -89,5 +89,5 @@
   --border: var(--border-default);
   --border-light: var(--border-subtle);
   --border-dark: var(--border-strong);
-  --font-serif: "KaiTi", "STKaiti", "楷体", "Georgia", serif;
+  --font-serif: "Inter", "Noto Sans SC", -apple-system, sans-serif;
 }
