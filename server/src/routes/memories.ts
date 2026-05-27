@@ -239,6 +239,8 @@ router.put("/:id", async (req, res, next) => {
 router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = idSchema.parse(req.params);
+    // C1: 删除前清理 RAG 向量数据，防止孤儿向量
+    getRagIngestService()?.deleteChunks("memory", id).catch(console.error);
     await prisma.memory.delete({ where: { id } });
     res.json({ success: true, data: null });
   } catch (error) {

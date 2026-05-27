@@ -148,6 +148,8 @@ router.put("/:id", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    // C1: 删除前清理 RAG 向量数据，防止孤儿向量
+    getRagIngestService()?.deleteChunks("general_knowledge", id).catch(console.error);
     await prisma.generalKnowledge.delete({
       where: { id },
     });

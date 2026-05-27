@@ -146,6 +146,8 @@ router.delete("/:id", async (req, res, next) => {
       res.status(403).json({ success: false, error: "无权操作该知识资产。" });
       return;
     }
+    // C1: 删除前清理 RAG 向量数据，防止孤儿向量
+    getRagIngestService()?.deleteChunks("knowledge_asset", id).catch(console.error);
     await prisma.knowledgeAsset.delete({ where: { id } });
     res.json({ success: true, data: null });
   } catch (error) {
