@@ -44,6 +44,11 @@ class VectorStore {
   private available = true;
 
   constructor(dimension = 1536) {
+    // C1: Validate dimension to prevent SQL injection via template literal
+    if (!Number.isInteger(dimension) || dimension <= 0 || dimension > 65536) {
+      throw new Error(`Invalid vector dimension: ${dimension}`);
+    }
+
     this.dimension = dimension;
 
     // 1. Resolve database path (same logic as prisma.ts)
@@ -52,20 +57,17 @@ class VectorStore {
     // 2. Create better-sqlite3 connection
     this.db = new Database(dbPath);
 
-    // 3. Load sqlite-vec extension
+    // 3. Load sqlite-vec extension & create table (C2: unified try-catch)
     try {
       loadSqliteVec(this.db);
+      this.ensureTable();
     } catch (error) {
       console.warn(
-        "[VectorStore] Failed to load sqlite-vec extension, vector search disabled:",
+        "[VectorStore] Failed to initialize sqlite-vec, vector search disabled:",
         error,
       );
       this.available = false;
-      return;
     }
-
-    // 4. Create vec0 virtual table
-    this.ensureTable();
   }
 
   // -- helpers -------------------------------------------------------------
@@ -245,7 +247,9 @@ class VectorStore {
   }
 
   close(): void {
+    this.available = false;
     this.db.close();
+    vectorStoreInstance = null;
   }
 }
 
