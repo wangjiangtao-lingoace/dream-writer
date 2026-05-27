@@ -20,6 +20,29 @@ export interface ListBookAnalysesInput {
 
 const llmService = new LlmInvokeService();
 
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = { status: "fulfilled", value: await fn(items[index], index) };
+      } catch (error) {
+        results[index] = { status: "rejected", reason: error };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
 function clipSourceText(text?: string): string {
   return (text || "").trim().slice(0, 12000);
 }
@@ -211,35 +234,57 @@ export class BookAnalysisService {
     });
 
     try {
-      for (let index = 0; index < BOOK_ANALYSIS_SECTIONS.length; index += 1) {
-        const section = BOOK_ANALYSIS_SECTIONS[index];
-        await prisma.bookAnalysisSection.update({
-          where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
-          data: { status: "running" },
-        });
-        await prisma.bookAnalysis.update({
-          where: { id },
-          data: {
-            progress: Math.round((index / BOOK_ANALYSIS_SECTIONS.length) * 86) + 8,
-            currentItemKey: section.key,
-            currentItemLabel: section.title,
-          },
-        });
+      // Mark all sections as "running"
+      await prisma.bookAnalysisSection.updateMany({
+        where: { analysisId: id },
+        data: { status: "running" },
+      });
 
-        const aiContent = await llmService.completeText({
-          prompt: buildPrompt(input, section.key, section.title),
-          temperature: 0.28,
-          maxTokens: 1800,
-        }) ?? fallbackSection(input, section.key, section.title);
+      const progressPerSection = Math.round(86 / BOOK_ANALYSIS_SECTIONS.length);
 
-        await prisma.bookAnalysisSection.update({
-          where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
-          data: {
-            status: "succeeded",
-            aiContent,
-            evidence: encodeEvidence(evidenceFromSource(input)),
-          },
-        });
+      // Run all LLM calls in parallel with concurrency limit of 4
+      const results = await mapWithConcurrency(
+        BOOK_ANALYSIS_SECTIONS,
+        4,
+        async (section) => {
+          const aiContent = await llmService.completeText({
+            prompt: buildPrompt(input, section.key, section.title),
+            temperature: 0.28,
+            maxTokens: 1800,
+          }) ?? fallbackSection(input, section.key, section.title);
+
+          await prisma.bookAnalysisSection.update({
+            where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
+            data: {
+              status: "succeeded",
+              aiContent,
+              evidence: encodeEvidence(evidenceFromSource(input)),
+            },
+          });
+
+          // Update progress atomically after each section completes
+          await prisma.bookAnalysis.update({
+            where: { id },
+            data: {
+              progress: { increment: progressPerSection },
+              currentItemKey: section.key,
+              currentItemLabel: `${section.title} ✓`,
+            },
+          });
+
+          return { key: section.key, aiContent };
+        },
+      );
+
+      // Handle partial failures
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === "rejected") {
+          const section = BOOK_ANALYSIS_SECTIONS[i];
+          await prisma.bookAnalysisSection.update({
+            where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
+            data: { status: "failed", aiContent: fallbackSection(input, section.key, section.title) },
+          });
+        }
       }
 
       const detail = await prisma.bookAnalysis.findUniqueOrThrow({
