@@ -8,6 +8,7 @@ import {
 } from "../../llm/providers";
 import { prisma } from "../../db/prisma";
 import { decryptApiKey } from "../../utils/crypto";
+import { withRetry } from "../../utils/retry";
 
 export interface ChapterDraftInput {
   novelTitle: string;
@@ -127,6 +128,10 @@ export class LlmError extends Error {
 
 export class LlmInvokeService {
   async completeTextOrThrow(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string> {
+    return withRetry(() => this.doCompleteText(input));
+  }
+
+  private async doCompleteText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string> {
     const config = await resolveModelConfig();
     const provider = config?.provider ?? "unknown";
     const model = config?.model ?? "unknown";
