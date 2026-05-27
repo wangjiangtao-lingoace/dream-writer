@@ -1,15 +1,216 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import CharacterCard from "../components/CharacterCard";
 import WorldviewEditor from "../components/WorldviewEditor";
+import WorldviewViewer from "../components/WorldviewViewer";
+import OutlineViewer from "../components/OutlineViewer";
+import RelationshipMatrix from "../components/RelationshipMatrix";
 import KnowledgeHub from "../components/KnowledgeHub";
 import VolumeEditor from "../components/VolumeEditor";
 import MemoryPanel from "../components/MemoryPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import StylePanel from "../components/StylePanel";
 import { AIPanel } from "../components/layout/AIPanel";
+import { translateChapterStatus, translateChapterSource, translateAdoptionKey, translateAdoptionValue, translateAssetType } from "../utils/translate";
 import "../styles/pages/workspace.css";
+
+// BlueprintViewer 组件：结构化展示创作蓝图
+const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  if (!blueprint || typeof blueprint !== "object") {
+    return (
+      <div style={{ padding: "1rem", color: "var(--text-muted)", textAlign: "center" }}>
+        暂无蓝图数据
+      </div>
+    );
+  }
+
+  const toggleExpand = (key: string) => {
+    const newExpanded = new Set(expandedKeys);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedKeys(newExpanded);
+  };
+
+  const renderValue = (key: string, value: any, depth: number = 0) => {
+    if (value === null || value === undefined) {
+      return <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>未设置</span>;
+    }
+
+    if (typeof value === "boolean") {
+      return <span style={{ color: value ? "#28a745" : "#dc3545" }}>{value ? "是" : "否"}</span>;
+    }
+
+    if (typeof value === "number") {
+      return <span style={{ color: "var(--accent)" }}>{value}</span>;
+    }
+
+    if (typeof value === "string") {
+      const isLong = value.length > 100;
+      const isExpanded = expandedKeys.has(key);
+
+      if (isLong) {
+        return (
+          <div>
+            <p style={{
+              margin: 0,
+              color: "var(--text-primary)",
+              lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+            }}>
+              {isExpanded ? value : value.substring(0, 100) + "..."}
+            </p>
+            <button
+              onClick={() => toggleExpand(key)}
+              style={{
+                marginTop: "0.5rem",
+                padding: "0.25rem 0.5rem",
+                background: "transparent",
+                color: "var(--accent)",
+                border: "1px solid var(--border-default)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              {isExpanded ? "收起" : "展开全部"}
+            </button>
+          </div>
+        );
+      }
+
+      return <span style={{ color: "var(--text-primary)", lineHeight: 1.7 }}>{value}</span>;
+    }
+
+    if (Array.isArray(value)) {
+      return (
+        <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "var(--text-secondary)" }}>
+          {value.map((item, index) => (
+            <li key={index} style={{ marginBottom: "0.25rem", lineHeight: 1.6 }}>
+              {typeof item === "object" ? JSON.stringify(item) : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (typeof value === "object") {
+      return (
+        <div style={{ paddingLeft: depth > 0 ? "1rem" : 0, borderLeft: depth > 0 ? "2px solid var(--border-default)" : "none" }}>
+          {Object.entries(value).map(([subKey, subValue]) => (
+            <div key={subKey} style={{ marginBottom: "0.75rem" }}>
+              <div style={{
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "var(--text-secondary)",
+                marginBottom: "0.25rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.02em",
+              }}>
+                {subKey}
+              </div>
+              <div style={{ paddingLeft: "0.5rem" }}>
+                {renderValue(`${key}.${subKey}`, subValue, depth + 1)}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <span>{String(value)}</span>;
+  };
+
+  // 中文标签映射
+  const labelMap: Record<string, string> = {
+    title: "标题",
+    genre: "类型",
+    theme: "主题",
+    setting: "背景设定",
+    tone: "基调",
+    style: "风格",
+    conflict: "核心冲突",
+    protagonist: "主角设定",
+    antagonist: "反派设定",
+    plot: "情节大纲",
+    chapters: "章节规划",
+    hooks: "钩子设计",
+    foreshadows: "伏笔设计",
+    emotions: "情感曲线",
+    pacing: "节奏控制",
+    wordCount: "目标字数",
+    targetAudience: "目标读者",
+    uniqueSellingPoint: "独特卖点",
+    synopsis: "故事梗概",
+    openingHook: "开篇钩子",
+    climax: "高潮设计",
+    resolution: "结局设计",
+    themes: "主题列表",
+    motifs: "母题列表",
+    symbolism: "象征意义",
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "0.75rem" }}>
+      {Object.entries(blueprint).map(([key, value]) => (
+        <div key={key} style={{
+          padding: "0.75rem 1rem",
+          background: "var(--bg-base)",
+          borderRadius: "var(--radius-sm)",
+          border: "1px solid var(--border-default)",
+        }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginBottom: "0.5rem",
+            paddingBottom: "0.5rem",
+            borderBottom: "1px solid var(--border-light)",
+          }}>
+            <span style={{
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+            }}>
+              {labelMap[key] || key}
+            </span>
+            {typeof value === "string" && value.length > 50 && (
+              <span style={{
+                fontSize: "0.6875rem",
+                color: "var(--text-muted)",
+                background: "var(--bg-surface)",
+                padding: "0.125rem 0.375rem",
+                borderRadius: "var(--radius-sm)",
+              }}>
+                文本
+              </span>
+            )}
+            {Array.isArray(value) && (
+              <span style={{
+                fontSize: "0.6875rem",
+                color: "var(--text-muted)",
+                background: "var(--bg-surface)",
+                padding: "0.125rem 0.375rem",
+                borderRadius: "var(--radius-sm)",
+              }}>
+                {value.length} 项
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: "0.875rem" }}>
+            {renderValue(key, value)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 type WorkspaceTab =
   | "dashboard"
@@ -60,7 +261,11 @@ const NovelWorkspace: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
+  const [editingInspiration, setEditingInspiration] = useState(false);
+  const [inspirationDraft, setInspirationDraft] = useState("");
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [worldviews, setWorldviews] = useState<any[]>([]);
+  const [editingWorldviewId, setEditingWorldviewId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -84,8 +289,12 @@ const NovelWorkspace: React.FC = () => {
   const loadNovel = async (novelId: string) => {
     try {
       setLoading(true);
-      const data = await api.get<NovelDetail>(`/api/novels/${novelId}`);
+      const [data, worldviewsData] = await Promise.all([
+        api.get<NovelDetail>(`/api/novels/${novelId}`),
+        api.get<any[]>(`/api/worldviews?novelId=${encodeURIComponent(novelId)}`).catch(() => []),
+      ]);
       setNovel(data);
+      setWorldviews(worldviewsData);
     } catch (error) {
       console.error("加载作品失败:", error);
       alert("作品不存在或加载失败");
@@ -356,8 +565,51 @@ const NovelWorkspace: React.FC = () => {
                 </div>
               </div>
               <div className="outline-section">
-                <h3>创作灵感</h3>
-                <p>{novel.inspiration || "暂无灵感描述"}</p>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h3 style={{ margin: 0 }}>创作灵感</h3>
+                  <button
+                    className="btn-edit"
+                    onClick={() => {
+                      if (editingInspiration) {
+                        api.put(`/api/novels/${id}`, { inspiration: inspirationDraft })
+                          .then(() => {
+                            setNovel(prev => prev ? { ...prev, inspiration: inspirationDraft } : null);
+                            setEditingInspiration(false);
+                            setNotice("灵感已保存");
+                          })
+                          .catch(() => alert("保存失败"));
+                      } else {
+                        setInspirationDraft(novel.inspiration || "");
+                        setEditingInspiration(true);
+                      }
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "0.25rem", padding: "0.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--accent)", background: "none", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
+                  >
+                    {editingInspiration ? "保存" : "编辑"}
+                  </button>
+                </div>
+                {editingInspiration ? (
+                  <textarea
+                    value={inspirationDraft}
+                    onChange={(e) => setInspirationDraft(e.target.value)}
+                    placeholder="请输入创作灵感，越详细越好..."
+                    rows={6}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      marginTop: "0.5rem",
+                      background: "var(--bg-base)",
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-md)",
+                      color: "var(--text-primary)",
+                      fontSize: "0.875rem",
+                      resize: "vertical",
+                      lineHeight: 1.7,
+                    }}
+                  />
+                ) : (
+                  <p style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>{novel.inspiration || "暂无灵感描述"}</p>
+                )}
               </div>
               <div className="outline-section">
                 <h3>故事大纲</h3>
@@ -380,7 +632,13 @@ const NovelWorkspace: React.FC = () => {
                     }}
                   />
                 ) : (
-                  <p>{novel.outline || "暂无大纲，请点击编辑按钮添加"}</p>
+                  <OutlineViewer
+                    content={novel.outline || ""}
+                    onEdit={() => {
+                      setOutlineDraft(novel.outline || "");
+                      setEditingOutline(true);
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -391,10 +649,61 @@ const NovelWorkspace: React.FC = () => {
         return <VolumeEditor novelId={id!} onNotice={handleNotice} />;
 
       case "characters":
-        return <CharacterCard novelId={id!} onNotice={handleNotice} />;
+        return (
+          <div className="characters-panel">
+            <CharacterCard novelId={id!} onNotice={handleNotice} />
+            <div style={{ marginTop: "2rem" }}>
+              <RelationshipMatrix novelId={id!} onNotice={handleNotice} />
+            </div>
+          </div>
+        );
 
       case "worldviews":
-        return <WorldviewEditor novelId={id!} onNotice={handleNotice} />;
+        return (
+          <div className="worldviews-panel">
+            <div className="panel-header">
+              <h2>世界观设定</h2>
+              <p className="panel-desc">管理作品的世界观、规则、力量体系等设定。</p>
+            </div>
+            {worldviews.length === 0 ? (
+              <div className="empty-state">
+                <p>暂无世界观数据，请点击下方按钮创建。</p>
+                <button
+                  className="btn-primary"
+                  onClick={() => setEditingWorldviewId("new")}
+                  style={{
+                    padding: "0.5rem 1rem",
+                    background: "var(--accent)",
+                    color: "var(--text-inverse)",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: "pointer",
+                  }}
+                >
+                  创建世界观
+                </button>
+              </div>
+            ) : (
+              <div className="worldviews-list">
+                {worldviews.map((worldview) => (
+                  <div key={worldview.id} className="worldview-item">
+                    {editingWorldviewId === worldview.id ? (
+                      <WorldviewEditor
+                        novelId={id!}
+                        onNotice={handleNotice}
+                      />
+                    ) : (
+                      <WorldviewViewer
+                        worldview={worldview}
+                        onEdit={() => setEditingWorldviewId(worldview.id)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
 
       case "memory":
         return <MemoryPanel novelId={id!} onNotice={handleNotice} />;
@@ -415,7 +724,7 @@ const NovelWorkspace: React.FC = () => {
         return <HookPanel novelId={id!} />;
 
       case "write":
-        return <WritePanel novelId={id!} />;
+        return <WritePanel novelId={id!} activeChapterId={activeChapterId} />;
 
       case "analysis":
         return <AnalysisPanel novelId={id!} />;
@@ -448,21 +757,8 @@ const NovelWorkspace: React.FC = () => {
   };
 
   return (
+    <ErrorBoundary>
     <div className="workspace">
-      {/* 左栏：章节目录 */}
-      <aside className="workspace-chapters">
-        <div className="workspace-chapters-title">章节目录</div>
-        {novel?.chapters?.map((chapter: { id: string; title: string }) => (
-          <div
-            key={chapter.id}
-            className={`workspace-chapter-item ${activeChapterId === chapter.id ? "active" : ""}`}
-            onClick={() => setActiveChapterId(chapter.id)}
-          >
-            <span>{chapter.title}</span>
-          </div>
-        ))}
-      </aside>
-
       {/* 中栏：编辑器 */}
       <div className="workspace-editor">
         <header className="workspace-header" style={{
@@ -474,28 +770,32 @@ const NovelWorkspace: React.FC = () => {
           background: "var(--bg-surface)",
           boxShadow: "var(--shadow-sm)",
         }}>
-          <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <button className="btn-back" onClick={() => navigate("/")} style={{
               display: "inline-flex",
               alignItems: "center",
-              justifyContent: "center",
-              width: "32px",
-              height: "32px",
+              gap: "0.5rem",
+              padding: "0.5rem 1rem",
               background: "transparent",
               color: "var(--text-secondary)",
               border: "1px solid var(--border-default)",
               borderRadius: "var(--radius-sm)",
               cursor: "pointer",
+              fontSize: "0.875rem",
+              transition: "all var(--transition-fast)",
             }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
                 <path d="m15 18-6-6 6-6" />
               </svg>
+              返回书架
             </button>
+            <div style={{ width: "1px", height: "24px", background: "var(--border-default)" }} />
             <h1 style={{
               fontFamily: "var(--font-serif)",
               fontSize: "1.25rem",
               color: "var(--text-primary)",
               letterSpacing: "0.05em",
+              margin: 0,
             }}>《{novel.title}》</h1>
           </div>
           <div className="header-actions" style={{ display: "flex", gap: "0.5rem" }}>
@@ -503,13 +803,14 @@ const NovelWorkspace: React.FC = () => {
               display: "inline-flex",
               alignItems: "center",
               gap: "0.375rem",
-              padding: "0.375rem 0.75rem",
+              padding: "0.5rem 1rem",
               background: "transparent",
               color: "var(--text-secondary)",
               border: "1px solid var(--border-default)",
               borderRadius: "var(--radius-sm)",
               fontSize: "0.8125rem",
               cursor: "pointer",
+              transition: "all var(--transition-fast)",
             }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -520,13 +821,14 @@ const NovelWorkspace: React.FC = () => {
               display: "inline-flex",
               alignItems: "center",
               gap: "0.375rem",
-              padding: "0.375rem 0.75rem",
+              padding: "0.5rem 1rem",
               background: "var(--accent)",
               color: "var(--text-inverse)",
               border: "none",
               borderRadius: "var(--radius-sm)",
               fontSize: "0.8125rem",
               cursor: "pointer",
+              transition: "all var(--transition-fast)",
             }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -679,6 +981,7 @@ const NovelWorkspace: React.FC = () => {
         onAction={(key) => console.log("AI action:", key)}
       />
     </div>
+    </ErrorBoundary>
   );
 };
 
@@ -1161,6 +1464,7 @@ interface WorkflowStatus {
   pipeline: null | { id: string; status: string; currentPhase: string; currentStep: string; progress: number };
   usage: { countsByType: Record<string, number>; recent: Array<{ id: string; assetType: string; title: string; usageStage: string; createdAt: string }> };
   nextActions: Array<{ key: string; label: string; enabled: boolean; reason: string; imitationPlanId?: string | null }>;
+  creationMode?: "standalone" | "imitation";
   health: { missing: string[]; warnings: string[] };
 }
 
@@ -1208,6 +1512,19 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
       navigate(`/novel/${novelId}/analysis`);
       return;
     }
+    if (action.key === "standalone") {
+      setNotice("正在从灵感生成大纲，请稍候...");
+      try {
+        await api.post("/api/pipeline/start", {
+          novelId,
+          config: { mode: "standalone", autoDraftChapters: 3 },
+        });
+        navigate(`/novel/${novelId}/pipeline`);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : "启动生成流程失败。");
+      }
+      return;
+    }
     if (action.key === "draft") {
       await runDraft(action.imitationPlanId);
       return;
@@ -1220,18 +1537,26 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
   if (loading) return <div className="panel-loading">加载创作总控台...</div>;
   if (!status) return <div className="empty-state">{notice || "无法加载创作流程状态。"}</div>;
 
-  const cards = [
-    { label: "拆书", value: status.bookAnalysis ? `${status.bookAnalysis.sectionCompleted}/${status.bookAnalysis.sectionTotal}` : "未开始", text: status.bookAnalysis ? `${status.bookAnalysis.usedForImitation} 个分区用于仿写` : "需要资料或粘贴内容" },
-    { label: "仿写", value: status.imitation ? "已生成" : "缺失", text: status.imitation ? `样章 ${status.imitation.sampleDraftCount} 个，${status.imitation.materialized ? "已落库" : "未落库"}` : "需要先完成拆书" },
-    { label: "资产", value: `${status.assets.knowledgeAssets || 0}/${status.assets.memories || 0}`, text: `知识库 / 记忆，人物 ${status.assets.characters || 0}，世界观 ${status.assets.worldviews || 0}` },
-    { label: "章节", value: `${status.chapters.drafted}/${status.chapters.total}`, text: `前三章：${status.chapters.firstThree.map((chapter) => chapter.hasContent ? "有" : "缺").join(" / ")}` },
-  ];
+  const isStandalone = status.creationMode === "standalone";
+  const cards = isStandalone
+    ? [
+        { label: "灵感", value: status.novel.inspiration ? "已填写" : "未填写", text: status.novel.inspiration ? status.novel.inspiration.slice(0, 40) + (status.novel.inspiration.length > 40 ? "..." : "") : "请先填写创作灵感" },
+        { label: "资产", value: `${status.assets.characters || 0}人物/${status.assets.worldviews || 0}世界观`, text: `风格 ${status.assets.styleProfiles || 0}，钩子 ${status.assets.hooks || 0}，卷纲 ${status.assets.volumes || 0}` },
+        { label: "章节", value: `${status.chapters.drafted}/${status.chapters.total}`, text: `前三章：${status.chapters.firstThree.map((chapter) => chapter.hasContent ? "有" : "缺").join(" / ")}` },
+        { label: "流程", value: status.pipeline ? (status.pipeline.status === "running" ? "运行中" : status.pipeline.status === "paused" ? "已暂停" : status.pipeline.status) : "未启动", text: status.pipeline ? `进度 ${status.pipeline.progress}%` : "点击下方按钮启动" },
+      ]
+    : [
+        { label: "拆书", value: status.bookAnalysis ? `${status.bookAnalysis.sectionCompleted}/${status.bookAnalysis.sectionTotal}` : "未开始", text: status.bookAnalysis ? `${status.bookAnalysis.usedForImitation} 个分区用于仿写` : "需要资料或粘贴内容" },
+        { label: "仿写", value: status.imitation ? "已生成" : "缺失", text: status.imitation ? `样章 ${status.imitation.sampleDraftCount} 个，${status.imitation.materialized ? "已落库" : "未落库"}` : "需要先完成拆书" },
+        { label: "资产", value: `${status.assets.knowledgeAssets || 0}/${status.assets.memories || 0}`, text: `知识库 / 记忆，人物 ${status.assets.characters || 0}，世界观 ${status.assets.worldviews || 0}` },
+        { label: "章节", value: `${status.chapters.drafted}/${status.chapters.total}`, text: `前三章：${status.chapters.firstThree.map((chapter) => chapter.hasContent ? "有" : "缺").join(" / ")}` },
+      ];
 
   return (
     <div className="workflow-dashboard" style={{ display: "grid", gap: "1.25rem" }}>
       <div className="panel-header">
         <h2>创作总控台</h2>
-        <p className="panel-desc">主路径：资料 → 拆书 → 仿写蓝图 → 资产落库 → 自动生成 1-3 章 → 继续创作。</p>
+        <p className="panel-desc">{isStandalone ? "独立创作：灵感 → AI 自动生成大纲、人物、世界观、风格、章节。" : "主路径：资料 → 拆书 → 仿写蓝图 → 资产落库 → 自动生成 1-3 章 → 继续创作。"}</p>
       </div>
 
       {notice && <div className="notice-bar" style={{ padding: "0.75rem 1rem", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", color: "var(--accent)", background: "rgba(249,115,22,0.06)" }}>{notice}</div>}
@@ -1281,8 +1606,8 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
           <div style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
             {Object.entries(status.adoption).map(([key, value]) => (
               <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.875rem" }}>
-                <span style={{ color: "var(--text-secondary)" }}>{key}</span>
-                <strong style={{ color: value.includes("Pipeline") ? "var(--accent)" : "var(--text-primary)" }}>{value}</strong>
+                <span style={{ color: "var(--text-secondary)" }}>{translateAdoptionKey(key)}</span>
+                <strong style={{ color: value.includes("Pipeline") ? "var(--accent)" : "var(--text-primary)" }}>{translateAdoptionValue(value)}</strong>
               </div>
             ))}
             {status.health.missing.length > 0 && (
@@ -1295,13 +1620,250 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
       </section>
 
       <section style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-base)", overflow: "hidden" }}>
+        <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "1rem" }}>任务关系图</h3>
+        <div style={{ padding: "1rem" }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.75rem 1rem",
+            background: "var(--bg-surface)",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--border-default)",
+            marginBottom: "0.75rem",
+            fontSize: "0.8125rem",
+            color: "var(--text-secondary)",
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            当前创作流程节点与依赖关系
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: "0.75rem",
+          }}>
+            {isStandalone ? (
+              <>
+                {/* 独立创作：灵感节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.novel.inspiration ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.novel.inspiration ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                  position: "relative",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.novel.inspiration ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>1</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>创作灵感</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.novel.inspiration ? "已填写" : "请填写灵感"}
+                  </p>
+                  <div style={{ position: "absolute", right: "-0.75rem", top: "50%", transform: "translateY(-50%)", width: "1.5rem", height: "2px", background: "var(--border-default)" }} />
+                </div>
+
+                {/* 独立创作：AI 规划节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: (status.assets.characters > 0 && status.assets.worldviews > 0) ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${(status.assets.characters > 0 && status.assets.worldviews > 0) ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                  position: "relative",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: (status.assets.characters > 0 && status.assets.worldviews > 0) ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>2</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>AI 规划</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    大纲/人物/世界观/风格
+                  </p>
+                  <div style={{ position: "absolute", right: "-0.75rem", top: "50%", transform: "translateY(-50%)", width: "1.5rem", height: "2px", background: "var(--border-default)" }} />
+                </div>
+
+                {/* 独立创作：章节创作节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.chapters.drafted > 0 ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.chapters.drafted > 0 ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.chapters.drafted > 0 ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>3</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>章节创作</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.chapters.drafted > 0 ? `${status.chapters.drafted}/${status.chapters.total} 章` : "自动生成 1-3 章"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 仿写模式：资料节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.bookAnalysis ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.bookAnalysis ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                  position: "relative",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.bookAnalysis ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>1</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>资料收集</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.bookAnalysis ? "已完成" : "准备参考文本"}
+                  </p>
+                  <div style={{ position: "absolute", right: "-0.75rem", top: "50%", transform: "translateY(-50%)", width: "1.5rem", height: "2px", background: "var(--border-default)" }} />
+                </div>
+
+                {/* 仿写模式：拆书节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.bookAnalysis?.status === "succeeded" ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.bookAnalysis?.status === "succeeded" ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                  position: "relative",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.bookAnalysis?.status === "succeeded" ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>2</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>拆书分析</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.bookAnalysis ? `${status.bookAnalysis.sectionCompleted}/${status.bookAnalysis.sectionTotal} 分区` : "8 个维度分析"}
+                  </p>
+                  <div style={{ position: "absolute", right: "-0.75rem", top: "50%", transform: "translateY(-50%)", width: "1.5rem", height: "2px", background: "var(--border-default)" }} />
+                </div>
+
+                {/* 仿写模式：仿写节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.imitation ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.imitation ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                  position: "relative",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.imitation ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>3</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>仿写方案</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.imitation ? `${status.imitation.sampleDraftCount} 个样章` : "蓝图 + 样章"}
+                  </p>
+                  <div style={{ position: "absolute", right: "-0.75rem", top: "50%", transform: "translateY(-50%)", width: "1.5rem", height: "2px", background: "var(--border-default)" }} />
+                </div>
+
+                {/* 仿写模式：创作节点 */}
+                <div style={{
+                  padding: "0.75rem",
+                  background: status.chapters.drafted > 0 ? "rgba(40,167,69,0.1)" : "var(--bg-surface)",
+                  border: `1px solid ${status.chapters.drafted > 0 ? "#28a745" : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-sm)",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "1.5rem", height: "1.5rem",
+                      background: status.chapters.drafted > 0 ? "#28a745" : "var(--text-muted)",
+                      color: "var(--text-inverse)", borderRadius: "50%", fontSize: "0.75rem", fontWeight: 600,
+                    }}>4</span>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>章节创作</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                    {status.chapters.drafted > 0 ? `${status.chapters.drafted}/${status.chapters.total} 章` : "自动生成 1-3 章"}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 流程进度条 */}
+          <div style={{
+            marginTop: "1rem",
+            padding: "0.75rem",
+            background: "var(--bg-surface)",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--border-default)",
+          }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+            }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--text-secondary)" }}>整体进度</span>
+              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                {Math.round(
+                  ((status.bookAnalysis ? 25 : 0) +
+                    (status.bookAnalysis?.status === "succeeded" ? 25 : 0) +
+                    (status.imitation ? 25 : 0) +
+                    (status.chapters.drafted > 0 ? 25 : 0))
+                )}%
+              </span>
+            </div>
+            <div style={{
+              height: "0.5rem",
+              background: "var(--border-default)",
+              borderRadius: "var(--radius-full)",
+              overflow: "hidden",
+            }}>
+              <div style={{
+                height: "100%",
+                width: `${Math.round(
+                  ((status.bookAnalysis ? 25 : 0) +
+                    (status.bookAnalysis?.status === "succeeded" ? 25 : 0) +
+                    (status.imitation ? 25 : 0) +
+                    (status.chapters.drafted > 0 ? 25 : 0))
+                )}%`,
+                background: "var(--accent)",
+                borderRadius: "var(--radius-full)",
+                transition: "width var(--transition-normal)",
+              }} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-base)", overflow: "hidden" }}>
         <h3 style={{ margin: 0, padding: "0.875rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "1rem" }}>成果与使用记录</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", padding: "1rem" }}>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {status.chapters.firstThree.map((chapter) => (
               <div key={chapter.order} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.625rem 0", borderBottom: "1px solid var(--border-light)" }}>
                 <span>第{chapter.order}章 {chapter.title}</span>
-                <strong>{chapter.hasContent ? `${chapter.wordCount}字 · ${chapter.source || "未知来源"}` : "未生成"}</strong>
+                <strong>{chapter.hasContent ? `${chapter.wordCount}字 · ${translateChapterSource(chapter.source || "manual").label}` : "未生成"}</strong>
               </div>
             ))}
           </div>
@@ -1309,7 +1871,7 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
             {status.usage.recent.slice(0, 8).map((item) => (
               <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.8125rem" }}>
                 <span>{item.title}</span>
-                <em style={{ fontStyle: "normal", color: "var(--text-muted)" }}>{item.assetType}</em>
+                <em style={{ fontStyle: "normal", color: "var(--text-muted)" }}>{translateAssetType(item.assetType)}</em>
               </div>
             ))}
             {status.usage.recent.length === 0 && <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.875rem" }}>还没有 Pipeline 使用记录。</p>}
@@ -1321,7 +1883,7 @@ const WorkflowDashboard: React.FC<{ novelId: string }> = ({ novelId }) => {
 };
 
 // 写作面板组件
-const WritePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
+const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }> = ({ novelId, activeChapterId }) => {
   const [chapters, setChapters] = useState<any[]>([]);
   const [activeChapter, setActiveChapter] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1329,6 +1891,16 @@ const WritePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   useEffect(() => {
     loadChapters();
   }, [novelId]);
+
+  // 当外部activeChapterId变化时，自动选择对应章节
+  useEffect(() => {
+    if (activeChapterId && chapters.length > 0) {
+      const chapter = chapters.find(c => c.id === activeChapterId);
+      if (chapter) {
+        setActiveChapter(chapter);
+      }
+    }
+  }, [activeChapterId, chapters]);
 
   const loadChapters = async () => {
     try {
@@ -1431,7 +2003,11 @@ const WritePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                   {chapter.wordCount || 0}字
                 </em>
               </span>
-              <span className="chapter-status">{chapter.status} · {chapter.source || "manual"}</span>
+              <span className="chapter-status">
+                {translateChapterStatus(chapter.status).icon} {translateChapterStatus(chapter.status).label}
+                {" · "}
+                {translateChapterSource(chapter.source || "manual").icon} {translateChapterSource(chapter.source || "manual").label}
+              </span>
             </div>
           ))}
         </div>
@@ -1450,7 +2026,7 @@ const WritePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               />
               <div className="write-actions">
                 <span style={{ alignSelf: "center", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-                  {activeChapter.wordCount || 0}字 · 来源：{activeChapter.source || "manual"}
+                  {activeChapter.wordCount || 0}字 · 来源：{translateChapterSource(activeChapter.source || "manual").icon} {translateChapterSource(activeChapter.source || "manual").label}
                 </span>
                 <button className="btn-secondary" onClick={handleSaveChapter}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1596,6 +2172,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [editingSectionKey, setEditingSectionKey] = useState<string | null>(null);
   const [sectionDraft, setSectionDraft] = useState("");
   const [sectionNotes, setSectionNotes] = useState("");
+  const [activeSectionIndex, setActiveSectionIndex] = useState(0);
 
   const activeAnalysis = useMemo(
     () => bookAnalyses.find((a) => a.id === activeAnalysisId) ?? bookAnalyses[0] ?? null,
@@ -2165,144 +2742,204 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 maxHeight: "calc(100vh - 350px)",
                 overflowY: "auto",
               }}>
-                {activeAnalysis.sections.map((section) => (
-                  <article key={section.id} style={{
-                    border: "1px solid var(--border-default)",
-                    borderRadius: "var(--radius-sm)",
-                    overflow: "hidden",
-                  }}>
-                    <header style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      padding: "0.75rem 1rem",
-                      background: "var(--bg-surface)",
-                      borderBottom: "1px solid var(--border-default)",
-                    }}>
-                      <span style={{
+                {/* 分区标签页导航 */}
+                <div style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  padding: "0.5rem",
+                  background: "var(--bg-surface)",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1px solid var(--border-default)",
+                  overflowX: "auto",
+                }}>
+                  {activeAnalysis.sections.map((section, index) => (
+                    <button
+                      key={section.id}
+                      onClick={() => setActiveSectionIndex(index)}
+                      style={{
                         display: "flex",
                         alignItems: "center",
+                        gap: "0.375rem",
+                        padding: "0.5rem 0.75rem",
+                        background: activeSectionIndex === index ? "rgba(249,115,22,0.1)" : "transparent",
+                        color: activeSectionIndex === index ? "var(--accent)" : "var(--text-secondary)",
+                        border: activeSectionIndex === index ? "1px solid var(--accent)" : "1px solid transparent",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                        fontSize: "0.8125rem",
+                        whiteSpace: "nowrap",
+                        transition: "all var(--transition-fast)",
+                      }}
+                    >
+                      <span style={{
+                        display: "inline-flex",
+                        alignItems: "center",
                         justifyContent: "center",
-                        width: "1.5rem",
-                        height: "1.5rem",
-                        background: "var(--accent)",
+                        width: "1.25rem",
+                        height: "1.25rem",
+                        background: activeSectionIndex === index ? "var(--accent)" : "var(--text-muted)",
                         color: "var(--text-inverse)",
                         borderRadius: "50%",
-                        fontSize: "0.75rem",
+                        fontSize: "0.6875rem",
                         fontWeight: 600,
                       }}>
                         {section.sortOrder}
                       </span>
-                      <strong style={{ fontSize: "0.9375rem", color: "var(--text-primary)", flex: 1 }}>
-                        {section.title}
-                      </strong>
-                      <label style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.375rem",
-                        fontSize: "0.75rem",
-                        color: "var(--text-secondary)",
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={section.usedForImitation !== false}
-                          onChange={() => toggleSectionUsage(section)}
-                          disabled={loading}
-                        />
-                        用于仿写
-                      </label>
-                      <button
-                        onClick={() => beginEditSection(section)}
-                        disabled={loading}
-                        style={{
-                          padding: "0.25rem 0.5rem",
-                          background: "transparent",
-                          color: "var(--accent)",
-                          border: "1px solid var(--border-default)",
-                          borderRadius: "var(--radius-sm)",
-                          fontSize: "0.75rem",
-                          cursor: loading ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        修改
-                      </button>
+                      {section.title}
                       <em style={{
-                        fontSize: "0.75rem",
-                        color: section.status === "succeeded" ? "#28a745" : "var(--text-muted)",
                         fontStyle: "normal",
+                        fontSize: "0.6875rem",
+                        color: section.status === "succeeded" ? "#28a745" : "var(--text-muted)",
                       }}>
-                        {section.status}
+                        {section.status === "succeeded" ? "✓" : section.status}
                       </em>
-                    </header>
-                    <pre style={{
-                      margin: 0,
-                      padding: "1rem",
-                      fontFamily: "inherit",
-                      fontSize: "0.875rem",
-                      lineHeight: 1.7,
-                      color: "var(--text-primary)",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      background: "var(--bg-base)",
+                    </button>
+                  ))}
+                </div>
+
+                {/* 当前选中分区的详细内容 */}
+                {activeAnalysis.sections[activeSectionIndex] && (() => {
+                  const section = activeAnalysis.sections[activeSectionIndex];
+                  return (
+                    <article key={section.id} style={{
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-sm)",
+                      overflow: "hidden",
                     }}>
-                      {section.editedContent || section.aiContent || "暂无内容。"}
-                    </pre>
-                    {editingSectionKey === section.sectionKey && (
-                      <div style={{ padding: "1rem", borderTop: "1px solid var(--border-default)", display: "grid", gap: "0.75rem" }}>
-                        <label style={{ display: "grid", gap: "0.375rem" }}>
-                          <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>分区修改内容</span>
-                          <textarea
-                            value={sectionDraft}
-                            onChange={(event) => setSectionDraft(event.target.value)}
-                            style={{
-                              minHeight: "180px",
-                              padding: "0.75rem",
-                              border: "1px solid var(--border-default)",
-                              borderRadius: "var(--radius-sm)",
-                              background: "var(--bg-base)",
-                              color: "var(--text-primary)",
-                              lineHeight: 1.7,
-                            }}
-                          />
-                        </label>
-                        <label style={{ display: "grid", gap: "0.375rem" }}>
-                          <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>修改备注</span>
+                      <header style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        padding: "0.75rem 1rem",
+                        background: "var(--bg-surface)",
+                        borderBottom: "1px solid var(--border-default)",
+                      }}>
+                        <span style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "1.5rem",
+                          height: "1.5rem",
+                          background: "var(--accent)",
+                          color: "var(--text-inverse)",
+                          borderRadius: "50%",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                        }}>
+                          {section.sortOrder}
+                        </span>
+                        <strong style={{ fontSize: "0.9375rem", color: "var(--text-primary)", flex: 1 }}>
+                          {section.title}
+                        </strong>
+                        <label style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          fontSize: "0.75rem",
+                          color: "var(--text-secondary)",
+                        }}>
                           <input
-                            value={sectionNotes}
-                            onChange={(event) => setSectionNotes(event.target.value)}
-                            style={{
-                              padding: "0.5rem 0.75rem",
-                              border: "1px solid var(--border-default)",
-                              borderRadius: "var(--radius-sm)",
-                              background: "var(--bg-base)",
-                              color: "var(--text-primary)",
-                            }}
+                            type="checkbox"
+                            checked={section.usedForImitation !== false}
+                            onChange={() => toggleSectionUsage(section)}
+                            disabled={loading}
                           />
+                          用于仿写
                         </label>
-                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                          <button onClick={() => setEditingSectionKey(null)} style={{
-                            padding: "0.5rem 0.75rem",
+                        <button
+                          onClick={() => beginEditSection(section)}
+                          disabled={loading}
+                          style={{
+                            padding: "0.25rem 0.5rem",
                             background: "transparent",
-                            color: "var(--text-secondary)",
+                            color: "var(--accent)",
                             border: "1px solid var(--border-default)",
                             borderRadius: "var(--radius-sm)",
-                          }}>
-                            取消
-                          </button>
-                          <button onClick={() => saveSection(section)} disabled={loading} style={{
-                            padding: "0.5rem 0.75rem",
-                            background: "var(--accent)",
-                            color: "var(--text-inverse)",
-                            border: "none",
-                            borderRadius: "var(--radius-sm)",
-                          }}>
-                            保存分区
-                          </button>
+                            fontSize: "0.75rem",
+                            cursor: loading ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          修改
+                        </button>
+                        <em style={{
+                          fontSize: "0.75rem",
+                          color: section.status === "succeeded" ? "#28a745" : "var(--text-muted)",
+                          fontStyle: "normal",
+                        }}>
+                          {section.status}
+                        </em>
+                      </header>
+                      <pre style={{
+                        margin: 0,
+                        padding: "1rem",
+                        fontFamily: "inherit",
+                        fontSize: "0.875rem",
+                        lineHeight: 1.7,
+                        color: "var(--text-primary)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        background: "var(--bg-base)",
+                        minHeight: "200px",
+                      }}>
+                        {section.editedContent || section.aiContent || "暂无内容。"}
+                      </pre>
+                      {editingSectionKey === section.sectionKey && (
+                        <div style={{ padding: "1rem", borderTop: "1px solid var(--border-default)", display: "grid", gap: "0.75rem" }}>
+                          <label style={{ display: "grid", gap: "0.375rem" }}>
+                            <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>分区修改内容</span>
+                            <textarea
+                              value={sectionDraft}
+                              onChange={(event) => setSectionDraft(event.target.value)}
+                              style={{
+                                minHeight: "180px",
+                                padding: "0.75rem",
+                                border: "1px solid var(--border-default)",
+                                borderRadius: "var(--radius-sm)",
+                                background: "var(--bg-base)",
+                                color: "var(--text-primary)",
+                                lineHeight: 1.7,
+                              }}
+                            />
+                          </label>
+                          <label style={{ display: "grid", gap: "0.375rem" }}>
+                            <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>修改备注</span>
+                            <input
+                              value={sectionNotes}
+                              onChange={(event) => setSectionNotes(event.target.value)}
+                              style={{
+                                padding: "0.5rem 0.75rem",
+                                border: "1px solid var(--border-default)",
+                                borderRadius: "var(--radius-sm)",
+                                background: "var(--bg-base)",
+                                color: "var(--text-primary)",
+                              }}
+                            />
+                          </label>
+                          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                            <button onClick={() => setEditingSectionKey(null)} style={{
+                              padding: "0.5rem 0.75rem",
+                              background: "transparent",
+                              color: "var(--text-secondary)",
+                              border: "1px solid var(--border-default)",
+                              borderRadius: "var(--radius-sm)",
+                            }}>
+                              取消
+                            </button>
+                            <button onClick={() => saveSection(section)} disabled={loading} style={{
+                              padding: "0.5rem 0.75rem",
+                              background: "var(--accent)",
+                              color: "var(--text-inverse)",
+                              border: "none",
+                              borderRadius: "var(--radius-sm)",
+                            }}>
+                              保存分区
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </article>
-                ))}
+                      )}
+                    </article>
+                  );
+                })()}
               </div>
             </>
           ) : (
@@ -2421,9 +3058,9 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               <section style={{ display: "grid", gap: "1rem" }}>
                 <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                   <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "0.9375rem" }}>创作蓝图</h3>
-                  <pre style={{ margin: 0, padding: "1rem", maxHeight: "220px", overflow: "auto", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.8125rem", lineHeight: 1.6 }}>
-                    {JSON.stringify(activePlan.blueprint, null, 2)}
-                  </pre>
+                  <div style={{ padding: "1rem", maxHeight: "400px", overflowY: "auto" }}>
+                    <BlueprintViewer blueprint={activePlan.blueprint} />
+                  </div>
                 </article>
                 <article style={{ border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                   <h3 style={{ margin: 0, padding: "0.75rem 1rem", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", fontSize: "0.9375rem" }}>样章草稿</h3>
