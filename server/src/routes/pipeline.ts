@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
+import { prisma } from "../db/prisma";
 import { pipelineService, PipelineConfig } from "../services/PipelineService";
+import { initSSE, writeSSEFrame } from "../llm/streaming";
 
 const router = Router();
 
@@ -36,6 +38,106 @@ router.post("/novel/:novelId/materialize-assets", async (req: Request, res: Resp
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// SSE 流式推送写作阶段进度
+router.get("/:jobId/stream", async (req: Request, res: Response) => {
+  const jobId = req.params.jobId as string;
+
+  const job = await prisma.pipelineJob.findUnique({
+    where: { id: jobId },
+    include: { novel: true },
+  });
+  if (!job) {
+    return res.status(404).json({ success: false, error: "流程不存在" });
+  }
+
+  const disposeHeartbeat = initSSE(res);
+  const reportedChapters = new Map<number, string>();
+  let lastCheckTime = new Date(Date.now() - 5000);
+  let closed = false;
+
+  req.on("close", () => {
+    closed = true;
+  });
+
+  const poll = setInterval(async () => {
+    if (closed || res.writableEnded) {
+      clearInterval(poll);
+      disposeHeartbeat();
+      return;
+    }
+
+    try {
+      const currentJob = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+      if (!currentJob) {
+        clearInterval(poll);
+        disposeHeartbeat();
+        writeSSEFrame(res, { type: "error", error: "流程记录不存在" });
+        res.end();
+        return;
+      }
+
+      const isTerminal = currentJob.status === "completed" || currentJob.status === "error";
+
+      const chapters = await prisma.chapter.findMany({
+        where: {
+          novelId: job.novelId,
+          source: { in: ["imitation_pipeline", "pipeline"] },
+          updatedAt: { gt: lastCheckTime },
+        },
+        orderBy: { order: "asc" },
+      });
+
+      lastCheckTime = new Date();
+
+      for (const ch of chapters) {
+        const prevStatus = reportedChapters.get(ch.order);
+        const currentStatus = ch.status === "drafted" ? "completed" : "generating";
+        if (prevStatus === currentStatus) continue;
+
+        reportedChapters.set(ch.order, currentStatus);
+        writeSSEFrame(res, {
+          type: "chunk",
+          content: JSON.stringify({
+            phase: "writing",
+            step: "chapter_drafts",
+            chapterOrder: ch.order,
+            chapterTitle: ch.title,
+            status: currentStatus,
+            wordCount: ch.wordCount,
+            preview: ch.content ? ch.content.slice(0, 100) : "",
+          }),
+        });
+      }
+
+      if (isTerminal) {
+        clearInterval(poll);
+        disposeHeartbeat();
+
+        if (currentJob.status === "error") {
+          writeSSEFrame(res, { type: "error", error: currentJob.lastError || "写作阶段执行失败" });
+        } else {
+          const totalChapters = await prisma.chapter.count({
+            where: { novelId: job.novelId, source: { in: ["imitation_pipeline", "pipeline"] } },
+          });
+          writeSSEFrame(res, {
+            type: "done",
+            fullContent: JSON.stringify({ status: "completed", totalChapters }),
+          });
+        }
+        res.end();
+      }
+    } catch (err) {
+      clearInterval(poll);
+      disposeHeartbeat();
+      writeSSEFrame(res, {
+        type: "error",
+        error: err instanceof Error ? err.message : "轮询进度失败",
+      });
+      res.end();
+    }
+  }, 2000);
 });
 
 // 获取流程详情
