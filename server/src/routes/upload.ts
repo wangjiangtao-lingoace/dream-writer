@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../db/prisma";
+import { textExtractionService } from "../services/TextExtractionService";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ if (!fs.existsSync(uploadDir)) {
 // 配置multer存储
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const subDir = req.query.type || "covers";
+    const subDir = path.basename((req.query.type as string) || "covers");
     const fullPath = path.join(uploadDir, subDir as string);
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
@@ -45,6 +46,36 @@ const upload = multer({
   limits: {
     fileSize: parseInt(process.env.MAX_UPLOAD_SIZE || "10485760"), // 默认10MB
   },
+});
+
+// 文档上传专用存储（独立子目录，避免与封面图混用）
+const documentStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const docDir = path.join(uploadDir, "documents");
+    if (!fs.existsSync(docDir)) {
+      fs.mkdirSync(docDir, { recursive: true });
+    }
+    cb(null, docDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  },
+});
+
+// 文档上传配置（PDF/EPUB/TXT）
+const documentUpload = multer({
+  storage: documentStorage,
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const allowed = ["text/plain", "application/pdf", "application/epub+zip"];
+    if (!allowed.includes(file.mimetype)) {
+      cb(new Error("不支持的文件格式，仅支持 PDF/EPUB/TXT"));
+    } else {
+      cb(null, true);
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
 // 上传封面图
@@ -125,11 +156,41 @@ router.delete("/file", async (req: Request, res: Response) => {
   }
 });
 
+// 上传文档并提取文本（PDF/EPUB/TXT）
+router.post("/document", documentUpload.single("document"), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: "请选择要上传的文件" });
+    }
+
+    const filePath = req.file.path;
+    try {
+      const text = await textExtractionService.extract(filePath);
+
+      res.json({
+        success: true,
+        data: {
+          text,
+          filename: req.file.originalname,
+          charCount: text.length,
+        },
+      });
+    } finally {
+      // 无论提取成功与否，都删除临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 获取文件列表
 router.get("/list", async (req: Request, res: Response) => {
   try {
-    const { type = "covers" } = req.query;
-    const dirPath = path.join(uploadDir, type as string);
+    const { type } = req.query;
+    const dirPath = path.join(uploadDir, path.basename((type as string) || "covers"));
 
     if (!fs.existsSync(dirPath)) {
       return res.json({ success: true, data: [] });

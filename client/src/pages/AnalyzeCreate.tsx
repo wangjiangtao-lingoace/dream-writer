@@ -25,6 +25,62 @@ const AnalyzeCreate: React.FC = () => {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // 文本粘贴相关状态
+  const [pastedText, setPastedText] = useState("");
+  const [sourceMode, setSourceMode] = useState<"none" | "search" | "manual">("none");
+
+  // 文件上传相关状态
+  const [fileUploading, setFileUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("document", file);
+
+      // 使用 fetch 而非 api 工具，因为 api 工具仅支持 JSON，文件上传需要 FormData
+      const response = await fetch("/api/upload/document", {
+        method: "POST",
+        body: formData,
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || "文件提取失败");
+      }
+
+      setPastedText(json.data.text);
+      if (!title.trim()) {
+        setTitle(json.data.filename.replace(/\.[^.]+$/, ""));
+      }
+    } catch (error: any) {
+      alert(error.message || "文件上传失败，请重试");
+    } finally {
+      setFileUploading(false);
+      // 清空 input 以便重复选择同一文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // 解析数据源：优先使用粘贴文本，否则搜索
+  const resolveSourceMaterial = useCallback((): { sourceText: string; sourceTitle: string } => {
+    if (pastedText.trim().length >= 80) {
+      setSourceMode("manual");
+      return { sourceText: pastedText.trim(), sourceTitle: title };
+    }
+    setSourceMode("search");
+    return {
+      sourceText: searchResult?.rawContent || searchResult?.synopsis || "",
+      sourceTitle: searchResult?.title || title,
+    };
+  }, [pastedText, title, searchResult]);
+
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -62,7 +118,13 @@ const AnalyzeCreate: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
-    if (!searchResult) return;
+    // 解析数据源：优先使用粘贴文本
+    const { sourceText, sourceTitle } = resolveSourceMaterial();
+
+    if (!sourceText || sourceText.length < 80) {
+      alert("请粘贴至少80字的原文内容，或等待搜索结果");
+      return;
+    }
 
     setLoading(true);
     setStatus("正在创建拆书任务...");
@@ -72,8 +134,8 @@ const AnalyzeCreate: React.FC = () => {
       // 1. 创建拆书任务
       const analysis = await api.post<any>("/api/book-analysis", {
         title: `${title}拆解分析`,
-        sourceTitle: title,
-        sourceText: searchResult.rawContent || searchResult.synopsis,
+        sourceTitle: sourceTitle,
+        sourceText: sourceText,
       });
       setAnalysisId(analysis.id);
 
@@ -246,22 +308,125 @@ const AnalyzeCreate: React.FC = () => {
             }}>系统将自动搜索作品内容进行分析</p>
           </div>
 
-          <button
-            onClick={handleSearch}
-            disabled={!title.trim() || loading}
-            style={{
-              width: "100%",
-              height: "48px",
-              background: title.trim() ? "var(--accent)" : "var(--border)",
-              color: "white",
-              border: "none",
-              borderRadius: "var(--radius-md)",
-              fontSize: "1rem",
-              cursor: title.trim() ? "pointer" : "not-allowed",
-            }}
-          >
-            搜索作品内容
-          </button>
+          <div style={{ marginBottom: "2rem" }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+            }}>
+              <label style={{
+                fontSize: "0.875rem",
+                color: "var(--text-secondary)",
+              }}>原文内容（可选）</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.pdf,.epub"
+                onChange={handleFileUpload}
+                style={{ display: "none" }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading || fileUploading}
+                style={{
+                  padding: "0.25rem 0.75rem",
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  color: fileUploading ? "var(--text-muted)" : "var(--text-secondary)",
+                  fontSize: "0.75rem",
+                  cursor: fileUploading ? "not-allowed" : "pointer",
+                }}
+              >
+                {fileUploading ? "提取中..." : "导入文件"}
+              </button>
+            </div>
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="粘贴原文内容可跳过搜索，直接进入拆书分析（至少80字）"
+              disabled={loading}
+              maxLength={12000}
+              style={{
+                width: "100%",
+                minHeight: "200px",
+                padding: "1rem",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                background: "var(--bg-primary)",
+                fontSize: "0.875rem",
+                color: "var(--text-primary)",
+                resize: "vertical",
+                lineHeight: 1.6,
+              }}
+            />
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: "0.5rem",
+            }}>
+              <p style={{
+                fontSize: "0.75rem",
+                color: "var(--text-muted)",
+              }}>粘贴原文内容可跳过搜索，直接进入拆书分析（至少80字）</p>
+              <span style={{
+                fontSize: "0.75rem",
+                color: pastedText.length >= 80 ? "var(--success)" : "var(--text-muted)",
+              }}>
+                已输入 {pastedText.length.toLocaleString()} 字 / 最多 12,000 字
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "1rem" }}>
+            <button
+              onClick={handleSearch}
+              disabled={!title.trim() || loading}
+              style={{
+                flex: 1,
+                height: "48px",
+                background: title.trim() ? "var(--accent)" : "var(--border)",
+                color: "white",
+                border: "none",
+                borderRadius: "var(--radius-md)",
+                fontSize: "1rem",
+                cursor: title.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              搜索作品内容
+            </button>
+            {pastedText.trim().length >= 80 && (
+              <button
+                onClick={() => {
+                  setSourceMode("manual");
+                  setStep("preview");
+                  setSearchResult({
+                    title: title,
+                    synopsis: pastedText.substring(0, 200) + "...",
+                    rawContent: pastedText,
+                    status: "found",
+                    source: "用户粘贴",
+                  });
+                }}
+                disabled={!title.trim() || loading}
+                style={{
+                  flex: 1,
+                  height: "48px",
+                  background: "var(--success)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                }}
+              >
+                直接拆书（使用粘贴内容）
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -301,7 +466,7 @@ const AnalyzeCreate: React.FC = () => {
             color: "var(--text-primary)",
             marginBottom: "1.5rem",
             textAlign: "center",
-          }}>搜索结果</h2>
+          }}>{sourceMode === "manual" ? "使用粘贴内容" : "搜索结果"}</h2>
 
           <div style={{
             background: "var(--bg-card)",
@@ -318,19 +483,21 @@ const AnalyzeCreate: React.FC = () => {
             }}>
               <span style={{
                 padding: "0.25rem 0.5rem",
-                background: searchResult.status === "found" ? "var(--success)" : "var(--warning)",
+                background: sourceMode === "manual" ? "var(--accent)" : searchResult.status === "found" ? "var(--success)" : "var(--warning)",
                 borderRadius: "var(--radius-sm)",
                 fontSize: "0.75rem",
                 color: "white",
               }}>
-                {searchResult.status === "found" ? "真实来源资料" : "缺资料"}
+                {sourceMode === "manual" ? "用户粘贴" : searchResult.status === "found" ? "真实来源资料" : "缺资料"}
               </span>
-              <span style={{
-                fontSize: "0.875rem",
-                color: "var(--text-muted)",
-              }}>
-                来源数：{searchResult.sources?.length || 0}
-              </span>
+              {sourceMode !== "manual" && (
+                <span style={{
+                  fontSize: "0.875rem",
+                  color: "var(--text-muted)",
+                }}>
+                  来源数：{searchResult.sources?.length || 0}
+                </span>
+              )}
             </div>
 
             <h3 style={{
@@ -378,7 +545,9 @@ const AnalyzeCreate: React.FC = () => {
 
             {searchResult.rawContent && (
               <div>
-                <strong style={{ color: "var(--text-primary)" }}>原始内容（前500字）：</strong>
+                <strong style={{ color: "var(--text-primary)" }}>
+                  {sourceMode === "manual" ? "粘贴内容（前500字）：" : "原始内容（前500字）："}
+                </strong>
                 <p style={{
                   color: "var(--text-muted)",
                   marginTop: "0.5rem",
@@ -393,6 +562,50 @@ const AnalyzeCreate: React.FC = () => {
                 </p>
               </div>
             )}
+
+            {/* 搜索失败时显示粘贴区域 */}
+            {searchResult.status === "no_source_found" && sourceMode !== "manual" && (
+              <div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border)", paddingTop: "1.5rem" }}>
+                <strong style={{ color: "var(--text-primary)" }}>粘贴原文内容：</strong>
+                <textarea
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder="搜索未找到资料，请在此粘贴原文内容（至少80字）"
+                  disabled={loading}
+                  maxLength={12000}
+                  style={{
+                    width: "100%",
+                    minHeight: "200px",
+                    padding: "1rem",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-md)",
+                    background: "var(--bg-primary)",
+                    fontSize: "0.875rem",
+                    color: "var(--text-primary)",
+                    resize: "vertical",
+                    lineHeight: 1.6,
+                    marginTop: "0.5rem",
+                  }}
+                />
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: "0.5rem",
+                }}>
+                  <p style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                  }}>粘贴至少80字内容后可直接拆书</p>
+                  <span style={{
+                    fontSize: "0.75rem",
+                    color: pastedText.length >= 80 ? "var(--success)" : "var(--text-muted)",
+                  }}>
+                    已输入 {pastedText.length.toLocaleString()} 字 / 最多 12,000 字
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{
@@ -404,6 +617,7 @@ const AnalyzeCreate: React.FC = () => {
               onClick={() => {
                 setStep("input");
                 setSearchResult(null);
+                setSourceMode("none");
               }}
               style={{
                 padding: "0.75rem 2rem",
@@ -433,17 +647,17 @@ const AnalyzeCreate: React.FC = () => {
             )}
             <button
               onClick={handleAnalyze}
-              disabled={loading || searchResult.status === "no_source_found"}
+              disabled={loading || (searchResult.status === "no_source_found" && pastedText.trim().length < 80 && sourceMode !== "manual")}
               style={{
                 padding: "0.75rem 2rem",
-                background: loading || searchResult.status === "no_source_found" ? "var(--border)" : "var(--accent)",
+                background: loading || (searchResult.status === "no_source_found" && pastedText.trim().length < 80 && sourceMode !== "manual") ? "var(--border)" : "var(--accent)",
                 border: "none",
                 borderRadius: "var(--radius-md)",
                 color: "white",
-                cursor: loading || searchResult.status === "no_source_found" ? "not-allowed" : "pointer",
+                cursor: loading || (searchResult.status === "no_source_found" && pastedText.trim().length < 80 && sourceMode !== "manual") ? "not-allowed" : "pointer",
               }}
             >
-              {searchResult.status === "no_source_found" ? "需粘贴资料后拆书" : loading ? "分析中..." : "开始拆解分析"}
+              {loading ? "分析中..." : "开始拆解分析"}
             </button>
           </div>
         </div>
