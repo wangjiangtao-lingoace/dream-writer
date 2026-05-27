@@ -620,7 +620,7 @@ const NovelWorkspace: React.FC = () => {
             alignItems: "center",
             gap: "0.5rem",
             padding: "0.75rem 1.5rem",
-            background: "rgba(249,115,22,0.08)",
+            background: "var(--accent-muted)",
             color: "var(--accent)",
             fontSize: "0.875rem",
             borderBottom: "1px solid var(--border-default)",

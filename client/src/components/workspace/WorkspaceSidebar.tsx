@@ -75,7 +75,7 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({ activeTab, onTabCha
                     alignItems: "center",
                     gap: "0.5rem",
                     padding: "0.5rem",
-                    background: activeTab === t.key ? "rgba(249,115,22,0.08)" : "transparent",
+                    background: activeTab === t.key ? "var(--accent-muted)" : "transparent",
                     color: activeTab === t.key ? "var(--accent)" : "var(--text-secondary)",
                     border: activeTab === t.key ? "1px solid var(--border-default)" : "1px solid transparent",
                     borderRadius: "var(--radius-sm)",

@@ -346,7 +346,7 @@ export default function StylePanel({ novelId, onNotice }: StylePanelProps) {
             <div style={{
               marginTop: "1rem",
               padding: "1rem",
-              background: "rgba(139,69,19,0.05)",
+              background: "var(--accent-muted)",
               border: "1px solid var(--border)",
               borderRadius: "var(--radius-sm)",
             }}>

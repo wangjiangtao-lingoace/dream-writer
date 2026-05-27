@@ -185,7 +185,7 @@ export default function WorldviewEditor({ novelId, onNotice }: WorldviewEditorPr
                     marginBottom: "0.5rem",
                     border: editingId === world.id ? "1px solid var(--accent)" : "1px solid var(--border)",
                     borderRadius: "var(--radius-sm)",
-                    background: editingId === world.id ? "rgba(139,69,19,0.08)" : "var(--bg-card)",
+                    background: editingId === world.id ? "var(--accent-muted)" : "var(--bg-card)",
                     cursor: "pointer",
                     transition: "all var(--transition-fast)",
                   }}
@@ -229,7 +229,7 @@ export default function WorldviewEditor({ novelId, onNotice }: WorldviewEditorPr
                 onClick={() => setActiveTab(tab.key)}
                 style={{
                   padding: "0.625rem 1.25rem",
-                  background: activeTab === tab.key ? "rgba(139,69,19,0.08)" : "transparent",
+                  background: activeTab === tab.key ? "var(--accent-muted)" : "transparent",
                   color: activeTab === tab.key ? "var(--accent)" : "var(--text-secondary)",
                   border: "none",
                   borderBottom: activeTab === tab.key ? "2px solid var(--accent)" : "2px solid transparent",

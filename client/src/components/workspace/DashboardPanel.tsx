@@ -131,7 +131,7 @@ const DashboardPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
         <p className="panel-desc">{isStandalone ? "独立创作：灵感 → AI 自动生成大纲、人物、世界观、风格、章节。" : "主路径：资料 → 拆书 → 仿写蓝图 → 资产落库 → 自动生成 1-3 章 → 继续创作。"}</p>
       </div>
 
-      {notice && <div className="notice-bar" style={{ padding: "0.75rem 1rem", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", color: "var(--accent)", background: "rgba(249,115,22,0.06)" }}>{notice}</div>}
+      {notice && <div className="notice-bar" style={{ padding: "0.75rem 1rem", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", color: "var(--accent)", background: "var(--accent-muted)" }}>{notice}</div>}
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "1rem" }}>
         {cards.map((card) => (

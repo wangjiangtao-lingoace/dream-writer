@@ -393,8 +393,8 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
       {notice && (
         <div className="notice-bar" style={{
           padding: "0.75rem 1rem",
-          background: notice.includes("失败") ? "rgba(220,53,69,0.08)" : "rgba(249,115,22,0.08)",
-          color: notice.includes("失败") ? "#dc3545" : "var(--accent)",
+          background: notice.includes("失败") ? "var(--error-muted)" : "var(--accent-muted)",
+          color: notice.includes("失败") ? "var(--error)" : "var(--accent)",
           borderRadius: "var(--radius-sm)",
           marginBottom: "1rem",
           fontSize: "0.875rem",
@@ -537,7 +537,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
             gridTemplateColumns: "1fr",
             gap: "0.5rem",
             padding: "0.75rem",
-            background: "rgba(249,115,22,0.05)",
+            background: "var(--accent-muted)",
             border: "1px solid var(--border-default)",
             borderRadius: "var(--radius-sm)",
           }}>
@@ -566,7 +566,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                     flexDirection: "column",
                     gap: "0.25rem",
                     padding: "0.625rem 0.75rem",
-                    background: activeAnalysis?.id === analysis.id ? "rgba(249,115,22,0.08)" : "transparent",
+                    background: activeAnalysis?.id === analysis.id ? "var(--accent-muted)" : "transparent",
                     border: activeAnalysis?.id === analysis.id ? "1px solid var(--border-default)" : "1px solid transparent",
                     borderRadius: "var(--radius-sm)",
                     cursor: "pointer",
@@ -662,7 +662,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
               {activeAnalysis.publishedAssetId && (
                 <div style={{
                   padding: "0.5rem 1.25rem",
-                  background: "rgba(249,115,22,0.05)",
+                  background: "var(--accent-muted)",
                   borderBottom: "1px solid var(--border-default)",
                   fontSize: "0.8125rem",
                   color: "var(--accent)",
@@ -697,7 +697,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                         alignItems: "center",
                         gap: "0.375rem",
                         padding: "0.5rem 0.75rem",
-                        background: activeSectionIndex === index ? "rgba(249,115,22,0.1)" : "transparent",
+                        background: activeSectionIndex === index ? "var(--accent-muted)" : "transparent",
                         color: activeSectionIndex === index ? "var(--accent)" : "var(--text-secondary)",
                         border: activeSectionIndex === index ? "1px solid var(--accent)" : "1px solid transparent",
                         borderRadius: "var(--radius-sm)",
@@ -961,7 +961,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                   style={{
                     flex: "0 0 auto",
                     padding: "0.5rem 0.75rem",
-                    background: activePlan?.id === plan.id ? "rgba(249,115,22,0.08)" : "transparent",
+                    background: activePlan?.id === plan.id ? "var(--accent-muted)" : "transparent",
                     color: "var(--text-primary)",
                     border: activePlan?.id === plan.id ? "1px solid var(--border-default)" : "1px solid transparent",
                     borderRadius: "var(--radius-sm)",

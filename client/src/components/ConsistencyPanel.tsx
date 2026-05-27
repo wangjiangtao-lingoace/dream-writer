@@ -172,11 +172,11 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
 
   const severityColor = (severity: string) => {
     switch (severity) {
-      case "critical": return "#c62828";
-      case "high": return "#e65100";
-      case "medium": return "#f9a825";
-      case "low": return "#2e7d32";
-      default: return "#546e7a";
+      case "critical": return "var(--error)";
+      case "high": return "var(--warning)";
+      case "medium": return "var(--info)";
+      case "low": return "var(--success)";
+      default: return "var(--text-muted)";
     }
   };
 
@@ -301,7 +301,7 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
                   </span>
                   <span style={{
                     fontSize: "0.75rem",
-                    color: r.overall_score >= 80 ? "#2e7d32" : r.overall_score >= 60 ? "#e65100" : "#c62828",
+                    color: r.overall_score >= 80 ? "var(--success)" : r.overall_score >= 60 ? "var(--warning)" : "var(--error)",
                     fontWeight: 600,
                   }}>
                     {r.overall_score}分 · {r.issues.length}问题
@@ -333,18 +333,18 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
               padding: "0.75rem 1.5rem",
               borderRadius: "var(--radius-sm)",
               background: activeResult.overall_score >= 80
-                ? "rgba(46,125,50,0.08)"
+                ? "var(--success-muted)"
                 : activeResult.overall_score >= 60
-                  ? "rgba(230,81,0,0.08)"
-                  : "rgba(198,40,40,0.08)",
+                  ? "var(--warning-muted)"
+                  : "var(--error-muted)",
             }}>
               <strong style={{
                 fontSize: "2rem",
                 color: activeResult.overall_score >= 80
-                  ? "#2e7d32"
+                  ? "var(--success)"
                   : activeResult.overall_score >= 60
-                    ? "#e65100"
-                    : "#c62828",
+                    ? "var(--warning)"
+                    : "var(--error)",
               }}>
                 {activeResult.overall_score || "?"}
               </strong>
@@ -418,25 +418,25 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
               }}>
                 <thead>
                   <tr>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       状态
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       类型
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       严重度
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600 }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600 }}>
                       问题描述
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600 }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600 }}>
                       原文证据
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600 }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600 }}>
                       建议
                     </th>
-                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "center", borderBottom: "2px solid var(--border)", background: "rgba(139,69,19,0.05)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "center", borderBottom: "2px solid var(--border)", background: "var(--accent-muted)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       操作
                     </th>
                   </tr>
@@ -486,7 +486,7 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
                           <pre style={{
                             margin: 0,
                             padding: "0.375rem 0.5rem",
-                            background: "rgba(139,69,19,0.03)",
+                            background: "var(--accent-muted)",
                             borderRadius: "var(--radius-sm)",
                             fontSize: "0.75rem",
                             whiteSpace: "pre-wrap",
