@@ -20,7 +20,16 @@ interface CharacterCardProps {
   onNotice: (msg: string) => void;
 }
 
-const ROLE_OPTIONS = ["主角", "反派", "配角", "龙套", "导师", "盟友", "亦正亦邪"];
+const ROLE_OPTIONS = [
+  // 基础类型
+  "主角", "反派", "配角", "龙套", "导师", "盟友", "亦正亦邪",
+  // 网文类型
+  "系统", "后宫", "小弟", "师父",
+  // 经典叙事类型
+  "旁白", "牺牲者", "守护者", "背叛者", "催化剂", "信使", "变形者", "影子",
+  // 自定义
+  "自定义",
+];
 
 export default function CharacterCard({ novelId, onNotice }: CharacterCardProps) {
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -274,7 +283,7 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
             padding: "0.25rem 0.75rem",
             fontSize: "0.8125rem",
             borderRadius: "9999px",
-            background: activeRoleFilter === null ? "var(--accent)" : "rgba(139,69,19,0.08)",
+            background: activeRoleFilter === null ? "var(--accent)" : "var(--accent-muted)",
             color: activeRoleFilter === null ? "var(--text-inverse)" : "var(--accent)",
             border: "1px solid var(--border)",
             cursor: "pointer",

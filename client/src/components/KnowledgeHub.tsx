@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import SmartJsonViewer from "./SmartJsonViewer";
 
 interface KnowledgeAsset {
   id: string;
@@ -52,7 +53,8 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
     }
     try {
       if (editingId) {
-        await api(`/api/knowledge-assets/${editingId}`, {
+        const query = novelId ? `?novelId=${novelId}` : "";
+        await api(`/api/knowledge-assets/${editingId}${query}`, {
           method: "PUT",
           body: JSON.stringify(form),
         });
@@ -75,7 +77,8 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
   async function handleDelete(id: string) {
     if (!confirm("确定删除此知识资产？")) return;
     try {
-      await api(`/api/knowledge-assets/${id}`, { method: "DELETE" });
+      const query = novelId ? `?novelId=${novelId}` : "";
+      await api(`/api/knowledge-assets/${id}${query}`, { method: "DELETE" });
       onNotice("知识资产已删除。");
       await loadAssets();
     } catch (error) {
@@ -118,56 +121,12 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
   }
 
   function renderContent(asset: KnowledgeAsset) {
-    const parsed = tryParseJson(asset.content);
-    if (!parsed) {
-      return <pre className="asset-content">{asset.content}</pre>;
-    }
-
-    const headers = Array.from(new Set(parsed.flatMap((row) => Object.keys(row))));
-
     return (
-      <div style={{ overflowX: "auto", marginTop: "0.5rem" }}>
-        <table style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: "0.8125rem",
-          fontFamily: "'Songti SC', 'SimSun', serif",
-        }}>
-          <thead>
-            <tr>
-              {headers.map((h) => (
-                <th key={h} style={{
-                  padding: "0.5rem 0.75rem",
-                  textAlign: "left",
-                  borderBottom: "2px solid var(--border)",
-                  background: "rgba(139,69,19,0.05)",
-                  color: "var(--text-primary)",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {parsed.map((row, i) => (
-              <tr key={i}>
-                {headers.map((h) => (
-                  <td key={h} style={{
-                    padding: "0.5rem 0.75rem",
-                    borderBottom: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                    maxWidth: "300px",
-                    wordBreak: "break-word",
-                  }}>
-                    {row[h] !== undefined && row[h] !== null ? String(row[h]) : "-"}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ marginTop: "0.5rem" }}>
+        <SmartJsonViewer
+          data={asset.content}
+          maxDepth={3}
+        />
       </div>
     );
   }
@@ -269,7 +228,7 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
             fontSize: "0.8125rem",
             borderRadius: "9999px",
             border: "1px solid var(--border)",
-            background: filterCategory === "全部" ? "rgba(139,69,19,0.08)" : "transparent",
+            background: filterCategory === "全部" ? "var(--accent-muted)" : "transparent",
             color: filterCategory === "全部" ? "var(--accent)" : "var(--text-secondary)",
             cursor: "pointer",
             transition: "all var(--transition-fast)",
@@ -290,7 +249,7 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
                 fontSize: "0.8125rem",
                 borderRadius: "9999px",
                 border: "1px solid var(--border)",
-                background: filterCategory === cat ? "rgba(139,69,19,0.08)" : "transparent",
+                background: filterCategory === cat ? "var(--accent-muted)" : "transparent",
                 color: filterCategory === cat ? "var(--accent)" : "var(--text-secondary)",
                 cursor: "pointer",
                 transition: "all var(--transition-fast)",

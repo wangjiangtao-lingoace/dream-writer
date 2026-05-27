@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ui/CommonComponents";
+import SmartJsonViewer from "./SmartJsonViewer";
 
 interface Memory {
   id: string;
@@ -75,10 +76,10 @@ const MEMORY_TYPES = [
 ];
 
 const MEMORY_LEVELS: { value: MemoryLevel; label: string; color: string }[] = [
-  { value: "permanent", label: "永久记忆", color: "#fee2e2" },
-  { value: "longTerm", label: "长期记忆", color: "#ffedd5" },
-  { value: "shortTerm", label: "短期记忆", color: "#fef9c3" },
-  { value: "temporary", label: "临时记忆", color: "#f3f4f6" },
+  { value: "permanent", label: "永久记忆", color: "var(--error)" },
+  { value: "longTerm", label: "长期记忆", color: "var(--warning)" },
+  { value: "shortTerm", label: "短期记忆", color: "var(--info)" },
+  { value: "temporary", label: "临时记忆", color: "var(--text-muted)" },
 ];
 
 export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
@@ -327,35 +328,35 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
 
       {/* 剧情状态可视化 */}
       {showStoryState && storyState && (
-        <div className="story-state-panel" style={{ background: "#f8fafc", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
-          <h3 style={{ marginBottom: "12px", fontSize: "1rem" }}>剧情状态</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-            <div style={{ background: "white", padding: "12px", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px" }}>当前进度</div>
+        <div className="story-state-panel">
+          <h3>剧情状态</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-3)" }}>
+            <div className="story-state-card">
+              <div className="story-state-label">当前进度</div>
               <div>第 {storyState.currentVolume} 卷 · 第 {storyState.currentChapter} 章</div>
-              <div style={{ fontSize: "0.875rem", color: "#4b5563" }}>阶段：{storyState.currentStage}</div>
+              <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>阶段：{storyState.currentStage}</div>
             </div>
-            <div style={{ background: "white", padding: "12px", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px" }}>主角状态</div>
+            <div className="story-state-card">
+              <div className="story-state-label">主角状态</div>
               <div>等级：{storyState.protagonist.level}</div>
-              <div style={{ fontSize: "0.875rem" }}>目标：{storyState.protagonist.goal}</div>
-              <div style={{ fontSize: "0.875rem", color: "#6b7280" }}>处境：{storyState.protagonist.situation}</div>
+              <div style={{ fontSize: "var(--text-sm)" }}>目标：{storyState.protagonist.goal}</div>
+              <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>处境：{storyState.protagonist.situation}</div>
             </div>
-            <div style={{ background: "white", padding: "12px", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px" }}>情绪状态</div>
+            <div className="story-state-card">
+              <div className="story-state-label">情绪状态</div>
               <div>当前：{storyState.emotion.current}</div>
-              <div style={{ fontSize: "0.875rem" }}>强度：{storyState.emotion.intensity}/10</div>
-              <div style={{ fontSize: "0.875rem", color: "#ef4444" }}>压抑值：{storyState.emotion.suppressedValue}</div>
+              <div style={{ fontSize: "var(--text-sm)" }}>强度：{storyState.emotion.intensity}/10</div>
+              <div style={{ fontSize: "var(--text-sm)", color: "var(--error)" }}>压抑值：{storyState.emotion.suppressedValue}</div>
             </div>
-            <div style={{ background: "white", padding: "12px", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px" }}>爽点状态</div>
+            <div className="story-state-card">
+              <div className="story-state-label">爽点状态</div>
               <div>上次爽点：第 {storyState.pleasurePoint.lastChapter} 章</div>
-              <div style={{ fontSize: "0.875rem" }}>冷却值：{storyState.pleasurePoint.cooldown}</div>
+              <div style={{ fontSize: "var(--text-sm)" }}>冷却值：{storyState.pleasurePoint.cooldown}</div>
             </div>
-            <div style={{ background: "white", padding: "12px", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px" }}>伏笔状态</div>
+            <div className="story-state-card">
+              <div className="story-state-label">伏笔状态</div>
               <div>活跃伏笔：{storyState.foreshadow.activeCount} 个</div>
-              <div style={{ fontSize: "0.875rem" }}>待回收：{storyState.foreshadow.pendingCount} 个</div>
+              <div style={{ fontSize: "var(--text-sm)" }}>待回收：{storyState.foreshadow.pendingCount} 个</div>
             </div>
           </div>
         </div>
@@ -562,7 +563,12 @@ export default function MemoryPanel({ novelId, onNotice }: MemoryPanelProps) {
                   {memory.importance}/10
                 </span>
               </header>
-              <pre className="memory-content">{memory.content}</pre>
+              <div className="memory-content">
+                <SmartJsonViewer
+                  data={memory.content}
+                  maxDepth={2}
+                />
+              </div>
               {memory.category && (
                 <div className="memory-category">
                   <span>分类：{memory.category}</span>
