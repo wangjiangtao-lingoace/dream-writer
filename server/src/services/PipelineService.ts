@@ -1,7 +1,7 @@
 import { prisma } from "../db/prisma";
 import { LlmInvokeService } from "./llm/LlmInvokeService";
-import { knowledgeSearchService } from "./KnowledgeSearchService";
 import { getRagIngestService } from "./RagIngestService";
+import { getRagRetrieveService } from "./RagRetrieveService";
 
 export interface PipelineConfig {
   volumeCount?: number;
@@ -140,12 +140,12 @@ export class PipelineService {
     const novel = await prisma.novel.findUnique({ where: { id: novelId } });
     if (!novel) throw new Error("作品不存在");
 
-    // 提取关键词用于知识库检索
-    const keywords = knowledgeSearchService.extractKeywords(
-      `${novel.title} ${novel.inspiration || ""} ${config.genre || ""}`
-    );
+    // RAG 检索知识库
     const knowledgeContext = [
-      await knowledgeSearchService.buildContext(novelId, keywords),
+      await getRagRetrieveService()?.retrieve(
+        `${novel.title} ${novel.inspiration || ""} ${config.genre || ""}`,
+        { novelId, topK: 10 }
+      ) ?? "",
       await this.buildWorkspaceAssetContext(novelId, jobId),
       await this.buildBookAnalysisContext(novelId, config, jobId),
       await this.buildImitationPlanContext(novelId, config, jobId),
@@ -201,10 +201,10 @@ export class PipelineService {
 
     // 3. 生成大纲（增量补充模式）
     await this.updateJobProgress(jobId, "outline", "outline");
-    const keywords = knowledgeSearchService.extractKeywords(
-      `${novel.title} ${inspiration} ${config.genre || ""}`
-    );
-    const knowledgeContext = await knowledgeSearchService.buildContext(novelId, keywords);
+    const knowledgeContext = await getRagRetrieveService()?.retrieve(
+      `${novel.title} ${inspiration} ${config.genre || ""}`,
+      { novelId, topK: 10 }
+    ) ?? "";
     const outlineResult = await this.generateOutline(novelId, inspiration, knowledgeContext, config);
     await this.savePhaseResult(jobId, "outline", "outline", { inspiration }, outlineResult);
     await this.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
@@ -587,10 +587,10 @@ ${inspiration}
     const novelId = job.novelId;
     const outlineResult = await this.getPhaseOutput(jobId, "outline", "outline");
 
-    const keywords = knowledgeSearchService.extractKeywords(
-      `${job.novel.title} ${job.novel.inspiration || ""} ${config.genre || ""}`
-    );
-    const knowledgeContext = await knowledgeSearchService.buildContext(novelId, keywords);
+    const knowledgeContext = await getRagRetrieveService()?.retrieve(
+      `${job.novel.title} ${job.novel.inspiration || ""} ${config.genre || ""}`,
+      { novelId, topK: 10 }
+    ) ?? "";
 
     const [existingWorldview, existingCharacters, existingStyle] = await Promise.all([
       prisma.worldview.findFirst({ where: { novelId } }),
@@ -986,10 +986,10 @@ ${inspiration}
       this.getPhaseOutput(jobId, "volumes", "volume").catch(() => ({})),
     ]);
 
-    const keywords = knowledgeSearchService.extractKeywords(
-      `${job.novel.title} ${job.novel.inspiration || ""} ${config.genre || ""}`
-    );
-    const knowledgeContext = await knowledgeSearchService.buildContext(novelId, keywords);
+    const knowledgeContext = await getRagRetrieveService()?.retrieve(
+      `${job.novel.title} ${job.novel.inspiration || ""} ${config.genre || ""}`,
+      { novelId, topK: 10 }
+    ) ?? "";
 
     // 章纲
     await this.updateJobProgress(jobId, "chapter_outline", "chapter_outline");
@@ -3320,14 +3320,16 @@ ${input.previousChapters.length
 
     switch (step) {
       case "outline": {
-        const keywords = knowledgeSearchService.extractKeywords(job.novel.inspiration || "");
-        const knowledge = await knowledgeSearchService.buildContext(job.novelId, keywords);
+        const knowledge = await getRagRetrieveService()?.retrieve(
+          job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
+        ) ?? "";
         output = await this.generateOutline(job.novelId, job.novel.inspiration || "", knowledge, config, userHint);
         break;
       }
       case "worldview": {
-        const wvKeywords = knowledgeSearchService.extractKeywords(job.novel.inspiration || "");
-        const wvKnowledge = await knowledgeSearchService.buildContext(job.novelId, wvKeywords);
+        const wvKnowledge = await getRagRetrieveService()?.retrieve(
+          job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
+        ) ?? "";
         output = await this.generateWorldview(job.novelId, outline, wvKnowledge, userHint);
         break;
       }
@@ -3336,8 +3338,9 @@ ${input.previousChapters.length
           where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } },
         });
         const worldview = worldviewResult ? JSON.parse(worldviewResult.output) : {};
-        const charKeywords = knowledgeSearchService.extractKeywords(job.novel.inspiration || "");
-        const charKnowledge = await knowledgeSearchService.buildContext(job.novelId, charKeywords);
+        const charKnowledge = await getRagRetrieveService()?.retrieve(
+          job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
+        ) ?? "";
         output = await this.generateCharacters(job.novelId, outline, worldview, charKnowledge, userHint);
         break;
       }
@@ -3385,8 +3388,9 @@ ${input.previousChapters.length
         const mhWv = mhWvRes ? JSON.parse(mhWvRes.output) : {};
         const mhChar = mhCharRes ? JSON.parse(mhCharRes.output) : {};
         const mhStyle = mhStyleRes ? JSON.parse(mhStyleRes.output) : {};
-        const mhKeywords = knowledgeSearchService.extractKeywords(job.novel.inspiration || "");
-        const mhKnowledge = await knowledgeSearchService.buildContext(job.novelId, mhKeywords);
+        const mhKnowledge = await getRagRetrieveService()?.retrieve(
+          job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
+        ) ?? "";
         output = await this.generateMainlinesAndHooks(job.novelId, outline, mhVolumes, mhWv, mhChar, mhStyle, mhKnowledge, userHint);
         break;
       }
