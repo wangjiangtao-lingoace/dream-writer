@@ -30,6 +30,29 @@ const NOVEL_KEYWORDS = [
   "特工", "废物", "修炼", "一朝", "被骂", "大陆", "帝国",
 ];
 
+// 叙事动词（用于区分小说内容 vs UI文本）
+const NARRATIVE_VERBS = [
+  "说道", "笑道", "想到", "看着", "听到", "发现", "决定", "终于",
+  "突然", "竟然", "不曾", "不曾想", "没想到", "一朝", "从此",
+  "曾经", "后来", "最终", "于是", "然而", "不过", "可是",
+];
+
+// 常见小说站点简介容器的CSS选择器模式（用于正则匹配class/id）
+const NOVEL_SITE_SELECTORS = [
+  /class=["'][^"']*intro[^"']*["']/i,
+  /class=["'][^"']*bookinfo[^"']*["']/i,
+  /class=["'][^"']*book-info[^"']*["']/i,
+  /class=["'][^"']*synopsis[^"']*["']/i,
+  /class=["'][^"']*description[^"']*["']/i,
+  /class=["'][^"']*book-desc[^"']*["']/i,
+  /class=["'][^"']*info[^"']*["']/i,
+  /class=["'][^"']*summary[^"']*["']/i,
+  /class=["'][^"']*jj_intro[^"']*["']/i,
+  /id=["'][^"']*introtext[^"']*["']/i,
+  /id=["'][^"']*bookintro[^"']*["']/i,
+  /id=["'][^"']*book_intro[^"']*["']/i,
+];
+
 // 样板内容关键词（用于过滤）
 const BOILERPLATE_KEYWORDS = [
   "首页", "登录", "注册", "搜索", "导航", "菜单", "footer",
@@ -65,11 +88,11 @@ export class ContentExtractionService {
    * 从HTML字符串提取内容
    */
   extractFromHtml(html: string, url?: string, titleVariants?: string[]): ExtractedContent {
-    // 第一步：清理HTML
+    // 第一步：清理HTML（用于作者提取等）
     const cleaned = this.cleanHtml(html);
 
-    // 第二步：提取文本块
-    const blocks = this.extractTextBlocks(cleaned);
+    // 第二步：从原始HTML提取文本块（保留outerHtml用于小说站点容器检测）
+    const blocks = this.extractTextBlocks(html);
 
     // 第三步：评分每个文本块
     const scoredBlocks = blocks.map((block) => ({
@@ -83,7 +106,7 @@ export class ContentExtractionService {
     // 第五步：提取结构化信息
     const title = this.extractTitle(html, titleVariants);
     const author = this.extractAuthor(cleaned);
-    const synopsis = this.extractSynopsis(scoredBlocks, titleVariants);
+    const synopsis = this.extractSynopsis(scoredBlocks, titleVariants, html);
     const bodyText = this.extractBodyText(scoredBlocks);
 
     // 第六步：计算置信度
@@ -149,16 +172,17 @@ export class ContentExtractionService {
   /**
    * 提取文本块
    */
-  private extractTextBlocks(html: string): Array<{ text: string; tag: string }> {
-    const blocks: Array<{ text: string; tag: string }> = [];
+  private extractTextBlocks(html: string): Array<{ text: string; tag: string; outerHtml?: string }> {
+    const blocks: Array<{ text: string; tag: string; outerHtml?: string }> = [];
 
     // 按常见块级标签分割
-    const blockRegex = /<(p|div|article|section|main|li|h[1-6]|td|th|dd|dt|blockquote)[^>]*>([\s\S]*?)<\/\1>/gi;
+    const blockRegex = /(<(p|div|article|section|main|li|h[1-6]|td|th|dd|dt|blockquote)[^>]*>)([\s\S]*?)<\/\2>/gi;
     let match;
 
     while ((match = blockRegex.exec(html)) !== null) {
-      const tag = match[1].toLowerCase();
-      const innerHtml = match[2];
+      const outerHtml = match[1];
+      const tag = match[2].toLowerCase();
+      const innerHtml = match[3];
 
       // 移除内部标签，保留文本
       const text = innerHtml
@@ -174,7 +198,7 @@ export class ContentExtractionService {
         .trim();
 
       if (text.length > 10) {
-        blocks.push({ text, tag });
+        blocks.push({ text, tag, outerHtml });
       }
     }
 
@@ -188,7 +212,7 @@ export class ContentExtractionService {
 
       const lines = plainText.split(/[。！？\n]/).filter((line) => line.trim().length > 15);
       for (const line of lines) {
-        blocks.push({ text: line.trim(), tag: "p" });
+        blocks.push({ text: line.trim(), tag: "p", outerHtml: undefined });
       }
     }
 
@@ -199,20 +223,26 @@ export class ContentExtractionService {
    * 评分文本块
    */
   private scoreBlock(
-    block: { text: string; tag: string },
+    block: { text: string; tag: string; outerHtml?: string },
     titleVariants?: string[],
   ): number {
     let score = 0;
     const text = block.text;
-
-    // 1. 长度评分（适中长度得分最高）
     const length = text.length;
-    if (length > 50 && length < 500) {
+
+    // 1. 长度评分（适中长度得分最高，过短/过长惩罚）
+    if (length < 30) {
+      score -= 5; // 过短内容惩罚
+    } else if (length >= 30 && length < 80) {
+      score += 5;
+    } else if (length >= 80 && length < 500) {
       score += 15;
     } else if (length >= 500 && length < 1000) {
       score += 10;
-    } else if (length >= 1000) {
+    } else if (length >= 1000 && length < 3000) {
       score += 5;
+    } else {
+      score -= 5; // 过长内容惩罚（可能是章节列表或正文拼接）
     }
 
     // 2. 中文字符密度
@@ -224,28 +254,67 @@ export class ContentExtractionService {
     const matchedKeywords = NOVEL_KEYWORDS.filter((kw) => text.includes(kw));
     score += matchedKeywords.length * 3;
 
-    // 4. 包含标题变体
+    // 4. 结构化内容奖励："作者"、"简介"、"主角"相邻出现
+    const structuralKeywords = ["作者", "简介", "主角"];
+    const matchedStructural = structuralKeywords.filter((kw) => text.includes(kw));
+    if (matchedStructural.length >= 2) {
+      score += 15; // 多个结构化关键词相邻出现，很可能是书籍信息页
+    } else if (matchedStructural.length === 1) {
+      score += 5;
+    }
+
+    // 5. 叙事动词奖励（区分小说内容 vs UI文本）
+    const matchedNarrativeVerbs = NARRATIVE_VERBS.filter((v) => text.includes(v));
+    score += matchedNarrativeVerbs.length * 2;
+
+    // 6. 章节目录 vs 简介的区分惩罚
+    const chapterPatterns = [
+      /第[一二三四五六七八九十百千\d]+[章回节卷]/g,
+      /chapter\s*\d+/gi,
+    ];
+    let chapterMatchCount = 0;
+    for (const pattern of chapterPatterns) {
+      const matches = text.match(pattern);
+      if (matches) chapterMatchCount += matches.length;
+    }
+    if (chapterMatchCount >= 3) {
+      score -= 20; // 章节目录列表，不是简介
+    } else if (chapterMatchCount >= 1 && length > 500) {
+      score -= 10; // 可能是章节目录
+    }
+
+    // 7. 包含标题变体
     if (titleVariants) {
       const hasTitle = titleVariants.some((t) => text.includes(t));
       if (hasTitle) score += 20;
     }
 
-    // 5. 标签权重
+    // 8. 标签权重
     if (block.tag === "article" || block.tag === "main") {
       score += 10;
     } else if (block.tag === "p") {
       score += 5;
     }
 
-    // 6. 样板内容扣分
+    // 9. 小说站点特定容器加分
+    if (block.outerHtml) {
+      const isNovelSiteContainer = NOVEL_SITE_SELECTORS.some((pattern) =>
+        pattern.test(block.outerHtml!),
+      );
+      if (isNovelSiteContainer) {
+        score += 20;
+      }
+    }
+
+    // 10. 样板内容扣分
     const matchedBoilerplate = BOILERPLATE_KEYWORDS.filter((kw) => text.includes(kw));
     score -= matchedBoilerplate.length * 5;
 
-    // 7. URL密度扣分
+    // 11. URL密度扣分
     const urlMatches = text.match(/https?:\/\/[^\s]+/g) || [];
     score -= urlMatches.length * 8;
 
-    // 8. 数字密度扣分（纯数字内容通常是噪音）
+    // 12. 数字密度扣分（纯数字内容通常是噪音）
     const digitMatches = text.match(/\d/g) || [];
     const digitDensity = digitMatches.length / Math.max(text.length, 1);
     if (digitDensity > 0.3) score -= 10;
@@ -316,8 +385,25 @@ export class ContentExtractionService {
   private extractSynopsis(
     scoredBlocks: Array<{ text: string; tag: string; score: number }>,
     titleVariants?: string[],
+    rawHtml?: string,
   ): string {
-    // 优先选择包含"简介"关键词的块
+    // 优先级1：从 <meta name="description"> 提取（高置信度简介候选）
+    if (rawHtml) {
+      const metaSynopsis = this.extractMetaSynopsis(rawHtml, titleVariants);
+      if (metaSynopsis) {
+        return this.cleanSynopsis(metaSynopsis, titleVariants);
+      }
+    }
+
+    // 优先级2：从小说站点特定容器提取（intro, bookinfo 等）
+    if (rawHtml) {
+      const siteSynopsis = this.extractNovelSiteSynopsis(rawHtml, titleVariants);
+      if (siteSynopsis) {
+        return this.cleanSynopsis(siteSynopsis, titleVariants);
+      }
+    }
+
+    // 优先级3：选择包含"简介"关键词的块
     const synopsisBlock = scoredBlocks.find((block) =>
       block.text.includes("简介") || block.text.includes("内容介绍") || block.text.includes("作品简介"),
     );
@@ -326,7 +412,7 @@ export class ContentExtractionService {
       return this.cleanSynopsis(synopsisBlock.text, titleVariants);
     }
 
-    // 其次选择分数最高且包含标题的块
+    // 优先级4：选择分数最高且包含标题的块
     if (titleVariants) {
       const titleBlock = scoredBlocks.find((block) =>
         titleVariants.some((t) => block.text.includes(t)) && block.text.length > 50,
@@ -337,12 +423,100 @@ export class ContentExtractionService {
       }
     }
 
-    // 最后选择分数最高的块
+    // 优先级5：选择分数最高的块
     if (scoredBlocks.length > 0) {
       return this.cleanSynopsis(scoredBlocks[0].text, titleVariants);
     }
 
     return "";
+  }
+
+  /**
+   * 从 <meta name="description"> 或 <meta property="og:description"> 提取简介
+   */
+  private extractMetaSynopsis(html: string, titleVariants?: string[]): string | null {
+    const metaPatterns = [
+      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i,
+      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i,
+    ];
+
+    for (const pattern of metaPatterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        const content = match[1]
+          .replace(/&nbsp;/g, " ")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .trim();
+
+        // meta description 需要足够长且与小说相关
+        if (content.length >= 30) {
+          // 如果有标题变体，检查是否相关
+          if (titleVariants && titleVariants.length > 0) {
+            const isRelevant = titleVariants.some((t) => content.includes(t)) ||
+              NOVEL_KEYWORDS.some((kw) => content.includes(kw));
+            if (isRelevant) {
+              return content;
+            }
+          } else {
+            return content;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 从小说站点特定容器（如 <div class="intro">, <div class="bookinfo">）提取简介
+   */
+  private extractNovelSiteSynopsis(html: string, titleVariants?: string[]): string | null {
+    // 匹配常见小说站点简介容器
+    const containerPatterns = [
+      /<div[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class=["'][^"']*bookinfo[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class=["'][^"']*book-info[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class=["'][^"']*synopsis[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class=["'][^"']*book-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*class=["'][^"']*jj_intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*id=["'][^"']*introtext[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*id=["'][^"']*bookintro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<div[^>]*id=["'][^"']*book_intro[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+      /<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>/i,
+    ];
+
+    for (const pattern of containerPatterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        const text = match[1]
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (text.length >= 20) {
+          // 按中文字符密度评分，过滤UI文本
+          const chineseChars = text.match(/[一-鿿]/g) || [];
+          const chineseDensity = chineseChars.length / Math.max(text.length, 1);
+          if (chineseDensity > 0.3) {
+            return text;
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -421,11 +595,15 @@ export class ContentExtractionService {
       confidence += 0.15;
     }
 
-    // 简介质量
-    if (synopsis.length > 50) {
+    // 简介质量（长度惩罚：过短扣分，适中加分）
+    if (synopsis.length > 100) {
       confidence += 0.2;
+    } else if (synopsis.length > 50) {
+      confidence += 0.15;
     } else if (synopsis.length > 20) {
       confidence += 0.1;
+    } else if (synopsis.length > 0 && synopsis.length <= 20) {
+      confidence += 0.02; // 过短简介几乎无价值
     }
 
     // 正文长度
@@ -441,6 +619,26 @@ export class ContentExtractionService {
     const chineseDensity = chineseChars.length / Math.max(allText.length, 1);
     if (chineseDensity > 0.5) {
       confidence += 0.1;
+    }
+
+    // 结构化内容奖励：简介中包含"作者"、"简介"、"主角"等结构化关键词
+    const structuralKeywords = ["作者", "简介", "主角", "类型", "标签"];
+    const matchedStructural = structuralKeywords.filter((kw) => synopsis.includes(kw));
+    if (matchedStructural.length >= 2) {
+      confidence += 0.08;
+    }
+
+    // 叙事动词奖励：简介中包含叙事动词，说明是真正的剧情描述而非UI文本
+    const matchedNarrativeVerbs = NARRATIVE_VERBS.filter((v) => synopsis.includes(v));
+    if (matchedNarrativeVerbs.length >= 2) {
+      confidence += 0.05;
+    }
+
+    // 章节目录惩罚：如果简介主要是章节目录，降低置信度
+    const chapterPattern = /第[一二三四五六七八九十百千\d]+[章回节卷]/g;
+    const chapterMatches = synopsis.match(chapterPattern);
+    if (chapterMatches && chapterMatches.length >= 3) {
+      confidence -= 0.15;
     }
 
     return Math.min(0.95, Math.max(0.1, confidence));

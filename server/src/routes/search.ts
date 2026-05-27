@@ -161,12 +161,21 @@ async function extractAndValidateResults(
 
       // 验证质量
       if (extracted && isValidResult(extracted, titleVariants)) {
+        // 根据源站点等级调整置信度
+        const sourceTier = getVerifiedSourceTier(result.url);
+        let adjustedConfidence = extracted.confidence;
+        if (sourceTier === 1) {
+          adjustedConfidence = Math.min(0.95, adjustedConfidence + 0.1);
+        } else if (sourceTier === 2) {
+          adjustedConfidence = Math.min(0.95, adjustedConfidence + 0.05);
+        }
+
         return {
           url: result.url,
           title: extracted.title || result.title,
           synopsis: extracted.synopsis || result.snippet,
           bodyText: extracted.bodyText,
-          confidence: extracted.confidence,
+          confidence: adjustedConfidence,
           provider,
         };
       }
@@ -274,6 +283,59 @@ async function tryKnownSources(titleVariants: string[]): Promise<{
 
 router.get("/novel", handleNovelSearch);
 router.post("/novel", handleNovelSearch);
+
+// ============================================================
+// 验证源域名
+// ============================================================
+
+// Tier 1: 高权重正版站
+const TIER1_DOMAINS = [
+  "qidian.com",
+  "jjwxc.net",
+  "zongheng.com",
+  "17k.com",
+  "ciweimao.com",
+  "qimao.com",
+  "faloo.com",
+  "shuqi.com",
+];
+
+// Tier 2: 资讯/社区站
+const TIER2_DOMAINS = [
+  "zhihu.com",
+  "douban.com",
+  "baike.baidu.com",
+];
+
+// Tier 3: 抓取/聚合站
+const TIER3_DOMAINS = [
+  "guazixs.cn",
+  "lrts.me",
+  "fanqienovel.com",
+  "sogou.com",
+];
+
+const ALL_VERIFIED_DOMAINS = [...TIER1_DOMAINS, ...TIER2_DOMAINS, ...TIER3_DOMAINS];
+
+/**
+ * 判断URL是否来自已验证的小说来源站点
+ * 返回 0 表示未验证，1/2/3 表示来源等级（数字越小权重越高）
+ */
+function getVerifiedSourceTier(url: string): number {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (TIER1_DOMAINS.some((d) => hostname.includes(d))) return 1;
+    if (TIER2_DOMAINS.some((d) => hostname.includes(d))) return 2;
+    if (TIER3_DOMAINS.some((d) => hostname.includes(d))) return 3;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+function isVerifiedSourceUrl(url: string): boolean {
+  return getVerifiedSourceTier(url) > 0;
+}
 
 // ============================================================
 // 工具函数（保留原有逻辑）
