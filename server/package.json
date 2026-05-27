@@ -33,11 +33,14 @@
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
+    "epub2": "^3.0.2",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "langchain": "^1.2.28",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "pdf-parse": "^2.4.5",
+    "sqlite-vec": "^0.1.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {
