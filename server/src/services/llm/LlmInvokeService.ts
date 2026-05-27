@@ -6,6 +6,8 @@ import {
   getProviderEnvModel,
   providerRequiresApiKey,
 } from "../../llm/providers";
+import { prisma } from "../../db/prisma";
+import { decryptApiKey } from "../../utils/crypto";
 
 export interface ChapterDraftInput {
   novelTitle: string;
@@ -24,7 +26,22 @@ interface ResolvedModelConfig {
   apiKey?: string;
 }
 
-function resolveModelConfig(): ResolvedModelConfig | null {
+async function resolveModelConfig(): Promise<ResolvedModelConfig | null> {
+  // 优先级: DB 默认配置 > .env 环境变量
+  try {
+    const dbConfig = await prisma.aIConfig.findFirst({ where: { isDefault: true } });
+    if (dbConfig) {
+      return {
+        provider: dbConfig.provider as LLMProvider,
+        model: dbConfig.model,
+        baseURL: dbConfig.baseUrl || getProviderDefaultBaseUrl(dbConfig.provider as LLMProvider) || "https://api.openai.com/v1",
+        apiKey: decryptApiKey(dbConfig.apiKey),
+      };
+    }
+  } catch {
+    // DB 查询失败时静默降级到 .env
+  }
+
   const provider = (process.env.DEFAULT_LLM_PROVIDER?.trim() || "openai") as LLMProvider;
   const model = process.env.DEFAULT_LLM_MODEL?.trim()
     || getProviderEnvModel(provider)
@@ -94,11 +111,27 @@ function extractOpenAIStreamDelta(line: string): string {
   }
 }
 
+export class LlmError extends Error {
+  constructor(
+    message: string,
+    public readonly provider: string,
+    public readonly model: string,
+    public readonly statusCode?: number,
+    options?: { cause?: unknown },
+  ) {
+    // @ts-expect-error — Error(message, options) is ES2022, works at runtime in Node 20+
+    super(message, options);
+    this.name = "LlmError";
+  }
+}
+
 export class LlmInvokeService {
-  async completeText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string | null> {
-    const config = resolveModelConfig();
+  async completeTextOrThrow(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string> {
+    const config = await resolveModelConfig();
+    const provider = config?.provider ?? "unknown";
+    const model = config?.model ?? "unknown";
     if (!config) {
-      return null;
+      throw new LlmError("未配置 LLM", provider, model);
     }
 
     const response = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
@@ -120,17 +153,29 @@ export class LlmInvokeService {
     });
 
     if (!response.ok) {
-      return null;
+      throw new LlmError(`LLM 请求失败: ${response.status}`, config.provider, config.model, response.status);
     }
 
     const json = await response.json() as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    return json.choices?.[0]?.message?.content?.trim() || null;
+    const content = json.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      throw new LlmError("LLM 返回空内容", config.provider, config.model);
+    }
+    return content;
+  }
+
+  async completeText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string | null> {
+    try {
+      return await this.completeTextOrThrow(input);
+    } catch {
+      return null;
+    }
   }
 
   async *streamText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): AsyncGenerator<string> {
-    const config = resolveModelConfig();
+    const config = await resolveModelConfig();
     if (!config) {
       yield* this.streamFallbackRaw(input.prompt);
       return;
@@ -193,7 +238,7 @@ export class LlmInvokeService {
   }
 
   async *streamChapterDraft(input: ChapterDraftInput): AsyncGenerator<string> {
-    const config = resolveModelConfig();
+    const config = await resolveModelConfig();
     if (!config) {
       yield* this.streamFallback(input);
       return;
