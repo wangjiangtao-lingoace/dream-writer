@@ -146,7 +146,12 @@ class EmbeddingService {
     if (!this.configPromise) {
       this.configPromise = this.resolveConfig();
     }
-    return this.configPromise;
+    const result = await this.configPromise;
+    // I4: 不缓存 null 结果，下次调用时重试
+    if (!result) {
+      this.configPromise = null;
+    }
+    return result;
   }
 
   /**
@@ -164,7 +169,7 @@ class EmbeddingService {
    */
   chunkText(text: string, options?: ChunkOptions): string[] {
     const chunkSize = options?.chunkSize ?? DEFAULT_CHUNK_SIZE;
-    const chunkOverlap = options?.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP;
+    const safeOverlap = Math.min(options?.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP, chunkSize - 1);
 
     if (!text || text.trim().length === 0) return [];
 
@@ -177,7 +182,7 @@ class EmbeddingService {
 
     // 递归分割
     const chunks: string[] = [];
-    this.splitRecursive(processed, chunkSize, chunkOverlap, chunks);
+    this.splitRecursive(processed, chunkSize, safeOverlap, chunks);
     return chunks.filter((c) => c.trim().length > 0);
   }
 
@@ -340,6 +345,12 @@ class EmbeddingService {
   ): Promise<Array<{ index: number; embedding: number[] }>> {
     const url = `${config.baseUrl.replace(/\/$/, "")}/embeddings`;
 
+    // I2: SSRF 校验 - 仅允许 http/https 协议
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error(`不允许的协议: ${parsedUrl.protocol}，仅支持 http/https`);
+    }
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -364,6 +375,28 @@ class EmbeddingService {
 
     if (!json.data || !Array.isArray(json.data)) {
       throw new Error("嵌入 API 返回格式异常：缺少 data 字段");
+    }
+
+    // I3: 校验返回结果数量与输入一致
+    if (json.data.length !== texts.length) {
+      throw new Error(
+        `嵌入 API 返回数量不匹配：期望 ${texts.length}，实际 ${json.data.length}`
+      );
+    }
+
+    // I5: 校验每个 embedding 的数值有效性
+    for (const item of json.data) {
+      if (!Array.isArray(item.embedding) || item.embedding.length === 0) {
+        throw new Error(`嵌入 API 返回异常：第 ${item.index} 项 embedding 为空或非数组`);
+      }
+      if (item.embedding.length !== config.dimension) {
+        throw new Error(
+          `嵌入维度不匹配：期望 ${config.dimension}，实际 ${item.embedding.length}`
+        );
+      }
+      if (item.embedding.some((v) => !Number.isFinite(v))) {
+        throw new Error(`嵌入 API 返回异常：第 ${item.index} 项包含 NaN/Infinity`);
+      }
     }
 
     return json.data.map((item) => ({
