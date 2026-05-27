@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { getEmbeddingService } from "./EmbeddingService";
 import { getVectorStore } from "../db/vectorStore";
+import { getRagRetrieveService } from "./RagRetrieveService";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,6 +118,9 @@ class RagIngestService {
         );
       }
 
+      // FTS5 同步：将新 chunks 写入全文索引
+      getRagRetrieveService()?.syncFtsAfterInsert(savedChunks);
+
       // I6: vec0 TEXT 列不支持 null，用空字符串；Prisma RagChunk 保持 null（匹配 schema）
       const vectors = savedChunks.map((chunk, index) => ({
         chunkId: chunk.id,
@@ -144,6 +148,8 @@ class RagIngestService {
             console.error("[RagIngestService] vec0 回滚失败:", cleanupErr),
           );
       }
+      // 同步清理 FTS5 索引
+      getRagRetrieveService()?.syncFtsAfterDelete(ownerType, ownerId);
       throw error;
     }
   }
@@ -163,6 +169,9 @@ class RagIngestService {
     await prisma.ragChunk.deleteMany({
       where: { ownerType, ownerId },
     });
+
+    // 同步清理 FTS5 索引
+    getRagRetrieveService()?.syncFtsAfterDelete(ownerType, ownerId);
   }
 }
 
