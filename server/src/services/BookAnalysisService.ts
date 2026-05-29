@@ -79,37 +79,6 @@ function buildPrompt(input: CreateBookAnalysisInput, key: BookAnalysisSectionKey
   ].join("\n");
 }
 
-function fallbackSection(input: CreateBookAnalysisInput, key: BookAnalysisSectionKey, title: string): string {
-  const source = clipSourceText(input.sourceText);
-  const firstParagraph = source.split(/\n+/).find((item) => item.trim().length > 20)?.trim() || source.slice(0, 120);
-  const map: Record<BookAnalysisSectionKey, string[]> = {
-    overview: ["作品需要先看清核心承诺：主角为何行动、读者为何继续读。", "最可迁移的是开篇问题、持续压力和阶段性回报。"],
-    plot_structure: ["剧情应按目标、阻力、代价、反转推进。", "每章结尾需要保留一个具体未解决问题。"],
-    timeline: ["时间线要服务因果，而不是罗列事件。", "关键事件应能解释人物选择如何一步步变得不可逆。"],
-    character_system: ["人物系统的核心是欲望冲突。", "主角、对手和盟友都应承担推进情节的功能。"],
-    worldbuilding: ["设定要形成限制和机会。", "世界观条目只有影响选择、资源或冲突时才有价值。"],
-    themes: ["主题来自人物选择中的代价。", "最好让主题通过行动呈现，而不是旁白解释。"],
-    style_technique: ["语言要优先服务场景与节奏。", "减少概念解释，多用动作、细节和对话承载信息。"],
-    market_highlights: ["商业卖点需要高频出现但不重复。", "题材标签、爽点和反转要形成稳定期待。"],
-  };
-
-  return [
-    `## ${title}`,
-    "",
-    "### 核心结论",
-    ...map[key].map((item) => `- ${item}`),
-    "",
-    "### 可迁移做法",
-    "- 先把目标读者期待写成一句话，再倒推章节功能。",
-    "- 每一章至少保留一个明确推进：信息、关系、资源、危机或情绪变化。",
-    "- 生成新作品时，把本分区结论放进章节目标，而不是只放在总设定里。",
-    "",
-    "### 原文依据",
-    `- 依据片段：${firstParagraph.slice(0, 160)}`,
-    "",
-    "> 当前为本地兜底拆书。配置 OpenAI 兼容模型密钥后，会生成更细的分区分析。",
-  ].join("\n");
-}
 
 function evidenceFromSource(input: CreateBookAnalysisInput): BookAnalysisEvidenceItem[] {
   const excerpt = clipSourceText(input.sourceText).replace(/\s+/g, " ").slice(0, 180);
@@ -251,7 +220,10 @@ export class BookAnalysisService {
             prompt: buildPrompt(input, section.key, section.title),
             temperature: 0.28,
             maxTokens: 1800,
-          }) ?? fallbackSection(input, section.key, section.title);
+          });
+          if (!aiContent) {
+            throw new Error(`分区「${section.title}」分析失败：LLM 未返回结果。请检查 API Key 配置。`);
+          }
 
           await prisma.bookAnalysisSection.update({
             where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
@@ -282,7 +254,7 @@ export class BookAnalysisService {
           const section = BOOK_ANALYSIS_SECTIONS[i];
           await prisma.bookAnalysisSection.update({
             where: { analysisId_sectionKey: { analysisId: id, sectionKey: section.key } },
-            data: { status: "failed", aiContent: fallbackSection(input, section.key, section.title) },
+            data: { status: "failed", aiContent: "分析失败：LLM 未返回结果。请检查 API Key 配置后重试。" },
           });
         }
       }

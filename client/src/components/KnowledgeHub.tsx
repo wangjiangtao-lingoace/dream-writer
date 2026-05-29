@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import SmartJsonViewer from "./SmartJsonViewer";
+import { defaultLabelMap } from "../utils/translate";
 
 interface KnowledgeAsset {
   id: string;
@@ -120,11 +121,39 @@ export default function KnowledgeHub({ novelId, onNotice }: KnowledgeHubProps) {
     }
   }
 
+  // 知识库专用 labelMap
+  const knowledgeLabelMap: Record<string, string> = {
+    ...defaultLabelMap,
+    title: "标题",
+    name: "名称",
+    description: "描述",
+    summary: "摘要",
+    content: "内容",
+    category: "分类",
+    tags: "标签",
+    type: "类型",
+    source: "来源",
+    setting: "设定",
+    rules: "规则",
+    powerSystem: "力量体系",
+    geography: "地理",
+    factions: "势力",
+    history: "历史",
+    culture: "文化",
+    abilities: "能力",
+    personality: "性格",
+    background: "背景",
+    motivation: "动机",
+    relationships: "关系",
+    appearance: "外貌",
+  };
+
   function renderContent(asset: KnowledgeAsset) {
     return (
       <div style={{ marginTop: "0.5rem" }}>
         <SmartJsonViewer
           data={asset.content}
+          labelMap={knowledgeLabelMap}
           maxDepth={3}
         />
       </div>

@@ -34,7 +34,7 @@ a:hover {
 }
 
 ::selection {
-  background: var(--accent-muted);
+  background: rgba(79, 124, 255, 0.2);
   color: var(--text-primary);
 }
 
@@ -48,12 +48,12 @@ a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-default);
+  background: #d1d5db;
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+  background: #b0b5be;
 }
 
 input, textarea, select, button {

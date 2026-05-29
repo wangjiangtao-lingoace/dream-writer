@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
 import { toast } from "../ui/toast";
+import { translateHookStatus } from "../../utils/translate";
 
 const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [hooks, setHooks] = useState<any[]>([]);
@@ -204,7 +205,7 @@ const HookPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                   <span className="type">{getTypeLabel(hook.type)}</span>
                   <span className="intensity">强度: {hook.intensity}/10</span>
                   <span className={`status ${hook.status}`}>
-                    {hook.status === "planted" ? "已埋设" : hook.status}
+                    {translateHookStatus(hook.status)}
                   </span>
                 </div>
               </div>

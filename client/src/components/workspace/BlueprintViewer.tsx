@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { defaultLabelMap, snakeCaseToReadable } from "../../utils/translate";
 
 // BlueprintViewer 组件：结构化展示创作蓝图
 const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
@@ -74,13 +75,43 @@ const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
 
     if (Array.isArray(value)) {
       return (
-        <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "var(--text-secondary)" }}>
+        <div style={{ display: "grid", gap: "0.5rem" }}>
           {value.map((item, index) => (
-            <li key={index} style={{ marginBottom: "0.25rem", lineHeight: 1.6 }}>
-              {typeof item === "object" ? JSON.stringify(item) : String(item)}
-            </li>
+            <div key={index} style={{
+              padding: "0.5rem 0.75rem",
+              background: "var(--bg-surface)",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border-light)",
+              fontSize: "0.8125rem",
+              lineHeight: 1.6,
+            }}>
+              {typeof item === "object" && item !== null ? (
+                <div style={{ display: "grid", gap: "0.25rem" }}>
+                  {item.title && <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{item.title}</div>}
+                  {item.name && !item.title && <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{item.name}</div>}
+                  {item.description && <div style={{ color: "var(--text-secondary)" }}>{item.description}</div>}
+                  {item.role && <div style={{ color: "var(--text-muted)" }}>角色：{item.role}</div>}
+                  {item.goal && <div style={{ color: "var(--text-secondary)" }}>目标：{item.goal}</div>}
+                  {item.conflict && <div style={{ color: "var(--text-secondary)" }}>冲突：{item.conflict}</div>}
+                  {item.motivation && <div style={{ color: "var(--text-secondary)" }}>动机：{item.motivation}</div>}
+                  {/* 如果没有识别到关键字段，fallback 到前几个字段 */}
+                  {!item.title && !item.name && !item.description && (
+                    <div style={{ color: "var(--text-secondary)" }}>
+                      {Object.entries(item).slice(0, 3).map(([k, v]) => (
+                        <span key={k} style={{ marginRight: "0.75rem" }}>
+                          <span style={{ color: "var(--text-muted)" }}>{(labelMap as Record<string, string>)[k] || snakeCaseToReadable(k)}：</span>
+                          {typeof v === "string" ? v.slice(0, 60) : String(v)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                String(item)
+              )}
+            </div>
           ))}
-        </ul>
+        </div>
       );
     }
 
@@ -94,10 +125,9 @@ const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
                 fontWeight: 600,
                 color: "var(--text-secondary)",
                 marginBottom: "0.25rem",
-                textTransform: "uppercase",
                 letterSpacing: "0.02em",
               }}>
-                {subKey}
+                {labelMap[subKey] || defaultLabelMap[subKey] || snakeCaseToReadable(subKey)}
               </div>
               <div style={{ paddingLeft: "0.5rem" }}>
                 {renderValue(`${key}.${subKey}`, subValue, depth + 1)}
@@ -111,8 +141,9 @@ const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
     return <span>{String(value)}</span>;
   };
 
-  // 中文标签映射
+  // 中文标签映射（合并 defaultLabelMap）
   const labelMap: Record<string, string> = {
+    ...defaultLabelMap,
     title: "标题",
     genre: "类型",
     theme: "主题",
@@ -138,6 +169,33 @@ const BlueprintViewer: React.FC<{ blueprint: any }> = ({ blueprint }) => {
     themes: "主题列表",
     motifs: "母题列表",
     symbolism: "象征意义",
+    // 人物子字段
+    name: "姓名",
+    role: "角色",
+    age: "年龄",
+    gender: "性别",
+    appearance: "外貌",
+    personality: "性格",
+    motivation: "动机",
+    background: "背景",
+    abilities: "能力",
+    relationships: "关系",
+    arc: "成长弧线",
+    // 世界观子字段
+    rules: "世界规则",
+    powerSystem: "力量体系",
+    geography: "地理环境",
+    factions: "势力派系",
+    history: "历史背景",
+    culture: "文化风俗",
+    magic: "魔法体系",
+    technology: "科技水平",
+    religion: "宗教信仰",
+    economy: "经济体系",
+    // 卷纲子字段
+    goal: "目标",
+    volumes: "卷结构",
+    chapterOutlines: "章纲列表",
   };
 
   return (

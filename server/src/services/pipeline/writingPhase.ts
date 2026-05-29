@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma";
 import { parseLlmJson } from "../../utils/parseJson";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext } from "./pipelineUtils";
+import { updateStoryState, extractMemories } from "./postProcessing";
 
 export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
@@ -22,6 +23,19 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
       draftCount,
     }, { chapters });
     await ctx.saveToKnowledgeBase(job.novelId, "chapter_draft", "自动仿写样章", { chapters });
+
+    // 续写模式后处理：更新 StoryState + 提取记忆
+    if (config.mode === "continue") {
+      for (const ch of chapters) {
+        if ((ch as any).skipped || !ch.content) continue;
+        try {
+          await updateStoryState(job.novelId, ch.order, ch.content);
+          await extractMemories(job.novelId, ch.id, ch.content);
+        } catch (e) {
+          console.warn(`[writingPhase] 第${ch.order}章后处理失败:`, e);
+        }
+      }
+    }
 
     await prisma.pipelineJob.update({
       where: { id: jobId },

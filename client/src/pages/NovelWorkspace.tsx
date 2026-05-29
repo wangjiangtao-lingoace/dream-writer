@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "../components/ui/toast";
 import CharacterCard from "../components/CharacterCard";
@@ -21,19 +21,39 @@ import {
   HookPanel,
   WritePanel,
   AnalysisPanel,
+  WorkspaceTopBar,
+  WorkspaceBottomBar,
+  ChapterSidebar,
+  RichTextEditor,
+  ChapterHeaderView,
+  AssetPanel,
+  AIProgressBanner,
 } from "../components/workspace";
-import type { WorkspaceTab, TabGroup, NovelDetail } from "../components/workspace";
+import type { WorkspaceTab, TabGroup, WorkspaceGroupId, WorkspaceGroupDef, NovelDetail, WorkspaceData, RadarScores, AIReview } from "../components/workspace";
 import "../styles/pages/workspace.css";
+
+const defaultWritingStats = {
+  todayWordCount: 0,
+  targetWordCount: 3000,
+  totalWordCount: 0,
+  streakDays: 0,
+  estimatedTime: "--",
+};
+
+const defaultSignals = { mood: "neutral", rhythm: "development", climax: false };
 
 const NovelWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const { id, tab } = useParams<{ id: string; tab?: string }>();
+  const [searchParams] = useSearchParams();
   const [novel, setNovel] = useState<NovelDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(
-    (tab as WorkspaceTab) || "dashboard"
+    (tab as WorkspaceTab) || "write"
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
   const [editingInspiration, setEditingInspiration] = useState(false);
@@ -41,6 +61,18 @@ const NovelWorkspace: React.FC = () => {
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [worldviews, setWorldviews] = useState<any[]>([]);
   const [editingWorldviewId, setEditingWorldviewId] = useState<string | null>(null);
+
+  // New state for 3-column layout
+  const [workspaceData, setWorkspaceData] = useState<WorkspaceData | null>(null);
+  const [radarScores, setRadarScores] = useState<RadarScores | null>(null);
+  const [activeChapterData, setActiveChapterData] = useState<any>(null);
+  const [aiReview, setAiReview] = useState<AIReview | undefined>(undefined);
+  const [continuing, setContinuing] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Global AI progress banner state
+  const [aiProgress, setAiProgress] = useState<{ message: string; progress?: number } | null>(null);
+  const pipelinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -56,10 +88,75 @@ const NovelWorkspace: React.FC = () => {
 
   useEffect(() => {
     if (notice) {
-      const timer = setTimeout(() => setNotice(null), 3000);
-      return () => clearTimeout(timer);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = setTimeout(() => setNotice(null), 3000);
     }
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
   }, [notice]);
+
+  // Poll pipeline status for global AI progress banner
+  useEffect(() => {
+    if (!id) return;
+    const checkPipeline = async () => {
+      try {
+        const status = await api.get<any>(`/api/pipeline/novel/${id}`);
+        if (status && status.status === "running") {
+          setAiProgress({
+            message: status.currentStep || `AI 正在处理：${status.currentPhase || "分析中"}...`,
+            progress: status.progress,
+          });
+        } else if (status && status.status === "paused") {
+          setAiProgress({ message: "流水线已暂停", progress: status.progress });
+        } else {
+          setAiProgress(null);
+        }
+      } catch {
+        // No pipeline job or error — clear progress
+        setAiProgress(null);
+      }
+    };
+    checkPipeline();
+    pipelinePollRef.current = setInterval(checkPipeline, 5000);
+    return () => {
+      if (pipelinePollRef.current) clearInterval(pipelinePollRef.current);
+    };
+  }, [id]);
+
+  // Fetch workspace data when entering write tab
+  useEffect(() => {
+    if (!id || activeTab !== "write") return;
+    Promise.all([
+      api.get<any>(`/api/novels/${id}/workspace-data`).catch(() => null),
+      api.get<any>(`/api/novels/${id}/radar-scores`).catch(() => null),
+    ]).then(([wd, rs]) => {
+      if (wd) setWorkspaceData(wd);
+      if (rs) setRadarScores(rs);
+      if (wd?.chapters?.length > 0 && !activeChapterId) {
+        setActiveChapterId(wd.chapters[0].id);
+      }
+    });
+  }, [id, activeTab]);
+
+  // Fetch AI review when active chapter changes
+  useEffect(() => {
+    if (!activeChapterId || !id) return;
+    api.get<any>(`/api/novels/${id}/chapters/${activeChapterId}/ai-review`)
+      .then(setAiReview)
+      .catch(() => setAiReview(undefined));
+  }, [id, activeChapterId]);
+
+  // Fetch full chapter content when activeChapterId changes
+  useEffect(() => {
+    if (!activeChapterId || !id) return;
+    api.get<any>(`/api/novels/${id}`)
+      .then((data) => {
+        const ch = data?.chapters?.find((c: any) => c.id === activeChapterId);
+        if (ch) setActiveChapterData(ch);
+      })
+      .catch(() => {});
+  }, [id, activeChapterId]);
 
   const loadNovel = async (novelId: string) => {
     try {
@@ -104,9 +201,139 @@ const NovelWorkspace: React.FC = () => {
     }
   };
 
-  const tabGroups: TabGroup[] = [
+  // New handlers for 3-column layout
+  const handleSelectChapter = useCallback(async (chapterId: string) => {
+    setActiveChapterId(chapterId);
+  }, []);
+
+  const handleEditorChange = useCallback((content: string) => {
+    if (!activeChapterData) return;
+    setActiveChapterData({ ...activeChapterData, content });
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await api.put(`/api/novels/${id}/chapters/${activeChapterData.id}`, {
+          title: activeChapterData.title,
+          content,
+        });
+      } catch {
+        toast.error("自动保存失败，请检查网络后手动保存");
+      }
+    }, 2000);
+  }, [activeChapterData, id]);
+
+  const handleToolbarAction = useCallback((action: string) => {
+    toast.info(`工具栏操作: ${action}`);
+  }, []);
+
+  const handleCreateChapter = useCallback(async () => {
+    if (!id) return;
+    try {
+      const chapters = workspaceData?.chapters || [];
+      const newChapter = await api.post<any>(`/api/novels/${id}/chapters`, {
+        title: `第${chapters.length + 1}章`,
+      });
+      // Reload workspace data
+      const wd = await api.get<any>(`/api/novels/${id}/workspace-data`).catch(() => null);
+      if (wd) setWorkspaceData(wd);
+      if (newChapter?.id) setActiveChapterId(newChapter.id);
+    } catch (error) {
+      console.error("创建章节失败:", error);
+      toast.error("创建章节失败");
+    }
+  }, [id, workspaceData]);
+
+  const handleContinue = useCallback(async () => {
+    if (!id) return;
+    setContinuing(true);
+    try {
+      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string }> }>(
+        `/api/novels/${id}/continue`,
+        { chapterCount: 1, targetWordCount: 1800 }
+      );
+      if (result.chapters.length > 0) {
+        toast.success(`第${result.chapters[0].order}章「${result.chapters[0].title}」续写完成`);
+        const wd = await api.get<any>(`/api/novels/${id}/workspace-data`).catch(() => null);
+        if (wd) setWorkspaceData(wd);
+        setActiveChapterId(result.chapters[0].id);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "续写失败");
+    } finally {
+      setContinuing(false);
+    }
+  }, [id]);
+
+  const getBreadcrumb = useCallback(() => {
+    if (!activeChapterData || !workspaceData) return "";
+    const vol = workspaceData.chapters.find((c) => c.id === activeChapterData.id)?.volumeTitle;
+    return vol ? `${vol} > ${activeChapterData.title}` : activeChapterData.title;
+  }, [activeChapterData, workspaceData]);
+
+  // Tab → Group 映射
+  const TAB_TO_GROUP: Record<WorkspaceTab, WorkspaceGroupId> = {
+    write: "writing",
+    analysis: "writing",
+    dashboard: "dashboard",
+    outline: "planning",
+    volumes: "planning",
+    mainlines: "planning",
+    hooks: "planning",
+    characters: "assets",
+    worldviews: "assets",
+    style: "assets",
+    knowledge: "assets",
+    memory: "quality",
+    consistency: "quality",
+  };
+
+  const activeGroupId = TAB_TO_GROUP[activeTab] || "writing";
+
+  // 5 大工作区定义
+  const groupDefs: WorkspaceGroupDef[] = [
     {
-      label: "规划",
+      id: "writing",
+      label: "正文写作",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+      ),
+      tabs: [
+        {
+          key: "write",
+          label: "写作",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          ),
+        },
+        {
+          key: "analysis",
+          label: "拆书",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+          ),
+        },
+      ],
+    },
+    {
+      id: "dashboard",
+      label: "创作总控",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
+      ),
       tabs: [
         {
           key: "dashboard",
@@ -120,6 +347,21 @@ const NovelWorkspace: React.FC = () => {
             </svg>
           ),
         },
+      ],
+    },
+    {
+      id: "planning",
+      label: "故事规划",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <polyline points="10 9 9 9 8 9" />
+        </svg>
+      ),
+      tabs: [
         {
           key: "outline",
           label: "大纲",
@@ -133,45 +375,6 @@ const NovelWorkspace: React.FC = () => {
             </svg>
           ),
         },
-        {
-          key: "worldviews",
-          label: "世界观",
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-          ),
-        },
-        {
-          key: "characters",
-          label: "人物",
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          ),
-        },
-        {
-          key: "style",
-          label: "风格",
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="13.5" cy="6.5" r="2.5" />
-              <circle cx="17.5" cy="10.5" r="2.5" />
-              <circle cx="8.5" cy="7.5" r="2.5" />
-              <circle cx="6.5" cy="12.5" r="2.5" />
-              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
-            </svg>
-          ),
-        },
-      ],
-    },
-    {
-      label: "结构",
-      tabs: [
         {
           key: "volumes",
           label: "卷纲",
@@ -206,33 +409,49 @@ const NovelWorkspace: React.FC = () => {
       ],
     },
     {
-      label: "创作",
+      id: "assets",
+      label: "创作资产",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
       tabs: [
         {
-          key: "write",
-          label: "写作",
+          key: "characters",
+          label: "人物",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
           ),
         },
         {
-          key: "analysis",
-          label: "拆书",
+          key: "worldviews",
+          label: "世界观",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
             </svg>
           ),
         },
-      ],
-    },
-    {
-      label: "管理",
-      tabs: [
+        {
+          key: "style",
+          label: "风格",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="13.5" cy="6.5" r="2.5" />
+              <circle cx="17.5" cy="10.5" r="2.5" />
+              <circle cx="8.5" cy="7.5" r="2.5" />
+              <circle cx="6.5" cy="12.5" r="2.5" />
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+            </svg>
+          ),
+        },
         {
           key: "knowledge",
           label: "知识库",
@@ -245,6 +464,18 @@ const NovelWorkspace: React.FC = () => {
             </svg>
           ),
         },
+      ],
+    },
+    {
+      id: "quality",
+      label: "质量校验",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      ),
+      tabs: [
         {
           key: "memory",
           label: "记忆",
@@ -269,6 +500,13 @@ const NovelWorkspace: React.FC = () => {
       ],
     },
   ];
+
+  const handleGroupClick = (groupId: WorkspaceGroupId) => {
+    const group = groupDefs.find(g => g.id === groupId);
+    if (group && group.tabs.length > 0) {
+      handleTabChange(group.tabs[0].key);
+    }
+  };
 
   if (loading) {
     return (
@@ -498,7 +736,8 @@ const NovelWorkspace: React.FC = () => {
         return <HookPanel novelId={id!} />;
 
       case "write":
-        return <WritePanel novelId={id!} activeChapterId={activeChapterId} />;
+        // Handled by the new 3-column layout below
+        return null;
 
       case "analysis":
         return <AnalysisPanel novelId={id!} />;
@@ -530,11 +769,92 @@ const NovelWorkspace: React.FC = () => {
     return actions[activeTab] || actions.dashboard;
   };
 
+  // 3-column layout for "writing" group (write + analysis)
+  if (activeGroupId === "writing") {
+    return (
+      <ErrorBoundary>
+        <div className="workspace-write-layout">
+          {aiProgress && (
+            <AIProgressBanner
+              message={aiProgress.message}
+              progress={aiProgress.progress}
+              onDetail={() => navigate(`/novel/${id}/pipeline`)}
+            />
+          )}
+          <WorkspaceTopBar
+            novelTitle={workspaceData?.novel?.title || novel?.title || ""}
+            onBack={() => navigate("/")}
+            writingStats={workspaceData?.writingStats || defaultWritingStats}
+            signals={workspaceData?.signals || defaultSignals}
+          />
+
+          <div className="workspace-write-body">
+            <ChapterSidebar
+              chapters={workspaceData?.chapters || []}
+              activeChapterId={activeChapterId}
+              onSelectChapter={handleSelectChapter}
+              onCreateChapter={handleCreateChapter}
+              onContinue={handleContinue}
+              continuing={continuing}
+            />
+
+            <main className="workspace-write-main">
+              <div className="workspace-write-main-inner">
+                {activeChapterData ? (
+                  <>
+                    <ChapterHeaderView
+                      breadcrumb={getBreadcrumb()}
+                      title={activeChapterData.title}
+                      goals={activeChapterData.summary}
+                      mood={workspaceData?.storyState?.currentEmotion}
+                      wordCount={activeChapterData.wordCount || 0}
+                    />
+                    <RichTextEditor
+                      content={activeChapterData.content || ""}
+                      onChange={handleEditorChange}
+                      placeholder="开始写作..."
+                      onToolbarAction={handleToolbarAction}
+                    />
+                  </>
+                ) : (
+                  <div className="workspace-write-empty">
+                    选择一个章节开始写作
+                  </div>
+                )}
+              </div>
+            </main>
+
+            <AssetPanel
+              characters={workspaceData?.characters || []}
+              worldviews={worldviews}
+              foreshadows={workspaceData?.foreshadows || []}
+              aiReview={aiReview}
+            />
+          </div>
+
+          <WorkspaceBottomBar
+            analysis={workspaceData?.storyState ? `${workspaceData.storyState.currentPhase}阶段，情绪${workspaceData.storyState.currentEmotion}` : undefined}
+            radarScores={radarScores || { pleasureDensity: 50, emotionWave: 50, infoRelease: 30 }}
+            nextSuggestion="继续创作下一章"
+          />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  // Standard layout for non-writing groups (dashboard, planning, assets, quality)
   return (
     <ErrorBoundary>
     <div className="workspace">
       {/* 中栏：编辑器 */}
       <div className="workspace-editor">
+        {aiProgress && (
+          <AIProgressBanner
+            message={aiProgress.message}
+            progress={aiProgress.progress}
+            onDetail={() => navigate(`/novel/${id}/pipeline`)}
+          />
+        )}
         <header className="workspace-header" style={{
           display: "flex",
           alignItems: "center",
@@ -620,9 +940,10 @@ const NovelWorkspace: React.FC = () => {
             alignItems: "center",
             gap: "0.5rem",
             padding: "0.75rem 1.5rem",
-            background: "var(--accent-muted)",
-            color: "var(--accent)",
+            background: notice.includes("失败") || notice.includes("错误") ? "var(--error-muted)" : "var(--accent-muted)",
+            color: notice.includes("失败") || notice.includes("错误") ? "var(--error)" : "var(--accent)",
             fontSize: "0.875rem",
+            fontWeight: 500,
             borderBottom: "1px solid var(--border-default)",
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
@@ -641,23 +962,44 @@ const NovelWorkspace: React.FC = () => {
           <WorkspaceSidebar
             activeTab={activeTab}
             onTabChange={handleTabChange}
-            tabGroups={tabGroups}
+            groups={groupDefs}
+            activeGroupId={activeGroupId}
+            onGroupClick={handleGroupClick}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
 
           <main className="workspace-content" style={{
             flex: 1,
             overflow: "auto",
-            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
           }}>
-            <div style={{
-              background: "var(--bg-surface)",
-              borderRadius: "var(--radius-lg)",
-              border: "1px solid var(--border-default)",
-              boxShadow: "var(--shadow-sm)",
-              minHeight: "100%",
-              padding: "1.5rem",
-            }}>
-              {renderContent()}
+            {/* 子 tab 栏：当分组有多个 tab 时显示 */}
+            {groupDefs.find(g => g.id === activeGroupId)?.tabs.length! > 1 && (
+              <div className="workspace-group-tabs">
+                {groupDefs.find(g => g.id === activeGroupId)?.tabs.map(t => (
+                  <button
+                    key={t.key}
+                    className={`group-tab ${activeTab === t.key ? "active" : ""}`}
+                    onClick={() => handleTabChange(t.key)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="workspace-content-inner">
+              <div style={{
+                background: "var(--bg-surface)",
+                borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--border-default)",
+                boxShadow: "var(--shadow-sm)",
+                minHeight: "100%",
+                padding: "1.5rem",
+              }}>
+                {renderContent()}
+              </div>
             </div>
           </main>
         </div>

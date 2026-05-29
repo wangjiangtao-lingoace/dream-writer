@@ -1,0 +1,178 @@
+<h2>AI 面板交互模式</h2>
+<p class="subtitle">AI 完成工作后，怎么呈现给人审核？核心是：AI 输出 → 人类确认/修改/重来。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #222228; background: #0c0c0e; padding: 12px;">
+        <!-- AI Panel header -->
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e;"></div>
+          <div style="font-size: 9px; color: #f97316; font-weight: 600;">AI 助手</div>
+          <div style="flex: 1;"></div>
+          <div style="font-size: 7px; color: #6b6b76;">上下文：第3章</div>
+        </div>
+        <!-- AI suggestion with inline diff -->
+        <div style="background: rgba(249,115,22,0.06); border: 1px solid rgba(249,115,22,0.15); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 6px;">
+            <div style="font-size: 7px; color: #fb923c; font-weight: 600;">续写建议</div>
+            <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 1px 5px; border-radius: 3px;">AI 生成</div>
+          </div>
+          <!-- Preview text -->
+          <div style="background: #0a0a0e; border-radius: 4px; padding: 8px; margin-bottom: 8px; max-height: 80px; overflow: hidden;">
+            <div style="height: 5px; width: 95%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 88%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 92%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 80%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 85%; background: #1c1c22; border-radius: 2px;"></div>
+            <div style="text-align: center; font-size: 6px; color: #3a3a42; margin-top: 4px;">点击展开全文</div>
+          </div>
+          <!-- Action buttons -->
+          <div style="display: flex; gap: 6px;">
+            <div style="flex: 1; height: 24px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 7px; color: white; font-weight: 600;">采纳</div>
+            <div style="flex: 1; height: 24px; background: #1a1a20; border: 1px solid #2a2a32; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #9a9aa0;">修改</div>
+            <div style="width: 24px; height: 24px; background: #1a1a20; border: 1px solid #2a2a32; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #6b6b76;">↻</div>
+          </div>
+        </div>
+        <!-- Previous suggestion (collapsed) -->
+        <div style="background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px; display: flex; align-items: center; gap: 6px;">
+          <div style="width: 5px; height: 5px; border-radius: 50%; background: #6b6b76;"></div>
+          <div style="font-size: 7px; color: #6b6b76;">一致性检查 — 无问题</div>
+          <div style="flex: 1;"></div>
+          <div style="font-size: 6px; color: #3a3a42;">2分钟前</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 卡片式建议</h3>
+      <p>AI 每次输出一个建议卡片：预览内容 + 采纳/修改/重新生成 按钮。采纳后内容插入编辑器。历史建议可折叠查看。简洁直接。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #222228; background: #0c0c0e; padding: 12px;">
+        <!-- AI Panel header -->
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e;"></div>
+          <div style="font-size: 9px; color: #f97316; font-weight: 600;">AI 协作</div>
+          <div style="flex: 1;"></div>
+          <div style="font-size: 7px; color: #6b6b76;">流式输出中...</div>
+        </div>
+        <!-- Chat-like interface -->
+        <div style="max-height: 160px; overflow: hidden;">
+          <!-- AI message -->
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <div style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #f97316, #fb923c); flex-shrink: 0;"></div>
+            <div style="flex: 1;">
+              <div style="font-size: 7px; color: #fb923c; margin-bottom: 3px;">AI</div>
+              <div style="background: #111114; border-radius: 6px; padding: 6px 8px;">
+                <div style="height: 4px; width: 95%; background: #1c1c22; border-radius: 2px; margin-bottom: 2px;"></div>
+                <div style="height: 4px; width: 88%; background: #1c1c22; border-radius: 2px; margin-bottom: 2px;"></div>
+                <div style="height: 4px; width: 92%; background: #1c1c22; border-radius: 2px; margin-bottom: 2px;"></div>
+                <div style="height: 4px; width: 75%; background: #1c1c22; border-radius: 2px; margin-bottom: 4px;"></div>
+                <!-- Inline action -->
+                <div style="display: inline-flex; gap: 4px;">
+                  <div style="font-size: 6px; color: #f97316; background: rgba(249,115,22,0.1); padding: 2px 6px; border-radius: 3px; cursor: pointer;">插入编辑器</div>
+                  <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 2px 6px; border-radius: 3px;">重新生成</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Human message -->
+          <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-direction: row-reverse;">
+            <div style="width: 18px; height: 18px; border-radius: 50%; background: #3a3a42; flex-shrink: 0;"></div>
+            <div style="flex: 1; text-align: right;">
+              <div style="font-size: 7px; color: #6b6b76; margin-bottom: 3px;">你</div>
+              <div style="background: rgba(249,115,22,0.08); border-radius: 6px; padding: 6px 8px; display: inline-block;">
+                <div style="height: 4px; width: 80px; background: #2a2a32; border-radius: 2px;"></div>
+              </div>
+            </div>
+          </div>
+          <!-- AI response (streaming) -->
+          <div style="display: flex; gap: 6px;">
+            <div style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #f97316, #fb923c); flex-shrink: 0;"></div>
+            <div style="flex: 1;">
+              <div style="font-size: 7px; color: #fb923c; margin-bottom: 3px;">AI <span style="color: #22c55e;">●</span></div>
+              <div style="background: #111114; border-radius: 6px; padding: 6px 8px;">
+                <div style="height: 4px; width: 90%; background: #1c1c22; border-radius: 2px; margin-bottom: 2px;"></div>
+                <div style="height: 4px; width: 70%; background: #1c1c22; border-radius: 2px; margin-bottom: 2px;"></div>
+                <div style="height: 4px; width: 40%; background: #1c1c22; border-radius: 2px;"></div>
+                <div style="display: inline-block; width: 2px; height: 8px; background: #f97316; animation: blink 1s infinite; margin-left: 2px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Input bar -->
+        <div style="margin-top: 8px; display: flex; gap: 6px;">
+          <div style="flex: 1; height: 28px; background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 0 8px; display: flex; align-items: center;">
+            <div style="height: 5px; width: 40%; background: #2a2a32; border-radius: 2px;"></div>
+          </div>
+          <div style="width: 28px; height: 28px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 10px; height: 10px; border-right: 2px solid white; border-top: 2px solid white; transform: rotate(45deg); margin-left: -2px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 对话式协作</h3>
+      <p>AI 面板像聊天界面，AI 输出可直接插入编辑器。支持追问、修改指令、重新生成。更灵活，但信息密度较低。类似 Cursor Chat。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #222228; background: #0c0c0e; padding: 12px;">
+        <!-- AI Panel header -->
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e;"></div>
+          <div style="font-size: 9px; color: #f97316; font-weight: 600;">AI 工作流</div>
+          <div style="flex: 1;"></div>
+          <div style="font-size: 7px; color: #22c55e;">● 就绪</div>
+        </div>
+        <!-- Context-aware action list -->
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 7px; color: #6b6b76; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px;">当前：第3章 · 正文编辑</div>
+          <!-- Action: Continue writing -->
+          <div style="background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.2); border-radius: 8px; padding: 10px; margin-bottom: 6px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <div style="font-size: 12px;">▶</div>
+              <div style="font-size: 8px; color: #fb923c; font-weight: 600;">续写本章</div>
+              <div style="flex: 1;"></div>
+              <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 1px 5px; border-radius: 3px;">⌘↵</div>
+            </div>
+            <div style="font-size: 6px; color: #6b6b76; padding-left: 20px;">AI 将根据上下文续写 500-1000 字</div>
+          </div>
+          <!-- Action: Check consistency -->
+          <div style="background: #111114; border: 1px solid #222228; border-radius: 8px; padding: 10px; margin-bottom: 6px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <div style="font-size: 12px;">🔍</div>
+              <div style="font-size: 8px; color: #e4e4e7; font-weight: 500;">一致性检查</div>
+              <div style="flex: 1;"></div>
+              <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 1px 5px; border-radius: 3px;">⌘⇧C</div>
+            </div>
+            <div style="font-size: 6px; color: #6b6b76; padding-left: 20px;">检查与前文的逻辑、人物、设定一致性</div>
+          </div>
+          <!-- Action: Optimize -->
+          <div style="background: #111114; border: 1px solid #222228; border-radius: 8px; padding: 10px; margin-bottom: 6px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <div style="font-size: 12px;">✨</div>
+              <div style="font-size: 8px; color: #e4e4e7; font-weight: 500;">润色优化</div>
+              <div style="flex: 1;"></div>
+              <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 1px 5px; border-radius: 3px;">⌘⇧P</div>
+            </div>
+            <div style="font-size: 6px; color: #6b6b76; padding-left: 20px;">优化文笔、节奏、情感表达</div>
+          </div>
+        </div>
+        <!-- Result area (appears after action) -->
+        <div style="background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px; text-align: center;">
+          <div style="font-size: 7px; color: #3a3a42;">选择一个操作开始</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 上下文操作面板</h3>
+      <p>AI 面板根据当前上下文（编辑/大纲/人物）动态显示可用操作。点击操作后，AI 执行并在下方展示结果。带快捷键，高效精准。类似 JetBrains AI。</p>
+    </div>
+  </div>
+</div>

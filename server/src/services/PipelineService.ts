@@ -4,7 +4,7 @@ import { LlmInvokeService } from "./llm/LlmInvokeService";
 import { getRagRetrieveService } from "./RagRetrieveService";
 import { PhaseContext, createPhaseContext, savePhaseResult as _savePhaseResult, confirmPhaseResults as _confirmPhaseResults, updateJobProgress as _updateJobProgress, saveToKnowledgeBase as _saveToKnowledgeBase, persistGeneratedAssets as _persistGeneratedAssets } from "./pipeline/pipelineUtils";
 import { buildWorkspaceAssetContext, buildBookAnalysisContext, buildImitationPlanContext } from "./pipeline/contextBuilders";
-import { executeAnalyzePhase } from "./pipeline/analyzePhase";
+import { executeAnalyzePhase, executeAnalyzePhase_continue } from "./pipeline/analyzePhase";
 import { executePlanningPhase, executePlanningPhase_standalone } from "./pipeline/planningPhase";
 import { executeAssetsPhase } from "./pipeline/assetsPhase";
 import { executeChapterOutlinesPhase, buildPreviousVolumeSummary, persistVolumeChapterData, persistStoryArcs } from "./pipeline/chapterOutlinesPhase";
@@ -26,7 +26,7 @@ export interface PipelineConfig {
   autoDraftChapters?: number;
   sourcePolicy?: "verified_only";
   overwriteExistingChapters?: boolean;
-  mode?: "standalone" | "imitation";
+  mode?: "standalone" | "imitation" | "continue";
   pipelineVersion?: number;
 }
 
@@ -67,8 +67,8 @@ export class PipelineService {
     }
 
     const volumeCount = config.volumeCount || 5;
-    const isStandalone = config.mode === "standalone" || !config.mode;
-    const totalSteps = isStandalone
+    const isStandaloneOrContinue = config.mode === "standalone" || config.mode === "continue" || !config.mode;
+    const totalSteps = isStandaloneOrContinue
       ? 3 + 3 + (1 + volumeCount + 1) + 1 + 1
       : 20;
 
@@ -614,6 +614,22 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     if (config.mode === "standalone") {
       try {
         await executeAnalyzePhase(ctx, jobId, job.novelId, config);
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: { status: "paused", currentPhase: "outline", currentStep: "waiting_confirm" },
+        });
+      } catch (error: any) {
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: { status: "error", lastError: error.message },
+        });
+      }
+      return;
+    }
+
+    if (config.mode === "continue") {
+      try {
+        await executeAnalyzePhase_continue(ctx, jobId, job.novelId, config);
         await prisma.pipelineJob.update({
           where: { id: jobId },
           data: { status: "paused", currentPhase: "outline", currentStep: "waiting_confirm" },

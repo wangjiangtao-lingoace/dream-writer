@@ -7,6 +7,7 @@ const router = Router();
 const idSchema = z.object({ id: z.string().trim().min(1) });
 
 const worldviewCreateSchema = z.object({
+  novelId: z.string().trim().min(1, "作品ID不能为空。"),
   name: z.string().trim().min(1, "世界观名称不能为空。"),
   summary: z.string().trim().optional(),
   rules: z.string().trim().optional(),
@@ -26,9 +27,12 @@ const worldviewUpdateSchema = z.object({
   customNotes: z.string().nullable().optional(),
 });
 
-router.get("/", async (_req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
+    const novelId = req.query.novelId as string | undefined;
+    const where = novelId ? { novelId } : {};
     const worldviews = await prisma.worldview.findMany({
+      where,
       orderBy: { name: "asc" },
     });
     res.json({ success: true, data: worldviews });

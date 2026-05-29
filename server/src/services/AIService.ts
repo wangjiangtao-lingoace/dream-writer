@@ -34,7 +34,8 @@ export async function generateInspiration(input: {
     maxTokens: 1000,
   });
 
-  return result || "生成失败，请重试。";
+  if (!result) throw new Error("灵感生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 export async function generateVolumeOutline(input: {
@@ -100,7 +101,8 @@ export async function generateVolumeOutline(input: {
     maxTokens: 3000,
   });
 
-  return result || "生成失败，请重试。";
+  if (!result) throw new Error("卷纲生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 /**
@@ -117,6 +119,7 @@ export async function generateChapterOutlinesForVolume(input: {
       novel: {
         include: {
           characters: true,
+          worldviews: { take: 1 },
           mainlines: true,
           styleProfiles: { where: { isDefault: true }, take: 1 },
         },
@@ -129,9 +132,37 @@ export async function generateChapterOutlinesForVolume(input: {
   }
 
   const novel = volume.novel;
-  const characterInfo = novel.characters.map((c) => `${c.name}(${c.role || "未定"})`).join("、");
-  const mainlineInfo = novel.mainlines.map((m, i) => `${i + 1}. ${m.title}`).join("\n");
-  const styleInfo = novel.styleProfiles[0]?.name || "默认风格";
+
+  // 构建增强上下文
+  const characterInfo = novel.characters.map((c) =>
+    `${c.name}：${c.identity || c.role || "未设定"}，${c.motivation || "动机未知"}`
+  ).join("\n");
+
+  const worldview = (novel as any).worldviews?.[0];
+  const worldviewInfo = worldview
+    ? `【世界观】${worldview.name}\n概述：${worldview.summary || ""}\n规则：${worldview.rules || ""}\n地理：${worldview.geography || ""}\n势力：${worldview.factions || ""}`
+    : "";
+
+  const outlineInfo = novel.outline ? `【故事大纲】\n${novel.outline}` : "";
+
+  const mainlineInfo = novel.mainlines.length > 0
+    ? novel.mainlines.map((m, i) => `${i + 1}. ${m.title}（${m.type}）：${m.description || ""}`).join("\n")
+    : "";
+
+  const styleProfile = novel.styleProfiles[0];
+  const styleInfo = styleProfile
+    ? `${styleProfile.name}：${styleProfile.description || ""}（视角：${styleProfile.narrativePov}，节奏：${styleProfile.pacing}）`
+    : "默认风格";
+
+  // 前序卷摘要
+  const previousVolumes = await prisma.volume.findMany({
+    where: { novelId: input.novelId, sortOrder: { lt: volume.sortOrder } },
+    orderBy: { sortOrder: "asc" },
+    include: { chapterOutlines: { orderBy: { sortOrder: "asc" }, take: 5 } },
+  });
+  const previousSummary = previousVolumes.map((v) =>
+    `卷"${v.title}"：${v.goal || ""}。章节：${v.chapterOutlines.map((c) => c.title).join("、") || "暂无"}`
+  ).join("\n");
 
   const chapterCount = input.chapterCount || 10;
 
@@ -141,12 +172,16 @@ export async function generateChapterOutlinesForVolume(input: {
 书名：${novel.title}
 类型：${novel.genre || "未指定"}
 
+${outlineInfo}
+
 【卷纲信息】
 卷名：${volume.title}
 本卷目标：${volume.goal || "未设定"}
 主要冲突：${volume.conflict || "未设定"}
 情绪基调：${volume.emotion || "未设定"}
 结尾钩子：${volume.endHook || "未设定"}
+
+${worldviewInfo}
 
 【人物设定】
 ${characterInfo || "暂无"}
@@ -156,6 +191,8 @@ ${mainlineInfo || "暂无"}
 
 【写作风格】
 ${styleInfo}
+
+${previousSummary ? `【前序卷摘要】\n${previousSummary}` : ""}
 
 请生成${chapterCount}章的章纲，每章包含：
 1. 章节标题（要有吸引力，不要用"第X章"这种格式）
@@ -218,6 +255,9 @@ export async function generateChapterOutline(input: {
       novel: {
         include: {
           characters: true,
+          worldviews: { take: 1 },
+          mainlines: true,
+          styleProfiles: { where: { isDefault: true }, take: 1 },
           memories: {
             where: { type: { in: ["world", "character", "plot"] } },
             take: 20,
@@ -233,8 +273,40 @@ export async function generateChapterOutline(input: {
   }
 
   const novel = volume.novel;
-  const characterInfo = novel.characters.map((c) => `${c.name}(${c.role || "未定"})`).join("、");
+
+  // 构建增强上下文
+  const characterInfo = novel.characters.map((c) =>
+    `${c.name}：${c.identity || c.role || "未设定"}，${c.motivation || "动机未知"}`
+  ).join("\n");
+
+  const worldview = (novel as any).worldviews?.[0];
+  const worldviewInfo = worldview
+    ? `\n【世界观】${worldview.name}\n概述：${worldview.summary || ""}\n规则：${worldview.rules || ""}\n地理：${worldview.geography || ""}\n势力：${worldview.factions || ""}`
+    : "";
+
+  const outlineInfo = novel.outline ? `\n【故事大纲】\n${novel.outline}` : "";
+
+  const mainlines = (novel as any).mainlines || [];
+  const mainlineInfo = mainlines.length > 0
+    ? `\n【故事主线】\n${mainlines.map((m: any, i: number) => `${i + 1}. ${m.title}（${m.type}）：${m.description || ""}`).join("\n")}`
+    : "";
+
+  const styleProfile = (novel as any).styleProfiles?.[0];
+  const styleInfo = styleProfile
+    ? `\n【写作风格】${styleProfile.name}\n描述：${styleProfile.description || ""}\n叙事视角：${styleProfile.narrativePov}，节奏：${styleProfile.pacing}`
+    : "";
+
   const memoryContext = novel.memories.map((m) => `[${m.type}] ${m.title}: ${m.content}`).join("\n");
+
+  // 前序卷摘要
+  const previousVolumes = await prisma.volume.findMany({
+    where: { novelId: input.novelId, sortOrder: { lt: volume.sortOrder } },
+    orderBy: { sortOrder: "asc" },
+    include: { chapterOutlines: { orderBy: { sortOrder: "asc" }, take: 5 } },
+  });
+  const previousSummary = previousVolumes.map((v) =>
+    `卷"${v.title}"：${v.goal || ""}。章节：${v.chapterOutlines.map((c) => c.title).join("、") || "暂无"}`
+  ).join("\n");
 
   const prompt = [
     "你是一位专业的网络小说作家，擅长章节级别的剧情规划。",
@@ -243,6 +315,8 @@ export async function generateChapterOutline(input: {
     `- 书名：${novel.title}`,
     `- 类型：${novel.genre || "未指定"}`,
     "",
+    outlineInfo,
+    "",
     "当前卷纲：",
     `- 卷名：${volume.title}`,
     `- 本卷目标：${volume.goal || "未设定"}`,
@@ -250,7 +324,16 @@ export async function generateChapterOutline(input: {
     `- 情绪基调：${volume.emotion || "未设定"}`,
     `- 结尾钩子：${volume.endHook || "未设定"}`,
     "",
-    `角色：${characterInfo || "暂无"}`,
+    worldviewInfo,
+    "",
+    "角色设定：",
+    characterInfo || "暂无",
+    "",
+    mainlineInfo,
+    "",
+    styleInfo,
+    "",
+    previousSummary ? `前序卷摘要：\n${previousSummary}` : "",
     "",
     "相关记忆：",
     memoryContext || "暂无",
@@ -275,7 +358,8 @@ export async function generateChapterOutline(input: {
     maxTokens: 3000,
   });
 
-  return result || "生成失败，请重试。";
+  if (!result) throw new Error("章纲生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 export async function generateChapterOutlineForChapter(input: {
@@ -376,7 +460,8 @@ ${prevOutlines || "这是第一章"}
     maxTokens: 1500,
   });
 
-  return result || "生成失败，请重试。";
+  if (!result) throw new Error("章纲生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 export async function* generateChapterContentStream(input: {
@@ -631,7 +716,8 @@ ${novel.assets[0].content?.substring(0, 1000) || ""}
     maxTokens: 4000,
   });
 
-  return result || "生成失败，请重试。";
+  if (!result) throw new Error("正文生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 export async function checkConsistency(input: {
@@ -698,7 +784,8 @@ export async function checkConsistency(input: {
     maxTokens: 2000,
   });
 
-  return result || "校验失败，请重试。";
+  if (!result) throw new Error("一致性校验失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 /**

@@ -60,14 +60,22 @@ const CreateWork: React.FC = () => {
       }}>
         <div className="create-options" style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           gap: "2rem",
-          maxWidth: "960px",
+          maxWidth: "1200px",
           width: "100%",
         }}>
           <div
             className="create-option"
+            role="button"
+            tabIndex={0}
             onClick={() => navigate("/create/new")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/create/new");
+              }
+            }}
             style={{
               background: "var(--bg-card)",
               borderRadius: "var(--radius-lg)",
@@ -174,7 +182,15 @@ const CreateWork: React.FC = () => {
 
           <div
             className="create-option"
+            role="button"
+            tabIndex={0}
             onClick={() => navigate("/create/analyze")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/create/analyze");
+              }
+            }}
             style={{
               background: "var(--bg-card)",
               borderRadius: "var(--radius-lg)",
@@ -250,6 +266,121 @@ const CreateWork: React.FC = () => {
                 gap: "0.75rem",
               }}>
                 {["结构分析", "风格提取", "技巧学习", "知识库沉淀"].map((item) => (
+                  <li key={item} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    fontSize: "0.875rem",
+                    color: "var(--text-secondary)",
+                  }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" style={{ width: "1rem", height: "1rem", flexShrink: 0 }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="option-arrow" style={{
+              position: "absolute",
+              right: "1.5rem",
+              bottom: "1.5rem",
+              color: "var(--accent)",
+              opacity: 0.5,
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1.25rem", height: "1.25rem" }}>
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* 导入续写 */}
+          <div
+            className="create-option"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate("/create/import")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/create/import");
+              }
+            }}
+            style={{
+              background: "var(--bg-card)",
+              borderRadius: "var(--radius-lg)",
+              border: "2px solid var(--border)",
+              padding: "2rem",
+              cursor: "pointer",
+              transition: "all var(--transition-normal)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              position: "absolute",
+              top: "0.5rem",
+              left: "0.5rem",
+              right: "0.5rem",
+              bottom: "0.5rem",
+              border: "1px solid var(--border-light)",
+              borderRadius: "var(--radius-md)",
+              pointerEvents: "none",
+            }} />
+            <div style={{
+              position: "absolute",
+              top: "-20px",
+              right: "-20px",
+              width: "80px",
+              height: "80px",
+              opacity: 0.1,
+              transform: "rotate(30deg)",
+            }}>
+              <svg viewBox="0 0 100 100" fill="var(--accent)">
+                <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" />
+              </svg>
+            </div>
+            <div className="option-icon" style={{
+              width: "56px",
+              height: "56px",
+              marginBottom: "1.5rem",
+              color: "var(--accent)",
+              background: "var(--accent-muted)",
+              borderRadius: "var(--radius-lg)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "1.75rem", height: "1.75rem" }}>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <div className="option-content">
+              <h2 style={{
+                fontFamily: "var(--font-serif)",
+                fontSize: "1.5rem",
+                color: "var(--text-primary)",
+                marginBottom: "0.75rem",
+                letterSpacing: "0.05em",
+              }}>导入续写</h2>
+              <p className="option-desc" style={{
+                color: "var(--text-secondary)",
+                fontSize: "0.875rem",
+                marginBottom: "1.5rem",
+                lineHeight: 1.6,
+              }}>上传已完成的小说文本，自动提取信息后继续创作</p>
+              <ul className="option-features" style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}>
+                {["自动提取人物世界观", "剧情和风格分析", "章节自动拆分", "一键续写后续章节"].map((item) => (
                   <li key={item} style={{
                     display: "flex",
                     alignItems: "center",

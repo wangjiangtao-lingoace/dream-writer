@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
 import { toast } from "../ui/toast";
+import { translateMainlineStatus } from "../../utils/translate";
 
 const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [mainlines, setMainlines] = useState<any[]>([]);
@@ -158,7 +159,7 @@ const MainlinePanel: React.FC<{ novelId: string }> = ({ novelId }) => {
                 <h3>{mainline.title}</h3>
                 <p>{mainline.description || "暂无描述"}</p>
                 <span className={`status ${mainline.status}`}>
-                  {mainline.status === "active" ? "进行中" : mainline.status}
+                  {translateMainlineStatus(mainline.status)}
                 </span>
               </div>
               <div style={{ display: "flex", gap: "0.25rem" }}>

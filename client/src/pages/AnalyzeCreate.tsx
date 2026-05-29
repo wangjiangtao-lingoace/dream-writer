@@ -220,7 +220,8 @@ const AnalyzeCreate: React.FC = () => {
       await api.post(`/api/analysis-to-novel/${novel.id}/${analysisId}`);
 
       setStatus("完成！");
-      setTimeout(() => navigate(`/novel/${novel.id}`), 1000);
+      toast.success("作品创建成功");
+      setTimeout(() => navigate(`/novel/${novel.id}?new=true`), 1000);
     } catch (error: any) {
       console.error("创建失败:", error);
       toast.error(error.message || "创建失败，请重试");

@@ -7,6 +7,7 @@ const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }>
   const [chapters, setChapters] = useState<any[]>([]);
   const [activeChapter, setActiveChapter] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [continuing, setContinuing] = useState(false);
 
   useEffect(() => {
     loadChapters();
@@ -36,6 +37,28 @@ const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }>
       console.error("加载章节失败:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    setContinuing(true);
+    try {
+      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string }> }>(
+        `/api/novels/${novelId}/continue`,
+        { chapterCount: 1, targetWordCount: 1800 }
+      );
+      if (result.chapters.length > 0) {
+        toast.success(`第${result.chapters[0].order}章「${result.chapters[0].title}」续写完成`);
+        await loadChapters();
+        // 自动选中新章节
+        const updated = await api.get<{ chapters: any[] }>(`/api/novels/${novelId}`);
+        const newCh = updated?.chapters?.find((c: any) => c.id === result.chapters[0].id);
+        if (newCh) setActiveChapter(newCh);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "续写失败");
+    } finally {
+      setContinuing(false);
     }
   };
 
@@ -103,12 +126,29 @@ const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }>
       <div className="chapter-sidebar">
         <div className="chapter-header">
           <h3>章节列表</h3>
-          <button className="btn-add" onClick={handleCreateChapter}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            <button
+              className="btn-add"
+              onClick={handleContinue}
+              disabled={continuing}
+              title="续写下一章"
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: "1.75rem", height: "1.75rem",
+                background: continuing ? "var(--accent-muted)" : "var(--accent)",
+                color: "white", border: "none", borderRadius: "var(--radius-sm)",
+                cursor: continuing ? "not-allowed" : "pointer", fontSize: "0.75rem", fontWeight: 600,
+              }}
+            >
+              {continuing ? "..." : "续"}
+            </button>
+            <button className="btn-add" onClick={handleCreateChapter}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div className="chapter-list">
           {chapters.map((chapter) => (

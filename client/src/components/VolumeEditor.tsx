@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ui/CommonComponents";
+import { Modal } from "./ui/Modal";
 
 interface ChapterOutline {
   id: string;
@@ -52,6 +53,8 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [generatePrompt, setGeneratePrompt] = useState<{ type: "volume" | "chapter"; count: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<ChapterOutline | null>(null);
+  const [showChapterDetail, setShowChapterDetail] = useState(false);
 
   const [volumeForm, setVolumeForm] = useState({
     title: "",
@@ -223,8 +226,7 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
         method: "POST",
         body: JSON.stringify({ novelId, volumeCount }),
       });
-      
-      // 尝试解析并创建卷纲
+
       try {
         const volumesData = JSON.parse(result.content);
         if (Array.isArray(volumesData)) {
@@ -261,8 +263,7 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
         method: "POST",
         body: JSON.stringify({ novelId, volumeId: activeVolumeId, chapterCount }),
       });
-      
-      // 尝试解析并创建章纲
+
       try {
         const chaptersData = JSON.parse(result.content);
         if (Array.isArray(chaptersData)) {
@@ -330,8 +331,33 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     setShowChapterForm(false);
   }
 
+  function truncate(text: string, max: number) {
+    return text.length > max ? text.substring(0, max) + "..." : text;
+  }
+
   const totalChapters = volumes.reduce((sum, v) => sum + v.chapterOutlines.length, 0);
   const isBusy = loading || generating;
+
+  // 信息字段配置
+  const volumeInfoFields = [
+    { key: "goal", label: "目标", value: activeVolume?.goal },
+    { key: "conflict", label: "冲突", value: activeVolume?.conflict },
+    { key: "emotion", label: "情绪", value: activeVolume?.emotion },
+    { key: "mapName", label: "地图", value: activeVolume?.mapName },
+    { key: "endHook", label: "结尾钩子", value: activeVolume?.endHook },
+    { key: "keyEvents", label: "关键事件", value: activeVolume?.keyEvents },
+    { key: "turningPoints", label: "转折点", value: activeVolume?.turningPoints },
+  ];
+
+  const chapterDetailFields = [
+    { key: "goal", label: "目标", value: selectedChapter?.goal },
+    { key: "conflict", label: "冲突", value: selectedChapter?.conflict },
+    { key: "emotion", label: "情绪", value: selectedChapter?.emotion },
+    { key: "pleasurePoint", label: "爽点", value: selectedChapter?.pleasurePoint },
+    { key: "hook", label: "钩子", value: selectedChapter?.hook },
+    { key: "foreshadowing", label: "埋设伏笔", value: selectedChapter?.foreshadowing },
+    { key: "payoff", label: "回收伏笔", value: selectedChapter?.payoff },
+  ];
 
   return (
     <section className="volume-editor-panel">
@@ -347,10 +373,10 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
           <button type="button" onClick={() => handlePromptGenerate("chapter")} disabled={!activeVolumeId || isBusy}>
             {generating ? "生成中..." : "AI 生成章纲"}
           </button>
-          <button type="button" onClick={() => setShowVolumeForm(!showVolumeForm)}>
+          <button type="button" onClick={() => { if (showVolumeForm) { resetVolumeForm(); } else { resetVolumeForm(); setShowVolumeForm(true); } }}>
             {showVolumeForm ? "收起" : "新建卷"}
           </button>
-          <button type="button" onClick={() => setShowChapterForm(!showChapterForm)} disabled={!activeVolumeId}>
+          <button type="button" onClick={() => { if (showChapterForm) { resetChapterForm(); } else { resetChapterForm(); setShowChapterForm(true); } }} disabled={!activeVolumeId}>
             {showChapterForm ? "收起" : "新建章"}
           </button>
         </div>
@@ -435,226 +461,545 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
 
       {/* 卷纲表单 */}
       {showVolumeForm && (
-        <div className="volume-form">
-          <h3>{editingVolumeId ? "编辑卷纲" : "新建卷纲"}</h3>
-          <label>
-            <span>卷名 *</span>
+        <div style={{
+          padding: "1rem",
+          marginBottom: "1rem",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>
+            {editingVolumeId ? "编辑卷纲" : "新建卷纲"}
+          </h3>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>卷名 *</span>
             <input
               value={volumeForm.title}
               onChange={(e) => setVolumeForm({ ...volumeForm, title: e.target.value })}
               placeholder="例如：第一卷 觉醒篇"
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
             />
           </label>
-          <label>
-            <span>本卷目标</span>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>本卷目标</span>
             <textarea
               value={volumeForm.goal}
               onChange={(e) => setVolumeForm({ ...volumeForm, goal: e.target.value })}
               placeholder="本卷要达成什么目标"
+              rows={2}
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
             />
           </label>
-          <label>
-            <span>主要冲突</span>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>主要冲突</span>
             <textarea
               value={volumeForm.conflict}
               onChange={(e) => setVolumeForm({ ...volumeForm, conflict: e.target.value })}
               placeholder="本卷的核心冲突"
+              rows={2}
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
             />
           </label>
-          <label>
-            <span>情绪基调</span>
-            <input
-              value={volumeForm.emotion}
-              onChange={(e) => setVolumeForm({ ...volumeForm, emotion: e.target.value })}
-              placeholder="例如：压抑→爆发→爽"
-            />
-          </label>
-          <label>
-            <span>新地图</span>
-            <input
-              value={volumeForm.mapName}
-              onChange={(e) => setVolumeForm({ ...volumeForm, mapName: e.target.value })}
-              placeholder="本卷新出现的地点"
-            />
-          </label>
-          <label>
-            <span>结尾钩子</span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>情绪基调</span>
+              <input
+                value={volumeForm.emotion}
+                onChange={(e) => setVolumeForm({ ...volumeForm, emotion: e.target.value })}
+                placeholder="例如：压抑→爆发→爽"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>新地图</span>
+              <input
+                value={volumeForm.mapName}
+                onChange={(e) => setVolumeForm({ ...volumeForm, mapName: e.target.value })}
+                placeholder="本卷新出现的地点"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+          </div>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>结尾钩子</span>
             <textarea
               value={volumeForm.endHook}
               onChange={(e) => setVolumeForm({ ...volumeForm, endHook: e.target.value })}
               placeholder="本卷结尾的悬念"
+              rows={2}
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
             />
           </label>
-          <label>
-            <span>预计章数</span>
-            <input
-              type="number"
-              value={volumeForm.chapterCount}
-              onChange={(e) => setVolumeForm({ ...volumeForm, chapterCount: e.target.value })}
-              placeholder="本卷预计章数"
-              min="1"
-            />
-          </label>
-          <label>
-            <span>关键事件</span>
-            <textarea
-              value={volumeForm.keyEvents}
-              onChange={(e) => setVolumeForm({ ...volumeForm, keyEvents: e.target.value })}
-              placeholder="本卷的关键事件列表"
-            />
-          </label>
-          <label>
-            <span>转折点</span>
-            <textarea
-              value={volumeForm.turningPoints}
-              onChange={(e) => setVolumeForm({ ...volumeForm, turningPoints: e.target.value })}
-              placeholder="本卷的重要转折点"
-            />
-          </label>
-          <div className="form-actions">
-            <button className="primary-button" type="button" onClick={handleSaveVolume}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>预计章数</span>
+              <input
+                type="number"
+                value={volumeForm.chapterCount}
+                onChange={(e) => setVolumeForm({ ...volumeForm, chapterCount: e.target.value })}
+                placeholder="本卷预计章数"
+                min="1"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>关键事件</span>
+              <input
+                value={volumeForm.keyEvents}
+                onChange={(e) => setVolumeForm({ ...volumeForm, keyEvents: e.target.value })}
+                placeholder="关键事件列表"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>转折点</span>
+              <input
+                value={volumeForm.turningPoints}
+                onChange={(e) => setVolumeForm({ ...volumeForm, turningPoints: e.target.value })}
+                placeholder="重要转折点"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+            <button
+              type="button"
+              onClick={handleSaveVolume}
+              style={{ padding: "0.5rem 1.25rem", background: "var(--accent)", color: "var(--text-inverse)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+            >
               {editingVolumeId ? "更新" : "创建"}
             </button>
-            <button type="button" onClick={resetVolumeForm}>取消</button>
+            <button
+              type="button"
+              onClick={resetVolumeForm}
+              style={{ padding: "0.5rem 1.25rem", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+            >
+              取消
+            </button>
           </div>
         </div>
       )}
 
       {/* 章纲表单 */}
       {showChapterForm && (
-        <div className="chapter-form">
-          <h3>{editingChapterId ? "编辑章纲" : "新建章纲"}</h3>
-          <label>
-            <span>章节名 *</span>
+        <div style={{
+          padding: "1rem",
+          marginBottom: "1rem",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 600 }}>
+            {editingChapterId ? "编辑章纲" : "新建章纲"}
+          </h3>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>章节名 *</span>
             <input
               value={chapterForm.title}
               onChange={(e) => setChapterForm({ ...chapterForm, title: e.target.value })}
               placeholder="例如：第1章 古玉奇缘"
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
             />
           </label>
-          <label>
-            <span>章节目标</span>
-            <textarea
-              value={chapterForm.goal}
-              onChange={(e) => setChapterForm({ ...chapterForm, goal: e.target.value })}
-              placeholder="本章要推进什么"
-            />
-          </label>
-          <label>
-            <span>冲突</span>
-            <textarea
-              value={chapterForm.conflict}
-              onChange={(e) => setChapterForm({ ...chapterForm, conflict: e.target.value })}
-              placeholder="本章的核心冲突"
-            />
-          </label>
-          <label>
-            <span>情绪基调</span>
-            <input
-              value={chapterForm.emotion}
-              onChange={(e) => setChapterForm({ ...chapterForm, emotion: e.target.value })}
-              placeholder="例如：紧张、悲伤、爽"
-            />
-          </label>
-          <label>
-            <span>爽点设计</span>
-            <textarea
-              value={chapterForm.pleasurePoint}
-              onChange={(e) => setChapterForm({ ...chapterForm, pleasurePoint: e.target.value })}
-              placeholder="本章的爽点是什么"
-            />
-          </label>
-          <label>
-            <span>章末钩子</span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>章节目标</span>
+              <textarea
+                value={chapterForm.goal}
+                onChange={(e) => setChapterForm({ ...chapterForm, goal: e.target.value })}
+                placeholder="本章要推进什么"
+                rows={2}
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>冲突</span>
+              <textarea
+                value={chapterForm.conflict}
+                onChange={(e) => setChapterForm({ ...chapterForm, conflict: e.target.value })}
+                placeholder="本章的核心冲突"
+                rows={2}
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
+              />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>情绪基调</span>
+              <input
+                value={chapterForm.emotion}
+                onChange={(e) => setChapterForm({ ...chapterForm, emotion: e.target.value })}
+                placeholder="例如：紧张、悲伤、爽"
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>爽点设计</span>
+              <textarea
+                value={chapterForm.pleasurePoint}
+                onChange={(e) => setChapterForm({ ...chapterForm, pleasurePoint: e.target.value })}
+                placeholder="本章的爽点是什么"
+                rows={2}
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
+              />
+            </label>
+          </div>
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>章末钩子</span>
             <textarea
               value={chapterForm.hook}
               onChange={(e) => setChapterForm({ ...chapterForm, hook: e.target.value })}
               placeholder="让读者继续看的悬念"
+              rows={2}
+              style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
             />
           </label>
-          <label>
-            <span>埋设伏笔</span>
-            <textarea
-              value={chapterForm.foreshadowing}
-              onChange={(e) => setChapterForm({ ...chapterForm, foreshadowing: e.target.value })}
-              placeholder="本章埋下的伏笔"
-            />
-          </label>
-          <label>
-            <span>回收伏笔</span>
-            <textarea
-              value={chapterForm.payoff}
-              onChange={(e) => setChapterForm({ ...chapterForm, payoff: e.target.value })}
-              placeholder="本章回收的伏笔"
-            />
-          </label>
-          <div className="form-actions">
-            <button className="primary-button" type="button" onClick={handleSaveChapter}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>埋设伏笔</span>
+              <textarea
+                value={chapterForm.foreshadowing}
+                onChange={(e) => setChapterForm({ ...chapterForm, foreshadowing: e.target.value })}
+                placeholder="本章埋下的伏笔"
+                rows={2}
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>回收伏笔</span>
+              <textarea
+                value={chapterForm.payoff}
+                onChange={(e) => setChapterForm({ ...chapterForm, payoff: e.target.value })}
+                placeholder="本章回收的伏笔"
+                rows={2}
+                style={{ width: "100%", padding: "0.5rem", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: "0.875rem", resize: "vertical" }}
+              />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+            <button
+              type="button"
+              onClick={handleSaveChapter}
+              style={{ padding: "0.5rem 1.25rem", background: "var(--accent)", color: "var(--text-inverse)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+            >
               {editingChapterId ? "更新" : "创建"}
             </button>
-            <button type="button" onClick={resetChapterForm}>取消</button>
+            <button
+              type="button"
+              onClick={resetChapterForm}
+              style={{ padding: "0.5rem 1.25rem", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+            >
+              取消
+            </button>
           </div>
         </div>
       )}
 
-      {/* 卷纲列表 */}
-      <div className="volume-layout">
-        <div className="volume-list">
-          <h3>卷列表</h3>
-          {loading ? (
-            <p className="empty-note">加载中...</p>
-          ) : volumes.length === 0 ? (
-            <p className="empty-note">还没有卷纲。点击"新建卷"开始规划。</p>
-          ) : (
-            volumes.map((vol) => (
-              <article
-                key={vol.id}
-                className={`volume-card ${activeVolumeId === vol.id ? "active" : ""}`}
-                onClick={() => setActiveVolumeId(vol.id)}
-              >
-                <header>
-                  <strong>{vol.title}</strong>
-                  <span>{vol.chapterOutlines.length} 章</span>
-                </header>
-                {vol.goal && <p className="vol-goal">{vol.goal}</p>}
-                {vol.mapName && <p className="vol-map">📍 {vol.mapName}</p>}
-                {vol.chapterCount && <p className="vol-chapter-count">预计章数: {vol.chapterCount}</p>}
-                {vol.keyEvents && <p className="vol-key-events" style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: "0.25rem 0 0" }}>关键事件: {vol.keyEvents.substring(0, 50)}{vol.keyEvents.length > 50 ? "..." : ""}</p>}
-                {vol.turningPoints && <p className="vol-turning-points" style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: "0.25rem 0 0" }}>转折点: {vol.turningPoints.substring(0, 50)}{vol.turningPoints.length > 50 ? "..." : ""}</p>}
-                <div className="card-actions">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleEditVolume(vol); }}>编辑</button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); requestDeleteVolume(vol.id); }}>删除</button>
-                </div>
-              </article>
-            ))
-          )}
+      {/* 主布局：左侧卷列表 + 右侧详情 */}
+      <div style={{ display: "flex", gap: "1.5rem", minHeight: "50vh" }}>
+        {/* 左侧：卷列表侧边栏 */}
+        <div style={{
+          width: "280px",
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-sm)",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            padding: "0.75rem",
+            borderBottom: "1px solid var(--border-default)",
+            fontWeight: 600,
+            fontSize: "0.875rem",
+            color: "var(--text-primary)",
+          }}>
+            卷列表 ({volumes.length})
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem" }}>
+            {loading ? (
+              <p style={{ color: "var(--text-muted)", fontSize: "0.8125rem", padding: "1rem", textAlign: "center" }}>加载中...</p>
+            ) : volumes.length === 0 ? (
+              <p style={{ color: "var(--text-muted)", fontSize: "0.8125rem", padding: "1rem", textAlign: "center" }}>还没有卷纲</p>
+            ) : (
+              volumes.map((vol) => (
+                <article
+                  key={vol.id}
+                  onClick={() => setActiveVolumeId(vol.id)}
+                  style={{
+                    padding: "0.75rem",
+                    marginBottom: "0.5rem",
+                    border: activeVolumeId === vol.id ? "1px solid var(--accent)" : "1px solid var(--border-default)",
+                    borderRadius: "var(--radius-sm)",
+                    background: activeVolumeId === vol.id ? "var(--accent-muted)" : "var(--bg-surface)",
+                    cursor: "pointer",
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                    <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>{vol.title}</strong>
+                    <span style={{
+                      fontSize: "0.75rem",
+                      padding: "0.125rem 0.5rem",
+                      background: "var(--accent-muted)",
+                      color: "var(--accent)",
+                      borderRadius: "var(--radius-full)",
+                    }}>
+                      {vol.chapterOutlines.length} 章
+                    </span>
+                  </div>
+                  {vol.goal && (
+                    <p style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: "0.25rem 0 0", lineHeight: 1.4 }}>
+                      {truncate(vol.goal, 60)}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleEditVolume(vol); }}
+                      style={{ fontSize: "0.75rem", padding: "0.125rem 0.5rem", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); requestDeleteVolume(vol.id); }}
+                      style={{ fontSize: "0.75rem", padding: "0.125rem 0.5rem", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
         </div>
 
-        {/* 章纲列表 */}
-        <div className="chapter-list-panel">
-          <h3>{activeVolume ? `${activeVolume.title} - 章纲` : "选择一个卷查看章纲"}</h3>
-          {activeVolume && activeVolume.chapterOutlines.length === 0 && (
-            <p className="empty-note">本卷还没有章纲。点击"新建章"添加。</p>
-          )}
-          {activeVolume && activeVolume.chapterOutlines.map((chap) => (
-            <article key={chap.id} className="chapter-outline-card">
-              <header>
-                <span className="chapter-order">{chap.sortOrder}</span>
-                <strong>{chap.title}</strong>
-              </header>
-              {chap.goal && <p className="chap-field"><span>目标：</span>{chap.goal}</p>}
-              {chap.conflict && <p className="chap-field"><span>冲突：</span>{chap.conflict}</p>}
-              {chap.emotion && <p className="chap-field"><span>情绪：</span>{chap.emotion}</p>}
-              {chap.pleasurePoint && <p className="chap-field"><span>爽点：</span>{chap.pleasurePoint}</p>}
-              {chap.hook && <p className="chap-field"><span>钩子：</span>{chap.hook}</p>}
-              <div className="card-actions">
-                <button type="button" onClick={() => handleEditChapter(chap)}>编辑</button>
-                <button type="button" onClick={() => requestDeleteChapter(chap.id)}>删除</button>
+        {/* 右侧：卷详情 + 章纲列表 */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {!activeVolume ? (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              color: "var(--text-muted)",
+              fontSize: "0.9375rem",
+            }}>
+              {volumes.length === 0 ? "点击「新建卷」开始规划" : "选择一个卷查看详情"}
+            </div>
+          ) : (
+            <>
+              {/* 卷详情面板 */}
+              <div style={{
+                padding: "1rem",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-default)",
+                borderRadius: "var(--radius-sm)",
+                marginBottom: "1rem",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                  <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600, color: "var(--text-primary)" }}>{activeVolume.title}</h3>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleEditVolume(activeVolume)}
+                      style={{ fontSize: "0.8125rem", padding: "0.25rem 0.75rem", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => requestDeleteVolume(activeVolume.id)}
+                      style={{ fontSize: "0.8125rem", padding: "0.25rem 0.75rem", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem 1.5rem" }}>
+                  {volumeInfoFields.filter((f) => f.value).map((f) => (
+                    <div key={f.key} style={{ display: "flex", gap: "0.5rem", fontSize: "0.8125rem", lineHeight: 1.6 }}>
+                      <span style={{ color: "var(--accent)", fontWeight: 500, flexShrink: 0, minWidth: "3.5rem" }}>{f.label}</span>
+                      <span style={{ color: "var(--text-primary)" }}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </article>
-          ))}
+
+              {/* 章纲列表标题 */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                <h4 style={{ margin: 0, fontSize: "0.9375rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                  章纲列表 ({activeVolume.chapterOutlines.length})
+                </h4>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePromptGenerate("chapter")}
+                    disabled={isBusy}
+                    style={{
+                      fontSize: "0.8125rem",
+                      padding: "0.25rem 0.75rem",
+                      background: "var(--accent)",
+                      color: "var(--text-inverse)",
+                      border: "none",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {generating ? "生成中..." : "AI 生成章纲"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { resetChapterForm(); setShowChapterForm(true); }}
+                    style={{
+                      fontSize: "0.8125rem",
+                      padding: "0.25rem 0.75rem",
+                      background: "transparent",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    新建章
+                  </button>
+                </div>
+              </div>
+
+              {/* 章纲列表 */}
+              {activeVolume.chapterOutlines.length === 0 ? (
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "3rem 1.5rem",
+                  color: "var(--text-muted)",
+                  textAlign: "center",
+                  border: "1px dashed var(--border-default)",
+                  borderRadius: "var(--radius-sm)",
+                }}>
+                  <p style={{ marginBottom: "1rem", fontSize: "0.9375rem" }}>本卷还没有章纲</p>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => handlePromptGenerate("chapter")}
+                      disabled={isBusy}
+                      style={{
+                        padding: "0.5rem 1.25rem",
+                        background: "var(--accent)",
+                        color: "var(--text-inverse)",
+                        border: "none",
+                        borderRadius: "var(--radius-md)",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {generating ? "生成中..." : "AI 生成章纲"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { resetChapterForm(); setShowChapterForm(true); }}
+                      style={{
+                        padding: "0.5rem 1.25rem",
+                        background: "var(--bg-elevated)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "var(--radius-md)",
+                        fontSize: "0.875rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      手动新建
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {activeVolume.chapterOutlines.map((chap) => (
+                    <article
+                      key={chap.id}
+                      onClick={() => { setSelectedChapter(chap); setShowChapterDetail(true); }}
+                      style={{
+                        padding: "0.75rem 1rem",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "var(--radius-sm)",
+                        background: "var(--bg-surface)",
+                        cursor: "pointer",
+                        transition: "all var(--transition-fast)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "1.5rem",
+                          height: "1.5rem",
+                          background: "var(--accent-muted)",
+                          color: "var(--accent)",
+                          borderRadius: "var(--radius-full)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          flexShrink: 0,
+                        }}>
+                          {chap.sortOrder}
+                        </span>
+                        <strong style={{ fontSize: "0.875rem", color: "var(--text-primary)" }}>{chap.title}</strong>
+                      </div>
+                      {chap.goal && (
+                        <p style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
+                          目标：{truncate(chap.goal, 80)}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
+
+      {/* 章纲详情 Modal */}
+      {selectedChapter && (
+        <Modal
+          open={showChapterDetail}
+          onClose={() => setShowChapterDetail(false)}
+          title={selectedChapter.title}
+          width="600px"
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <div>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>第 {selectedChapter.sortOrder} 章</span>
+            </div>
+            {chapterDetailFields.filter((f) => f.value).map((f) => (
+              <div key={f.key}>
+                <strong style={{ color: "var(--accent)", fontSize: "0.8125rem", display: "block", marginBottom: "0.25rem" }}>{f.label}</strong>
+                <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--text-primary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{f.value}</p>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border-default)" }}>
+              <button
+                type="button"
+                onClick={() => { setShowChapterDetail(false); handleEditChapter(selectedChapter); }}
+                style={{ padding: "0.5rem 1rem", background: "var(--accent)", color: "var(--text-inverse)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowChapterDetail(false); requestDeleteChapter(selectedChapter.id); }}
+                style={{ padding: "0.5rem 1rem", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", fontSize: "0.875rem", cursor: "pointer" }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {confirmAction && (
         <ConfirmDialog

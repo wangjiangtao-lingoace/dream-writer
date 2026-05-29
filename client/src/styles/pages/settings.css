@@ -33,7 +33,7 @@
 }
 
 .config-card.active {
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: rgba(79, 124, 255, 0.3);
   background: var(--accent-muted);
 }
 

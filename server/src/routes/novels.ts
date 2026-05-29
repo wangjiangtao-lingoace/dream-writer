@@ -7,6 +7,12 @@ import { prisma } from "../db/prisma";
 import { imitationPlanService } from "../services/ImitationPlanService";
 import * as AIService from "../services/AIService";
 
+/** 返回本地时区日期字符串 YYYY-MM-DD，避免 UTC 时区偏移问题 */
+function localDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const router = Router();
 const novelService = new NovelService();
 const llmService = new LlmInvokeService();
@@ -147,14 +153,30 @@ router.get("/:id/workflow-status", async (req, res, next) => {
 
     const [characters, worldviews, volumes, chapterOutlines, mainlines, hooks, knowledgeAssets, memories, styleProfiles] = assetCounts;
     const usedTypes = new Set(recentUsage.map((item) => item.assetType));
+
+    // 独立创作模式：有灵感但无拆书/仿写方案，Pipeline 可从灵感直接生成全部资产
+    const hasExistingChapters = chapters.some((ch: any) => ch.content?.trim());
+    const isStandalone = Boolean(novel.inspiration?.trim()) && !latestAnalysis && !latestPlan && !hasExistingChapters;
+    // 续写模式：已有章节内容但无拆书/仿写方案
+    const isContinue = hasExistingChapters && !latestAnalysis && !latestPlan;
+
     const missing: string[] = [];
-    if (!latestAnalysis) missing.push("缺拆书");
-    if (!latestPlan) missing.push("缺仿写方案");
-    if (!characters) missing.push("缺人物卡");
-    if (!worldviews) missing.push("缺世界观");
-    if (!styleProfiles) missing.push("缺风格配置");
-    if (!volumes || !chapterOutlines) missing.push("缺卷纲/章纲");
-    if (!hooks) missing.push("缺钩子");
+    if (isStandalone || isContinue) {
+      // 独立创作/续写模式：拆书/仿写方案非必需，只提示 Pipeline 会自动生成的资产
+      if (!characters) missing.push("缺人物卡（将自动生成）");
+      if (!worldviews) missing.push("缺世界观（将自动生成）");
+      if (!styleProfiles) missing.push("缺风格配置（将自动生成）");
+      if (!volumes || !chapterOutlines) missing.push("缺卷纲/章纲（将自动生成）");
+      if (!hooks) missing.push("缺钩子（将自动生成）");
+    } else {
+      if (!latestAnalysis) missing.push("缺拆书");
+      if (!latestPlan) missing.push("缺仿写方案");
+      if (!characters) missing.push("缺人物卡");
+      if (!worldviews) missing.push("缺世界观");
+      if (!styleProfiles) missing.push("缺风格配置");
+      if (!volumes || !chapterOutlines) missing.push("缺卷纲/章纲");
+      if (!hooks) missing.push("缺钩子");
+    }
     const hasDrafts = firstThree.some((chapter) => chapter.hasContent);
 
     const nextActions = [
@@ -171,17 +193,27 @@ router.get("/:id/workflow-status", async (req, res, next) => {
         reason: latestPlan ? "已有仿写方案，可直接生成正文。" : latestAnalysis ? "拆书已完成，可生成蓝图和章纲。" : "需要先完成拆书。",
       },
       {
+        key: "standalone",
+        label: "从灵感一键生成全部",
+        enabled: isStandalone,
+        reason: isStandalone
+          ? "基于创作灵感，先生成大纲供你审核确认，确认后再生成世界观、人物、钩子和前 1-3 章。"
+          : hasExistingChapters ? "已有章节内容，请使用智能续写。" : latestAnalysis ? "已有拆书资料，请使用仿写流程。" : "需要先填写创作灵感。",
+      },
+      {
+        key: "continue",
+        label: "智能续写",
+        enabled: isContinue,
+        reason: isContinue
+          ? "从已有章节提取大纲、人物、世界观，规划卷纲章纲后继续创作。每个阶段可确认调整。"
+          : hasExistingChapters ? "已有拆书/仿写方案，请使用对应流程。" : "需要先有已写章节。",
+      },
+      {
         key: "draft",
         label: "自动生成 1-3 章",
         enabled: Boolean(latestPlan),
         reason: latestPlan ? (hasDrafts ? "已有正文，默认不会覆盖已有草稿。" : "已有仿写方案，可生成样章。") : "需要先生成仿写方案。",
         imitationPlanId: latestPlan?.id ?? null,
-      },
-      {
-        key: "continue",
-        label: "继续生成下一章",
-        enabled: chapters.length > 0,
-        reason: chapters.length > 0 ? "可进入章节写作继续扩写。" : "需要先生成或创建章节。",
       },
     ];
 
@@ -233,10 +265,10 @@ router.get("/:id/workflow-status", async (req, res, next) => {
           styleProfiles,
         },
         adoption: {
-          characters: usedTypes.has("character") ? "已被 Pipeline 使用" : characters ? "已进入知识库" : "未使用",
-          worldviews: usedTypes.has("worldview") ? "已被 Pipeline 使用" : worldviews ? "已进入知识库" : "未使用",
-          volumes: usedTypes.has("volume") || usedTypes.has("chapter_outline") ? "已被 Pipeline 使用" : volumes ? "已进入知识库" : "未使用",
-          hooks: usedTypes.has("hook") ? "已被 Pipeline 使用" : hooks ? "已进入知识库" : "未使用",
+          characters: usedTypes.has("character") ? "已被流水线使用" : characters ? "已进入知识库" : "未使用",
+          worldviews: usedTypes.has("worldview") ? "已被流水线使用" : worldviews ? "已进入知识库" : "未使用",
+          volumes: usedTypes.has("volume") || usedTypes.has("chapter_outline") ? "已被流水线使用" : volumes ? "已进入知识库" : "未使用",
+          hooks: usedTypes.has("hook") ? "已被流水线使用" : hooks ? "已进入知识库" : "未使用",
           styleProfiles: styleProfiles ? "已进入知识库" : "未使用",
         },
         chapters: {
@@ -263,6 +295,7 @@ router.get("/:id/workflow-status", async (req, res, next) => {
           recent: recentUsage,
         },
         nextActions,
+        creationMode: isContinue ? "continue" : isStandalone ? "standalone" : "imitation",
         health: {
           missing,
           warnings: hasDrafts ? ["已有正文默认不会被自动覆盖。"] : [],
@@ -326,7 +359,22 @@ router.put("/:id/chapters/:chapterId", async (req, res, next) => {
   try {
     const { id, chapterId } = chapterIdSchema.parse(req.params);
     const input = chapterUpdateSchema.parse(req.body);
-    res.json({ success: true, data: await novelService.updateChapter(id, chapterId, input) });
+    const existingChapter = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { wordCount: true } });
+    const result = await novelService.updateChapter(id, chapterId, input);
+    res.json({ success: true, data: result });
+
+    // Fire-and-forget: update writing session stats
+    const today = localDate();
+    const newWordCount = input.content ? input.content.replace(/\s/g, "").length : 0;
+    const oldWordCount = existingChapter?.wordCount || 0;
+    const wordDelta = newWordCount - oldWordCount;
+    if (wordDelta > 0) {
+      prisma.writingSession.upsert({
+        where: { novelId_date: { novelId: id, date: today } },
+        update: { wordCount: { increment: wordDelta } },
+        create: { novelId: id, date: today, wordCount: wordDelta },
+      }).catch(() => {});
+    }
   } catch (error) {
     next(error);
   }

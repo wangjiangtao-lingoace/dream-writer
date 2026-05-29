@@ -77,7 +77,7 @@
   transition: border-color var(--transition-fast);
 }
 
-.input:focus {
+.input:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
@@ -328,7 +328,7 @@
 .card-actions button:hover {
   color: var(--text-primary);
   background: var(--accent-muted);
-  border-color: rgba(99, 102, 241, 0.2);
+  border-color: var(--accent-border);
 }
 
 /* ─── CharacterCard 组件 ─── */
@@ -372,9 +372,9 @@
   transition: border-color var(--transition-fast);
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
@@ -476,9 +476,9 @@
   transition: border-color var(--transition-fast);
 }
 
-.knowledge-form input:focus,
-.knowledge-form select:focus,
-.knowledge-form textarea:focus {
+.knowledge-form input:focus-visible,
+.knowledge-form select:focus-visible,
+.knowledge-form textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
@@ -542,7 +542,7 @@
 .knowledge-filter button.active,
 .knowledge-filter button[style*="accent"] {
   background: var(--accent-muted);
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: var(--accent-border-strong);
   color: var(--accent);
 }
 
@@ -666,7 +666,7 @@
 
 .memory-stats article.active {
   background: var(--accent-muted);
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: var(--accent-border-strong);
 }
 
 .memory-stats article strong {
@@ -698,7 +698,7 @@
   transition: border-color var(--transition-fast);
 }
 
-.memory-search input:focus {
+.memory-search input:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
@@ -763,9 +763,9 @@
   transition: border-color var(--transition-fast);
 }
 
-.memory-form input:focus,
-.memory-form select:focus,
-.memory-form textarea:focus {
+.memory-form input:focus-visible,
+.memory-form select:focus-visible,
+.memory-form textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }

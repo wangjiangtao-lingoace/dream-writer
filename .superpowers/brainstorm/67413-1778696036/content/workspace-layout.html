@@ -1,0 +1,149 @@
+<h2>小说工作台布局</h2>
+<p class="subtitle">进入一部小说后，主内容区怎么组织？核心是编辑器、目录、AI 面板的关系。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Left sidebar -->
+        <div style="width: 160px; background: #0c0c0e; border-right: 1px solid #222228; padding: 10px 8px;">
+          <div style="font-size: 8px; color: #f97316; font-weight: 600; margin-bottom: 6px;">目录</div>
+          <div style="padding: 4px 6px; border-radius: 3px; background: rgba(249,115,22,0.1); margin-bottom: 2px;">
+            <div style="height: 6px; width: 70%; background: #f97316; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">
+            <div style="height: 6px; width: 60%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">
+            <div style="height: 6px; width: 65%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">
+            <div style="height: 6px; width: 55%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px;">
+            <div style="height: 6px; width: 60%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Center: Editor -->
+        <div style="flex: 1; background: #08080a; padding: 12px; display: flex; flex-direction: column;">
+          <!-- Tab bar -->
+          <div style="display: flex; gap: 4px; margin-bottom: 10px;">
+            <div style="padding: 4px 10px; border-radius: 4px; background: rgba(249,115,22,0.15); font-size: 7px; color: #f97316;">正文</div>
+            <div style="padding: 4px 10px; border-radius: 4px; font-size: 7px; color: #3a3a42;">大纲</div>
+            <div style="padding: 4px 10px; border-radius: 4px; font-size: 7px; color: #3a3a42;">人物</div>
+          </div>
+          <!-- Editor content -->
+          <div style="flex: 1; background: #0f0f12; border-radius: 6px; border: 1px solid #222228; padding: 10px;">
+            <div style="height: 6px; width: 90%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 85%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 88%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 75%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 82%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 78%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 90%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 70%; background: #1c1c20; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Right: AI Panel -->
+        <div style="width: 220px; background: #0c0c0e; border-left: 1px solid #222228; padding: 10px;">
+          <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 8px;">
+            <div style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></div>
+            <div style="font-size: 8px; color: #f97316; font-weight: 600;">AI 助手</div>
+          </div>
+          <!-- AI suggestion card -->
+          <div style="background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.2); border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+            <div style="font-size: 7px; color: #fb923c; margin-bottom: 4px; font-weight: 600;">建议：续写下一章</div>
+            <div style="height: 5px; width: 90%; background: #2a2a30; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 75%; background: #2a2a30; border-radius: 2px; margin-bottom: 6px;"></div>
+            <div style="height: 18px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 4px; opacity: 0.7;"></div>
+          </div>
+          <!-- AI suggestion card 2 -->
+          <div style="background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+            <div style="font-size: 7px; color: #6b6b76; margin-bottom: 4px;">一致性检查</div>
+            <div style="height: 5px; width: 85%; background: #1c1c20; border-radius: 2px;"></div>
+          </div>
+          <!-- AI suggestion card 3 -->
+          <div style="background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+            <div style="font-size: 7px; color: #6b6b76; margin-bottom: 4px;">节奏优化</div>
+            <div style="height: 5px; width: 80%; background: #1c1c20; border-radius: 2px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 三栏：目录 | 编辑器 | AI</h3>
+      <p>左侧章节目录树 + 中间富文本编辑器 + 右侧 AI 面板（上下文推荐、一键续写、实时检查）。tab 切换正文/大纲/人物等视图。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Left sidebar (same) -->
+        <div style="width: 160px; background: #0c0c0e; border-right: 1px solid #222228; padding: 10px 8px;">
+          <div style="font-size: 8px; color: #f97316; font-weight: 600; margin-bottom: 6px;">目录</div>
+          <div style="padding: 4px 6px; border-radius: 3px; background: rgba(249,115,22,0.1); margin-bottom: 2px;">
+            <div style="height: 6px; width: 70%; background: #f97316; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">
+            <div style="height: 6px; width: 60%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">
+            <div style="height: 6px; width: 65%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 4px 6px; border-radius: 3px;">
+            <div style="height: 6px; width: 55%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Center: Full width editor (no tabs, content switches in sidebar) -->
+        <div style="flex: 1; background: #08080a; padding: 12px; display: flex; flex-direction: column;">
+          <!-- Breadcrumb -->
+          <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 10px;">
+            <div style="height: 6px; width: 30px; background: #3a3a42; border-radius: 2px;"></div>
+            <div style="height: 6px; width: 4px; background: #3a3a42; border-radius: 1px;"></div>
+            <div style="height: 6px; width: 50px; background: #f97316; border-radius: 2px; opacity: 0.6;"></div>
+          </div>
+          <!-- Editor (full width) -->
+          <div style="flex: 1; background: #0f0f12; border-radius: 6px; border: 1px solid #222228; padding: 10px;">
+            <div style="height: 6px; width: 90%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 85%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 88%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 75%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 82%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 78%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 90%; background: #1c1c20; border-radius: 2px; margin-bottom: 4px;"></div>
+            <div style="height: 6px; width: 70%; background: #1c1c20; border-radius: 2px;"></div>
+          </div>
+          <!-- Bottom AI bar -->
+          <div style="margin-top: 8px; background: #0f0f12; border: 1px solid #222228; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; gap: 8px;">
+            <div style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></div>
+            <div style="height: 6px; width: 60%; background: #1c1c20; border-radius: 2px;"></div>
+            <div style="flex: 1;"></div>
+            <div style="height: 22px; width: 60px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 4px; opacity: 0.7;"></div>
+          </div>
+        </div>
+        <!-- Right: AI Panel (collapsible) -->
+        <div style="width: 220px; background: #0c0c0e; border-left: 1px solid #222228; padding: 10px;">
+          <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 8px;">
+            <div style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></div>
+            <div style="font-size: 8px; color: #f97316; font-weight: 600;">AI 助手</div>
+          </div>
+          <div style="background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.2); border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+            <div style="font-size: 7px; color: #fb923c; margin-bottom: 4px; font-weight: 600;">续写建议</div>
+            <div style="height: 5px; width: 90%; background: #2a2a30; border-radius: 2px; margin-bottom: 3px;"></div>
+            <div style="height: 5px; width: 75%; background: #2a2a30; border-radius: 2px; margin-bottom: 6px;"></div>
+            <div style="height: 18px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 4px; opacity: 0.7;"></div>
+          </div>
+          <div style="background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+            <div style="font-size: 7px; color: #6b6b76; margin-bottom: 4px;">检查结果</div>
+            <div style="height: 5px; width: 85%; background: #1c1c20; border-radius: 2px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 双栏：目录 | 编辑器+AI</h3>
+      <p>左侧章节目录 + 右侧编辑器占主空间。AI 以底部栏 + 右侧面板两种形式存在。侧边栏点击切换正文/大纲/人物等，编辑器始终全宽。类似 Notion 的侧边栏导航模式。</p>
+    </div>
+  </div>
+</div>

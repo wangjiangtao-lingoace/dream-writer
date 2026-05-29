@@ -394,3 +394,104 @@ ${inspiration}
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 3000 });
   return parseLlmJson(result) || {};
 }
+
+// ==================== 续写模式分析阶段 ====================
+
+export async function executeAnalyzePhase_continue(
+  ctx: PhaseContext,
+  jobId: string,
+  novelId: string,
+  config: PipelineConfig,
+) {
+  const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+  if (!novel) throw new Error("作品不存在");
+
+  // 加载已有章节内容（最近 10 章，最多约 8000 字）
+  const chapters = await prisma.chapter.findMany({
+    where: { novelId, content: { not: "" } },
+    orderBy: { order: "asc" },
+  });
+
+  if (chapters.length === 0) {
+    throw new Error("没有已有章节内容，无法进行续写分析");
+  }
+
+  // 拼接已有章节内容作为分析输入
+  let chapterContent = "";
+  const recentChapters = chapters.slice(-10);
+  for (const ch of recentChapters) {
+    if (ch.content?.trim()) {
+      chapterContent += `\n\n--- 第${ch.order}章 ${ch.title || ""} ---\n${ch.content}`;
+    }
+  }
+  // 截断到约 8000 字
+  if (chapterContent.length > 8000) {
+    chapterContent = chapterContent.slice(0, 8000) + "\n...(内容截断)";
+  }
+
+  const analysisInput = `【作品标题】${novel.title}\n${novel.genre ? `【类型】${novel.genre}\n` : ""}${novel.synopsis ? `【简介】${novel.synopsis}\n` : ""}\n【已有章节内容】${chapterContent}`;
+
+  // 1. 分析已有内容包含哪些资产
+  await ctx.updateJobProgress(jobId, "outline", "analyze");
+  const analysis = await analyzeInput(ctx, analysisInput);
+  await ctx.savePhaseResult(jobId, "outline", "analyze", { source: "existing_chapters" }, analysis);
+
+  // 2. 拆解已有内容入库
+  await ctx.updateJobProgress(jobId, "outline", "decompose");
+  const decomposed = await decomposeIntoAssets(ctx, novelId, analysisInput, analysis, config);
+  await ctx.savePhaseResult(jobId, "outline", "decompose", { source: "existing_chapters", analysis }, decomposed);
+
+  // 3. 从已有章节推断大纲
+  await ctx.updateJobProgress(jobId, "outline", "outline");
+  const knowledgeContext = await getRagRetrieveService()?.retrieve(
+    `${novel.title} ${novel.genre || ""} 章节内容分析`,
+    { novelId, topK: 10 }
+  ) ?? "";
+  const outlineResult = await generateOutlineFromChapters(ctx, novelId, analysisInput, knowledgeContext, config);
+  await ctx.savePhaseResult(jobId, "outline", "outline", { source: "existing_chapters" }, outlineResult);
+  await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
+}
+
+async function generateOutlineFromChapters(
+  ctx: PhaseContext,
+  novelId: string,
+  chapterContent: string,
+  knowledgeContext: string,
+  config: PipelineConfig,
+): Promise<any> {
+  const system = `你是一位资深网文策划师。你的任务是从已有的章节内容中推断完整的故事弧线，并规划后续卷结构。
+核心原则：基于已有内容推断故事走向，保留已有设定，补充缺失的宏观结构。`;
+
+  const prompt = `以下是一部小说的已有章节内容。请从中推断完整的故事大纲，并规划后续卷结构。
+
+${chapterContent}
+
+${knowledgeContext ? `【参考资料】\n${knowledgeContext}\n` : ""}
+【类型】${config.genre || "自动判断"}
+
+要求：
+1. 从已有内容中提取核心设定、人物关系、冲突线索
+2. 推断故事的宏观走向（开篇→发展→高潮→结局）
+3. 规划分卷结构（已有内容属于哪一卷，后续应有几卷）
+4. 保留已有内容中的独特设定和伏笔
+
+请输出JSON：
+{
+  "title": "作品标题",
+  "genre": "类型",
+  "theme": "核心主题",
+  "hook": "开篇钩子",
+  "coreSetting": "核心设定",
+  "mainConflict": "主要冲突",
+  "protagonist": { "name": "", "identity": "", "goal": "", "growth": "" },
+  "antagonist": { "name": "", "identity": "", "motivation": "" },
+  "plotStructure": { "beginning": "", "development": "", "climax": "", "resolution": "" },
+  "highlights": "亮点",
+  "targetAudience": "目标读者",
+  "existingChaptersSummary": "已有章节内容摘要",
+  "volumePlan": "分卷规划建议"
+}`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
+  return parseLlmJson(result) || {};
+}

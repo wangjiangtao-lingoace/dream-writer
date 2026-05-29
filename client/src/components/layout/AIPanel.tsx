@@ -85,7 +85,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({
               width: "100%",
               padding: "var(--space-3)",
               background: action.primary ? "var(--accent-muted)" : "var(--bg-elevated)",
-              border: `1px solid ${action.primary ? "rgba(99,102,241,0.2)" : "var(--border-subtle)"}`,
+              border: `1px solid ${action.primary ? "rgba(79,124,255,0.2)" : "var(--border-subtle)"}`,
               borderRadius: "var(--radius-lg)",
               color: action.primary ? "var(--accent-hover)" : "var(--text-primary)",
               fontSize: "var(--text-sm)",

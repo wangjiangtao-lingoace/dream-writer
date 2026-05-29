@@ -8,7 +8,9 @@ import NovelWorkspace from "@/pages/NovelWorkspace";
 import PipelinePage from "@/pages/PipelinePage";
 import GeneralKnowledge from "@/pages/GeneralKnowledge";
 import AnalyzeCreate from "@/pages/AnalyzeCreate";
+import ImportContinue from "@/pages/ImportContinue";
 import Settings from "@/pages/Settings";
+import GuidePage from "@/pages/GuidePage";
 
 const routes: RouteObject[] = [
   {
@@ -19,11 +21,13 @@ const routes: RouteObject[] = [
       { path: "create", element: <CreateWork /> },
       { path: "create/new", element: <NovelForm /> },
       { path: "create/analyze", element: <AnalyzeCreate /> },
+      { path: "create/import", element: <ImportContinue /> },
       { path: "novel/:id", element: <NovelWorkspace /> },
       { path: "novel/:id/:tab", element: <NovelWorkspace /> },
       { path: "novel/:id/pipeline", element: <PipelinePage /> },
       { path: "knowledge", element: <GeneralKnowledge /> },
       { path: "settings", element: <Settings /> },
+      { path: "guide", element: <GuidePage /> },
     ],
   },
 ];

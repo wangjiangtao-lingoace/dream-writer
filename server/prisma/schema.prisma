@@ -45,6 +45,7 @@ model Novel {
   assetUsageRecords AssetUsageRecord[]
   pipelineJob PipelineJob?
   autoGenerateStatus AutoGenerateStatus?
+  writingSessions WritingSession[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -252,6 +253,20 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// 7b. AI 模型配置（BYOK）
+model AIConfig {
+  id        String   @id @default(cuid())
+  provider  String
+  model     String
+  apiKey    String   // AES-256 加密存储
+  baseUrl   String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([provider])
 }
 
 // 8. 生成日志
@@ -656,4 +671,20 @@ model PhaseResult {
   
   @@unique([jobId, phase, step])
   @@index([jobId, phase])
+}
+
+// 25. 写作会话（每日写作统计）
+model WritingSession {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  date            String   // YYYY-MM-DD format
+  wordCount       Int      @default(0)
+  duration        Int      @default(0)  // seconds
+  chaptersWritten Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([novelId, date])
+  @@index([novelId, date])
 }

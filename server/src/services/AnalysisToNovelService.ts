@@ -258,6 +258,7 @@ ${sections.market_highlights || "无"}
     // 2. 创建世界观
     const worldview = await prisma.worldview.create({
       data: {
+        novelId,
         name: data.worldview.name,
         summary: data.worldview.summary,
         rules: data.worldview.rules,
@@ -266,8 +267,6 @@ ${sections.market_highlights || "无"}
         history: data.worldview.history,
       },
     });
-
-    // 世界观已通过novelId关联，无需额外操作
 
     // 3. 创建人物（去重）
     const existingCharacters = await prisma.character.findMany({

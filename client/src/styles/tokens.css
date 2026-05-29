@@ -1,27 +1,32 @@
 /* client/src/styles/tokens.css */
 :root {
   /* 背景 */
-  --bg-base: #08080a;
-  --bg-surface: #0c0c0e;
-  --bg-elevated: #0f0f12;
-  --bg-overlay: #111114;
+  --bg-base: #f5f7fa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f0f2f5;
+  --bg-overlay: #e8eaed;
 
   /* 边框 */
-  --border-subtle: #1a1a20;
-  --border-default: #222228;
-  --border-strong: #2a2a34;
+  --border-subtle: #eef0f3;
+  --border-default: #e5e7eb;
+  --border-strong: #d1d5db;
+  --border-light: #f3f4f6;
 
   /* 文字 */
-  --text-primary: #e4e4e7;
-  --text-secondary: #9a9aa0;
-  --text-muted: #6b6b76;
-  --text-disabled: #3a3a42;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #6b7280;
+  --text-disabled: #9ca3af;
+  --text-inverse: #ffffff;
 
-  /* 主色：靛蓝 */
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-muted: rgba(99, 102, 241, 0.15);
-  --accent-glow: rgba(99, 102, 241, 0.4);
+  /* 主色：蓝色 */
+  --accent: #4f7cff;
+  --accent-hover: #3b6bef;
+  --accent-muted: rgba(79, 124, 255, 0.1);
+  --accent-subtle: rgba(79, 124, 255, 0.05);
+  --accent-border: rgba(79, 124, 255, 0.2);
+  --accent-border-strong: rgba(79, 124, 255, 0.25);
+  --accent-glow: rgba(79, 124, 255, 0.3);
 
   /* 语义色 */
   --success: #22c55e;
@@ -52,9 +57,9 @@
   --radius-full: 9999px;
 
   /* 阴影 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
   --shadow-glow: 0 0 16px var(--accent-glow);
 
   /* 字体 */
@@ -75,19 +80,32 @@
   --transition-slow: 300ms ease;
 
   /* 布局 */
-  --sidebar-width: 200px;
+  --sidebar-width: 280px;
   --sidebar-collapsed-width: 52px;
+  --asset-panel-width: 340px;
   --ai-panel-width: 280px;
-  --topbar-height: 48px;
+  --topbar-height: 64px;
+  --bottombar-height: 76px;
 }
 
-/* Backward-compatible aliases (to be removed after full migration) */
+/* Backward-compatible aliases */
 :root {
   --bg-primary: var(--bg-base);
   --bg-secondary: var(--bg-elevated);
   --bg-card: var(--bg-surface);
   --border: var(--border-default);
-  --border-light: var(--border-subtle);
   --border-dark: var(--border-strong);
-  --font-serif: "Inter", "Noto Sans SC", -apple-system, sans-serif;
+  --font-serif: "LXGW WenKai", "Songti SC", "Noto Serif CJK SC", serif;
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

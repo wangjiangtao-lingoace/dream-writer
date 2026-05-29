@@ -5,6 +5,7 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import { ZodError } from "zod";
 import novelRouter from "./routes/novels";
+import workspaceRouter from "./routes/workspace";
 import bookAnalysisRouter from "./routes/bookAnalysis";
 import characterRouter from "./routes/characters";
 import worldviewRouter from "./routes/worldviews";
@@ -30,7 +31,12 @@ import volumeOutlinesRouter from "./routes/volumeOutlines";
 import aiEnhancedRouter from "./routes/aiEnhanced";
 import imitationPlansRouter from "./routes/imitationPlans";
 import consistencyResultsRouter from "./routes/consistencyResults";
+import aiConfigRouter from "./routes/aiConfig";
+import ragRouter from "./routes/rag";
+import continuationRouter from "./routes/continuation";
 import { prisma } from "./db/prisma";
+import { getRagRetrieveService } from "./services/RagRetrieveService";
+import { getVectorStore } from "./db/vectorStore";
 
 dotenv.config();
 
@@ -116,6 +122,7 @@ app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use("/api/novels", novelRouter);
+app.use("/api/novels", workspaceRouter);
 app.use("/api/book-analysis", bookAnalysisRouter);
 app.use("/api/characters", characterRouter);
 app.use("/api/worldviews", worldviewRouter);
@@ -141,6 +148,9 @@ app.use("/api/novels", volumeOutlinesRouter);
 app.use("/api/ai", aiEnhancedRouter);
 app.use("/api/imitation-plans", imitationPlansRouter);
 app.use("/api/consistency-results", consistencyResultsRouter);
+app.use("/api/ai-config", aiConfigRouter);
+app.use("/api/rag", ragRouter);
+app.use("/api", continuationRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ success: false, error: `Not Found: ${req.method} ${req.path}` });
@@ -165,5 +175,15 @@ app.listen(PORT, HOST, () => {
   console.log(`🪶 Dream Writer server listening on http://${HOST}:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
+
+function gracefulShutdown(signal: string) {
+  console.log(`\n${signal} received, shutting down gracefully...`);
+  getRagRetrieveService()?.close();
+  getVectorStore()?.close();
+  void prisma.$disconnect().finally(() => process.exit(0));
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 export default app;

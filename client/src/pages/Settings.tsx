@@ -3,6 +3,7 @@ import { useAIConfigs, useCreateConfig, useDeleteConfig, useTestConfig } from ".
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
+import { ConfirmDialog } from "../components/ui/CommonComponents";
 import "../styles/pages/settings.css";
 
 const PROVIDERS = [
@@ -29,6 +30,8 @@ const Settings: React.FC = () => {
   const [baseUrl, setBaseUrl] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const selectedProvider = PROVIDERS.find((p) => p.value === provider);
 
@@ -51,18 +54,27 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, providerName: string) => {
-    if (!window.confirm(`确定要删除 ${providerName} 的配置吗？`)) return;
-    deleteConfig.mutate(id);
+  const handleDelete = (id: string, providerName: string) => {
+    setDeleteTarget({ id, name: providerName });
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteConfig.mutate(deleteTarget.id);
+      setDeleteTarget(null);
+    }
   };
 
   const handleTest = async (id: string) => {
     setTestResult(null);
+    setTestingId(id);
     try {
       const result = await testConfig.mutateAsync(id);
       setTestResult(result);
     } catch (error) {
       setTestResult({ success: false, message: "测试失败" });
+    } finally {
+      setTestingId(null);
     }
   };
 
@@ -86,8 +98,8 @@ const Settings: React.FC = () => {
                   </span>
                 )}
                 <div style={{ flex: 1 }} />
-                <Button size="sm" variant="ghost" onClick={() => handleTest(config.id)}>
-                  测试连接
+                <Button size="sm" variant="ghost" onClick={() => handleTest(config.id)} disabled={testingId !== null}>
+                  {testingId === config.id ? "测试中..." : "测试连接"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => handleDelete(config.id, config.provider)}>
                   删除
@@ -202,6 +214,19 @@ const Settings: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* 删除确认弹窗 */}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="删除配置"
+          message={`确定要删除 ${deleteTarget.name.toUpperCase()} 的配置吗？此操作不可撤销。`}
+          confirmText="删除"
+          cancelText="取消"
+          variant="danger"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 };

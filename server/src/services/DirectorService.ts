@@ -90,7 +90,8 @@ export async function directorAnalyze(input: {
     maxTokens: 2000,
   });
 
-  return result || "分析失败，请重试。";
+  if (!result) throw new Error("分析失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 // 剧情规划器 - 规划后续剧情
@@ -166,7 +167,8 @@ export async function plotPlan(input: {
     maxTokens: 3000,
   });
 
-  return result || "规划失败，请重试。";
+  if (!result) throw new Error("规划失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 // 读者模拟器 - 模拟读者阅读体验
@@ -232,7 +234,8 @@ export async function readerSimulation(input: {
     maxTokens: 1500,
   });
 
-  return result || "模拟失败，请重试。";
+  if (!result) throw new Error("模拟失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }
 
 // 综合创作建议
@@ -277,5 +280,6 @@ export async function creativeAdvice(input: {
     maxTokens: 1500,
   });
 
-  return result || "建议生成失败，请重试。";
+  if (!result) throw new Error("建议生成失败：LLM 未返回结果。请检查 API Key 配置。");
+  return result;
 }

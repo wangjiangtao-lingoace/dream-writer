@@ -2,11 +2,23 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { useDefaultConfig } from "../hooks/useConfig";
+import { useDefaultConfig, useCreateConfig } from "../hooks/useConfig";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Skeleton } from "../components/ui/Skeleton";
+import { toast } from "../components/ui/toast";
 import "../styles/pages/bookshelf.css";
+
+const PROVIDERS = [
+  { value: "deepseek", label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
+  { value: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"] },
+  { value: "anthropic", label: "Anthropic", models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"] },
+  { value: "qwen", label: "Qwen", models: ["qwen-plus", "qwen-turbo"] },
+  { value: "glm", label: "GLM", models: ["glm-4", "glm-4-flash"] },
+  { value: "kimi", label: "Kimi", models: ["moonshot-v1-8k", "moonshot-v1-32k"] },
+  { value: "gemini", label: "Gemini", models: ["gemini-2.0-flash", "gemini-1.5-pro"] },
+  { value: "mimo", label: "Mimo", models: ["mimo-v2.5-pro", "mimo-v2.5-flash"] },
+];
 
 interface NovelListItem {
   id: string;
@@ -23,7 +35,37 @@ const BookShelf: React.FC = () => {
   const [novels, setNovels] = useState<NovelListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { data: defaultConfig } = useDefaultConfig();
+  const createConfig = useCreateConfig();
+
+  // 配置表单状态
+  const [provider, setProvider] = useState("deepseek");
+  const [model, setModel] = useState("deepseek-chat");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  const selectedProvider = PROVIDERS.find((p) => p.value === provider);
+
+  const handleConfigSubmit = async () => {
+    if (!apiKey.trim()) return;
+    setConfigError(null);
+    try {
+      await createConfig.mutateAsync({
+        provider,
+        model,
+        apiKey: apiKey.trim(),
+        baseUrl: baseUrl.trim() || undefined,
+        isDefault: true,
+      });
+      toast.success("AI 模型配置成功");
+      setApiKey("");
+      setBaseUrl("");
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : "配置失败，请重试");
+    }
+  };
 
   useEffect(() => {
     loadNovels();
@@ -36,18 +78,24 @@ const BookShelf: React.FC = () => {
       setNovels(data || []);
     } catch (error) {
       console.error("加载作品列表失败:", error);
+      toast.error("加载作品列表失败");
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    setDeleting(true);
     try {
       await api.delete(`/api/novels/${id}`);
       setNovels(novels.filter((n) => n.id !== id));
       setDeleteConfirm(null);
+      toast.success("作品已删除");
     } catch (error) {
       console.error("删除失败:", error);
+      toast.error("删除失败，请重试");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -84,22 +132,91 @@ const BookShelf: React.FC = () => {
 
   return (
     <div className="bookshelf">
-      {/* API Key 配置横幅 */}
+      {/* API Key 配置引导 — 未配置时显示内嵌表单 */}
       {!defaultConfig && (
-        <div className="bookshelf-banner">
-          <div className="bookshelf-banner-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
+        <div className="bookshelf-setup">
+          <div className="bookshelf-setup-header">
+            <div className="bookshelf-setup-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <div>
+              <div className="bookshelf-setup-title">配置 AI 模型开始创作</div>
+              <div className="bookshelf-setup-desc">选择一个 AI 提供商并输入 API Key，即可开始使用 AI 辅助创作</div>
+            </div>
           </div>
-          <div className="bookshelf-banner-text">
-            <div className="bookshelf-banner-title">配置 AI 模型开始创作</div>
-            <div className="bookshelf-banner-desc">添加你的 API Key，即可开始使用 AI 辅助创作</div>
+
+          <div className="bookshelf-setup-form">
+            <div className="bookshelf-setup-row">
+              <div className="bookshelf-setup-field">
+                <label className="bookshelf-setup-label">AI 提供商</label>
+                <select
+                  className="input"
+                  value={provider}
+                  onChange={(e) => {
+                    setProvider(e.target.value);
+                    const p = PROVIDERS.find((p) => p.value === e.target.value);
+                    if (p) setModel(p.models[0]);
+                  }}
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="bookshelf-setup-field">
+                <label className="bookshelf-setup-label">模型</label>
+                <select
+                  className="input"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                >
+                  {selectedProvider?.models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bookshelf-setup-field">
+              <label className="bookshelf-setup-label">API Key</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="sk-..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            </div>
+
+            <div className="bookshelf-setup-field">
+              <label className="bookshelf-setup-label">Base URL（可选）</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="https://api.example.com/v1"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+              />
+            </div>
+
+            {configError && (
+              <div className="bookshelf-setup-error">{configError}</div>
+            )}
+
+            <div className="bookshelf-setup-actions">
+              <Button
+                variant="primary"
+                onClick={handleConfigSubmit}
+                loading={createConfig.isPending}
+                disabled={!apiKey.trim()}
+              >
+                保存并开始
+              </Button>
+            </div>
           </div>
-          <Button variant="primary" size="sm" onClick={() => navigate("/settings")}>
-            立即配置
-          </Button>
         </div>
       )}
 
@@ -163,7 +280,7 @@ const BookShelf: React.FC = () => {
                   <div className="bookshelf-item-progress">
                     <div
                       className="bookshelf-item-progress-bar"
-                      style={{ width: `${Math.min(100, (chapterCount / 10) * 100)}%` }}
+                      style={{ width: `${Math.min(100, Math.round(chapterCount / Math.max(1, (novel as any).chaptersPerVol || 20) * 100))}%` }}
                     />
                   </div>
                   <button
@@ -176,8 +293,19 @@ const BookShelf: React.FC = () => {
                       border: "none",
                       color: "var(--text-muted)",
                       cursor: "pointer",
-                      padding: "var(--space-1)",
+                      padding: "0.25rem",
+                      borderRadius: "var(--radius-sm)",
+                      transition: "all var(--transition-fast)",
                     }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "var(--error)";
+                      e.currentTarget.style.background = "var(--error-muted)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "var(--text-muted)";
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                    title="删除作品"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6" />
@@ -198,7 +326,9 @@ const BookShelf: React.FC = () => {
         </p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>取消</Button>
-          <Button variant="primary" onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)}>确认删除</Button>
+          <Button variant="primary" onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)} disabled={deleting}>
+            {deleting ? "删除中..." : "确认删除"}
+          </Button>
         </div>
       </Modal>
     </div>
