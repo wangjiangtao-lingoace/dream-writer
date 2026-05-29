@@ -323,19 +323,37 @@ setup_env() {
 start_dev() {
   step 8 "启动开发服务器"
 
+  local url="http://localhost:${PORT_CLIENT}"
+
   echo ""
   echo -e "${GREEN}════════════════════════════════════════════${NC}"
   echo -e "${GREEN}  Dream Writer 环境就绪！${NC}"
   echo -e "${GREEN}════════════════════════════════════════════${NC}"
   echo ""
-  echo -e "  前端地址: ${CYAN}http://localhost:${PORT_CLIENT}${NC}"
+  echo -e "  前端地址: ${CYAN}${url}${NC}"
   echo -e "  后端地址: ${CYAN}http://localhost:${PORT_SERVER}${NC}"
   echo ""
-  echo -e "  ${DIM}首次使用请在页面「设置」中配置 LLM API Key${NC}"
+  echo -e "  ${DIM}首次使用在页面配置 AI 模型和 API Key 即可开始创作${NC}"
   echo -e "  ${DIM}按 Ctrl+C 可随时停止${NC}"
   echo ""
 
-  pnpm dev
+  pnpm dev &
+  local dev_pid=$!
+
+  # 等待前端端口就绪后自动打开浏览器（仅 macOS）
+  if [ "$IS_MACOS" = true ]; then
+    (
+      for i in $(seq 1 30); do
+        if curl -s -o /dev/null -w "" "http://localhost:${PORT_CLIENT}" 2>/dev/null; then
+          open "$url"
+          break
+        fi
+        sleep 1
+      done
+    ) &
+  fi
+
+  wait "$dev_pid" 2>/dev/null
 }
 
 # ──────────────────────────────────────────────
