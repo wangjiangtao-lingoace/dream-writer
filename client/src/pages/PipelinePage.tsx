@@ -216,11 +216,9 @@ const PipelinePage: React.FC = () => {
     let config: any = {};
     try { config = JSON.parse(job.config); } catch {}
     const pipelineVersion = config.pipelineVersion || 1;
-    const defaultPhases = config.mode === "imitation"
-      ? ["planning", "structuring", "writing", "quality_check"]
-      : (config.mode === "continue" || pipelineVersion >= 2)
-        ? ["outline", "assets", "planning", "consistency_check", "writing"]
-        : ["outline", "assets", "volumes", "chapter_outline", "writing"];
+    const defaultPhases = pipelineVersion >= 2
+      ? ["outline", "assets", "planning", "consistency_check", "writing"]
+      : ["outline", "assets", "volumes", "chapter_outline", "writing"];
     const results = job.phaseResults ?? [];
     const seenPhases = new Set(results.map((r) => r.phase));
     seenPhases.add(job.currentPhase);

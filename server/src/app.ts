@@ -34,6 +34,7 @@ import consistencyResultsRouter from "./routes/consistencyResults";
 import aiConfigRouter from "./routes/aiConfig";
 import ragRouter from "./routes/rag";
 import continuationRouter from "./routes/continuation";
+import exportRouter from "./routes/export";
 import { prisma } from "./db/prisma";
 import { getRagRetrieveService } from "./services/RagRetrieveService";
 import { getVectorStore } from "./db/vectorStore";
@@ -151,6 +152,7 @@ app.use("/api/consistency-results", consistencyResultsRouter);
 app.use("/api/ai-config", aiConfigRouter);
 app.use("/api/rag", ragRouter);
 app.use("/api", continuationRouter);
+app.use("/api/export", exportRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ success: false, error: `Not Found: ${req.method} ${req.path}` });

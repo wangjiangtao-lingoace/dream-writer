@@ -4,8 +4,8 @@ import { LlmInvokeService } from "./llm/LlmInvokeService";
 import { getRagRetrieveService } from "./RagRetrieveService";
 import { PhaseContext, createPhaseContext, savePhaseResult as _savePhaseResult, confirmPhaseResults as _confirmPhaseResults, updateJobProgress as _updateJobProgress, saveToKnowledgeBase as _saveToKnowledgeBase, persistGeneratedAssets as _persistGeneratedAssets } from "./pipeline/pipelineUtils";
 import { buildWorkspaceAssetContext, buildBookAnalysisContext, buildImitationPlanContext } from "./pipeline/contextBuilders";
-import { executeAnalyzePhase, executeAnalyzePhase_continue } from "./pipeline/analyzePhase";
-import { executePlanningPhase, executePlanningPhase_standalone } from "./pipeline/planningPhase";
+import { executeAnalyzePhase, decomposeIntoAssets } from "./pipeline/analyzePhase";
+import { executePlanningPhase_unified } from "./pipeline/planningPhase";
 import { executeAssetsPhase } from "./pipeline/assetsPhase";
 import { executeChapterOutlinesPhase, buildPreviousVolumeSummary, persistVolumeChapterData, persistStoryArcs } from "./pipeline/chapterOutlinesPhase";
 import { executeConsistencyCheckPhase, buildPlanSummaryForConsistency } from "./pipeline/consistencyPhase";
@@ -26,7 +26,8 @@ export interface PipelineConfig {
   autoDraftChapters?: number;
   sourcePolicy?: "verified_only";
   overwriteExistingChapters?: boolean;
-  mode?: "standalone" | "imitation" | "continue";
+  mode?: "create" | "imitation" | "standalone" | "continue";
+  sourceType?: "idea" | "content";
   pipelineVersion?: number;
 }
 
@@ -47,7 +48,7 @@ export class PipelineService {
     this.llmService = new LlmInvokeService();
   }
 
-  private get ctx(): PhaseContext {
+  public get ctx(): PhaseContext {
     return createPhaseContext(
       this.llmService,
       this.selfReview.bind(this),
@@ -67,10 +68,15 @@ export class PipelineService {
     }
 
     const volumeCount = config.volumeCount || 5;
-    const isStandaloneOrContinue = config.mode === "standalone" || config.mode === "continue" || !config.mode;
-    const totalSteps = isStandaloneOrContinue
-      ? 3 + 3 + (1 + volumeCount + 1) + 1 + 1
-      : 20;
+
+    // 向后兼容：迁移旧 mode 值
+    if (config.mode === "standalone" || config.mode === "continue") {
+      config.sourceType = config.sourceType || (config.mode === "continue" ? "content" : "idea");
+      config.mode = "create";
+    }
+
+    // outline(3) + assets(3) + planning(1+volumeCount+1) + consistency(1) + writing(1)
+    const totalSteps = 3 + 3 + (1 + volumeCount + 1) + 1 + 1;
 
     const configWithVersion = { ...config, pipelineVersion: 2 };
 
@@ -177,7 +183,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           where: { id: jobId },
           data: { status: "running", currentPhase: "planning", currentStep: "volume_outline" },
         });
-        executePlanningPhase_standalone(ctx, jobId);
+        executePlanningPhase_unified(ctx, jobId);
       }
       if (phase === "planning" && step === "volume_outline") {
         const volumeOutlineConfirmed = allResults.find(r => r.step === "volume_outline")?.status === "confirmed";
@@ -241,21 +247,6 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
       }
     }
 
-    if (allConfirmed && phase === "planning" && config.mode === "imitation") {
-      await prisma.pipelineJob.update({
-        where: { id: jobId },
-        data: { status: "running", currentPhase: "structuring", currentStep: "volume" },
-      });
-      this.executeStructuringPhase(ctx, jobId);
-    }
-    if (allConfirmed && phase === "structuring") {
-      await prisma.pipelineJob.update({
-        where: { id: jobId },
-        data: { status: "running", currentPhase: "writing", currentStep: "chapter_drafts" },
-      });
-      executeWritingPhase(ctx, jobId);
-    }
-
     return result;
   }
 
@@ -301,7 +292,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
       if (job.currentPhase === "outline" && job.currentStep === "waiting_confirm") {
         executeAssetsPhase(ctx, jobId);
       } else if (job.currentPhase === "assets" && job.currentStep === "waiting_confirm") {
-        executePlanningPhase_standalone(ctx, jobId);
+        executePlanningPhase_unified(ctx, jobId);
       } else if (job.currentPhase === "planning" && job.currentStep === "waiting_confirm") {
         const phaseResults = await prisma.phaseResult.findMany({ where: { jobId, phase: "planning" } });
         const hasVolumeOutline = phaseResults.some(r => r.step === "volume_outline" && r.status === "confirmed");
@@ -313,7 +304,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         } else if (hasChapterOutlines && hasStoryArcs) {
           executeConsistencyCheckPhase(ctx, jobId);
         } else {
-          executePlanningPhase_standalone(ctx, jobId);
+          executePlanningPhase_unified(ctx, jobId);
         }
       } else if (job.currentPhase === "consistency_check" && job.currentStep === "waiting_confirm") {
         executeWritingPhase(ctx, jobId);
@@ -330,11 +321,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
       } else if (job.currentPhase === "chapter_outline" && job.currentStep === "waiting_confirm") {
         executeWritingPhase(ctx, jobId);
       }
-      else if (job.currentPhase === "planning" && job.currentStep === "waiting_confirm") {
-        this.executeStructuringPhase(ctx, jobId);
-      } else if (job.currentPhase === "structuring" && job.currentStep === "waiting_confirm") {
-        executeWritingPhase(ctx, jobId);
-      } else {
+      else {
         this.executePipeline(jobId);
       }
     }
@@ -366,6 +353,16 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     const chPhase = phase === "chapter_outline" ? "chapter_outline" : phase === "generation" ? "generation" : "structuring";
 
     switch (step) {
+      case "decompose": {
+        const analyzeResult = await prisma.phaseResult.findUnique({
+          where: { jobId_phase_step: { jobId, phase: "outline", step: "analyze" } },
+        });
+        if (!analyzeResult) throw new Error("请先完成分析步骤");
+        const analysis = JSON.parse(analyzeResult.output);
+        const decomposed = await decomposeIntoAssets(ctx, job.novelId, job.novel.inspiration || "", analysis, config);
+        output = decomposed;
+        break;
+      }
       case "outline": {
         const knowledge = await getRagRetrieveService()?.retrieve(
           job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
@@ -391,9 +388,16 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         output = await generateCharacters(ctx, job.novelId, outline, worldview, charKnowledge, userHint);
         break;
       }
-      case "style":
-        output = await generateStyle(ctx, job.novelId, outline, config, userHint);
+      case "style": {
+        const [styleWvRes, styleCharRes] = await Promise.all([
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } } }),
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "characters" } } }),
+        ]);
+        const styleWv = styleWvRes ? JSON.parse(styleWvRes.output) : {};
+        const styleChar = styleCharRes ? JSON.parse(styleCharRes.output) : {};
+        output = await generateStyle(ctx, job.novelId, outline, styleWv, styleChar, config, userHint);
         break;
+      }
       case "volume": {
         const [volWvRes, volCharRes, volStyleRes] = await Promise.all([
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } } }),
@@ -501,7 +505,18 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const cchPlanSummary = buildPlanSummaryForConsistency(
           cchOutlines, cchHooks, cchForeshadows, cchMainlines, cchPleasurePoints, cchEmotionCurves,
         );
-        output = await generateConsistencyCheck(ctx, job.novelId, cchPlanSummary);
+        // 加载核心资产
+        const [cchOutlineRes, cchWvRes, cchCharRes, cchStyleRes] = await Promise.all([
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "outline", step: "outline" } } }),
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "worldview" } } }),
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "characters" } } }),
+          prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "style" } } }),
+        ]);
+        const cchOutline = cchOutlineRes ? JSON.parse(cchOutlineRes.output) : undefined;
+        const cchWv = cchWvRes ? JSON.parse(cchWvRes.output) : undefined;
+        const cchChar = cchCharRes ? JSON.parse(cchCharRes.output) : undefined;
+        const cchStyle = cchStyleRes ? JSON.parse(cchStyleRes.output) : undefined;
+        output = await generateConsistencyCheck(ctx, job.novelId, cchPlanSummary, cchOutline, cchWv, cchChar, cchStyle);
         break;
       }
 
@@ -611,109 +626,27 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     const config = JSON.parse(job.config) as PipelineConfig;
     const ctx = this.ctx;
 
-    if (config.mode === "standalone") {
-      try {
-        await executeAnalyzePhase(ctx, jobId, job.novelId, config);
-        await prisma.pipelineJob.update({
-          where: { id: jobId },
-          data: { status: "paused", currentPhase: "outline", currentStep: "waiting_confirm" },
-        });
-      } catch (error: any) {
-        await prisma.pipelineJob.update({
-          where: { id: jobId },
-          data: { status: "error", lastError: error.message },
-        });
-      }
-      return;
-    }
-
-    if (config.mode === "continue") {
-      try {
-        await executeAnalyzePhase_continue(ctx, jobId, job.novelId, config);
-        await prisma.pipelineJob.update({
-          where: { id: jobId },
-          data: { status: "paused", currentPhase: "outline", currentStep: "waiting_confirm" },
-        });
-      } catch (error: any) {
-        await prisma.pipelineJob.update({
-          where: { id: jobId },
-          data: { status: "error", lastError: error.message },
-        });
-      }
-      return;
-    }
-
     try {
-      await executePlanningPhase(ctx, jobId, job.novelId, config);
-
+      await executeAnalyzePhase(ctx, jobId, job.novelId, config);
       if (config.autoContinue) {
-        await _confirmPhaseResults(jobId, "planning");
-        this.executeStructuringPhase(ctx, jobId);
-        return;
+        await _confirmPhaseResults(jobId, "outline");
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: { status: "running", currentPhase: "assets", currentStep: "worldview" },
+        });
+        executeAssetsPhase(ctx, jobId);
+      } else {
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: { status: "paused", currentPhase: "outline", currentStep: "waiting_confirm" },
+        });
       }
-
-      await prisma.pipelineJob.update({
-        where: { id: jobId },
-        data: { status: "paused", currentPhase: "planning", currentStep: "waiting_confirm" },
-      });
-
     } catch (error: any) {
       await prisma.pipelineJob.update({
         where: { id: jobId },
         data: { status: "error", lastError: error.message },
       });
     }
-  }
-
-  // imitation 模式的结构化阶段
-  private async executeStructuringPhase(ctx: PhaseContext, jobId: string) {
-    const job = await prisma.pipelineJob.findUnique({
-      where: { id: jobId },
-      include: { novel: true },
-    });
-    if (!job) return;
-
-    const config = JSON.parse(job.config) as PipelineConfig;
-
-    const outlineResult = await prisma.phaseResult.findUnique({
-      where: { jobId_phase_step: { jobId, phase: "planning", step: "outline" } },
-    });
-    const outline = outlineResult ? JSON.parse(outlineResult.output) : {};
-
-    const [worldviewRes, charactersRes, styleRes] = await Promise.all([
-      prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "planning", step: "worldview" } } }),
-      prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "planning", step: "characters" } } }),
-      prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "planning", step: "style" } } }),
-    ]);
-    const worldview = worldviewRes ? JSON.parse(worldviewRes.output) : {};
-    const characters = charactersRes ? JSON.parse(charactersRes.output) : {};
-    const style = styleRes ? JSON.parse(styleRes.output) : {};
-
-    await _updateJobProgress(jobId, "structuring", "volume");
-    const volumeResult = await generateVolumeOutline(ctx, job.novelId, outline, worldview, characters, style, config);
-    await _savePhaseResult(jobId, "structuring", "volume", { outline }, volumeResult, this.selfReview.bind(this));
-    await _saveToKnowledgeBase(job.novelId, 'volume', '卷纲规划', volumeResult);
-
-    await _updateJobProgress(jobId, "structuring", "chapter_outline");
-    const chapterOutlineResult = await generateChapterOutlines(ctx, job.novelId, volumeResult, outline, worldview, characters, style, config);
-    await _savePhaseResult(jobId, "structuring", "chapter_outline", { volumes: volumeResult }, chapterOutlineResult, this.selfReview.bind(this));
-    await _saveToKnowledgeBase(job.novelId, 'chapter_outline', '章纲规划', chapterOutlineResult);
-
-    await _updateJobProgress(jobId, "structuring", "mainline_hook");
-    const mainlineHookResult = await generateMainlinesAndHooks(ctx, job.novelId, outline, volumeResult, worldview, characters, style);
-    await _savePhaseResult(jobId, "structuring", "mainline_hook", { outline, volumes: volumeResult }, mainlineHookResult, this.selfReview.bind(this));
-    await _saveToKnowledgeBase(job.novelId, 'mainline_hook', '主线钩子', mainlineHookResult);
-
-    if (config.autoContinue) {
-      await _confirmPhaseResults(jobId, "structuring");
-      executeWritingPhase(ctx, jobId);
-      return;
-    }
-
-    await prisma.pipelineJob.update({
-      where: { id: jobId },
-      data: { status: "paused", currentPhase: "structuring", currentStep: "waiting_confirm" },
-    });
   }
 }
 

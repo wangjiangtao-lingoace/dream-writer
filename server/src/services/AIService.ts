@@ -517,13 +517,17 @@ export async function* generateChapterContentStream(input: {
 ${novel.mainlines.map((m: any, i: number) => `${i + 1}. ${m.title}：${m.description || ""}`).join("\n")}
 ` : "";
 
-  const styleInfo = novel.styleProfiles[0] ? `
-【写作风格】${novel.styleProfiles[0].name}
-描述：${novel.styleProfiles[0].description || ""}
-叙事视角：${novel.styleProfiles[0].narrativePov}
-节奏：${novel.styleProfiles[0].pacing}
-句子长度：${novel.styleProfiles[0].sentenceLength}
-对话比例：${novel.styleProfiles[0].dialogueRatio}
+  const styleProfile = novel.styleProfiles[0];
+  const styleInfo = styleProfile ? `
+【写作风格】${styleProfile.name}
+描述：${styleProfile.description || ""}
+叙事视角：${styleProfile.narrativePov}
+节奏：${styleProfile.pacing}
+句子长度：${styleProfile.sentenceLength}
+对话比例：${styleProfile.dialogueRatio}
+${styleProfile.humorLevel ? `幽默程度：${styleProfile.humorLevel}` : ""}
+${styleProfile.emotionIntensity ? `情绪强度：${styleProfile.emotionIntensity}` : ""}
+${styleProfile.vocabulary ? `用词风格：${styleProfile.vocabulary}` : ""}
 ` : "";
 
   const analysisInfo = novel.assets[0] ? `
@@ -575,15 +579,20 @@ ${novel.assets[0].content?.substring(0, 1000) || ""}
     "5. 章末必须有钩子",
     "6. 去除 AI 味，让文字更有烟火气",
     "7. 目标字数：2000-2500字，不要写太长",
+    "8. 必须使用第三人称叙事（他/角色名），严禁使用第一人称（我/我们）",
     "",
     "请生成正文。",
   ].join("\n");
 
+  const systemPrompt = styleProfile?.description
+    ? `你是一名专业中文网络小说作家。${styleProfile.description}严禁出现 AI 味的套路化表达。`
+    : "你是克制、细腻、重视叙事推进的中文小说写作助手。你的文字有烟火气，擅长写对话和场景，避免 AI 味的套路化表达。";
+
   yield* llmService.streamText({
-    system: "你是克制、细腻、重视叙事推进的中文小说写作助手。你的文字有烟火气，擅长写对话和场景，避免 AI 味的套路化表达。",
+    system: systemPrompt,
     prompt,
-    temperature: 0.8,
-    maxTokens: 4000,
+    temperature: 0.85,
+    maxTokens: 5000,
   });
 }
 
@@ -645,13 +654,17 @@ ${novel.mainlines.map((m: any, i: number) => `${i + 1}. ${m.title}：${m.descrip
 ` : "";
 
   // 获取风格信息
-  const styleInfo = novel.styleProfiles[0] ? `
-【写作风格】${novel.styleProfiles[0].name}
-描述：${novel.styleProfiles[0].description || ""}
-叙事视角：${novel.styleProfiles[0].narrativePov}
-节奏：${novel.styleProfiles[0].pacing}
-句子长度：${novel.styleProfiles[0].sentenceLength}
-对话比例：${novel.styleProfiles[0].dialogueRatio}
+  const styleProfile = novel.styleProfiles[0];
+  const styleInfo = styleProfile ? `
+【写作风格】${styleProfile.name}
+描述：${styleProfile.description || ""}
+叙事视角：${styleProfile.narrativePov}
+节奏：${styleProfile.pacing}
+句子长度：${styleProfile.sentenceLength}
+对话比例：${styleProfile.dialogueRatio}
+${styleProfile.humorLevel ? `幽默程度：${styleProfile.humorLevel}` : ""}
+${styleProfile.emotionIntensity ? `情绪强度：${styleProfile.emotionIntensity}` : ""}
+${styleProfile.vocabulary ? `用词风格：${styleProfile.vocabulary}` : ""}
 ` : "";
 
   // 获取拆书分析结果
@@ -705,15 +718,20 @@ ${novel.assets[0].content?.substring(0, 1000) || ""}
     "5. 章末必须有钩子",
     "6. 去除 AI 味，让文字更有烟火气",
     "7. 目标字数：2000-2500字，不要写太长",
+    "8. 必须使用第三人称叙事（他/角色名），严禁使用第一人称（我/我们）",
     "",
     "请生成正文。",
   ].join("\n");
 
+  const systemPrompt = styleProfile?.description
+    ? `你是一名专业中文网络小说作家。${styleProfile.description}严禁出现 AI 味的套路化表达。`
+    : "你是克制、细腻、重视叙事推进的中文小说写作助手。你的文字有烟火气，擅长写对话和场景，避免 AI 味的套路化表达。";
+
   const result = await llmService.completeText({
-    system: "你是克制、细腻、重视叙事推进的中文小说写作助手。你的文字有烟火气，擅长写对话和场景，避免 AI 味的套路化表达。",
+    system: systemPrompt,
     prompt,
-    temperature: 0.8,
-    maxTokens: 4000,
+    temperature: 0.85,
+    maxTokens: 5000,
   });
 
   if (!result) throw new Error("正文生成失败：LLM 未返回结果。请检查 API Key 配置。");

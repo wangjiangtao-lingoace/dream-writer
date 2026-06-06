@@ -1,7 +1,8 @@
 import { prisma } from "../../db/prisma";
 import { PipelineConfig } from "../PipelineService";
-import { PhaseContext, saveToKnowledgeBase } from "./pipelineUtils";
+import { PhaseContext, saveToKnowledgeBase, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateEnrichedChapterOutlines, generateStoryArcs } from "./generators";
+import { executeConsistencyCheckPhase } from "./consistencyPhase";
 
 export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
@@ -16,6 +17,21 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
   const chaptersPerVolume = config.chaptersPerVolume || 30;
 
   try {
+    // 缓存检查：如果所有卷的章纲已存在，跳过重新生成
+    const existingOutlines = await prisma.phaseResult.findMany({
+      where: { jobId, phase: "planning", step: { startsWith: "chapter_outline_vol_" } },
+    });
+    if (existingOutlines.length >= volumeCount) {
+      const allHaveContent = existingOutlines.every(r => r.output && r.output !== "{}");
+      if (allHaveContent) {
+        console.log(`[chapterOutlines] 所有${volumeCount}卷章纲已存在，跳过重新生成`);
+        await autoAdvanceOrPause(jobId, "planning", async () => {
+          await executeConsistencyCheckPhase(ctx, jobId);
+        });
+        return;
+      }
+    }
+
     // 加载前置阶段结果
     const outlineResult = await ctx.getPhaseOutput(jobId, "outline", "outline");
     const volumeResult = await ctx.getPhaseOutput(jobId, "planning", "volume_outline");
@@ -52,7 +68,13 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
         enrichedChapters);
     }
 
-    // 生成跨卷故事弧线
+    // 生成跨卷故事弧线（缓存检查）
+    const existingStoryArcs = await prisma.phaseResult.findUnique({
+      where: { jobId_phase_step: { jobId, phase: "planning", step: "story_arcs" } },
+    });
+    if (existingStoryArcs?.output && existingStoryArcs.output !== "{}") {
+      console.log("[chapterOutlines] 故事弧线已存在，跳过重新生成");
+    } else {
     await ctx.updateJobProgress(jobId, "planning", "story_arcs");
     const storyArcs = await generateStoryArcs(
       ctx, novelId, outlineResult, allChapterOutlines, volumeResult,
@@ -62,11 +84,15 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
     await ctx.savePhaseResult(jobId, "planning", "story_arcs",
       { outline: outlineResult, totalChapters: volumeCount * chaptersPerVolume },
       storyArcs);
+    } // end else (story arcs cache check)
 
     // 暂停等用户确认
-    await prisma.pipelineJob.update({
-      where: { id: jobId },
-      data: { status: "paused", currentPhase: "planning", currentStep: "waiting_confirm" },
+    await autoAdvanceOrPause(jobId, "planning", async () => {
+      await prisma.pipelineJob.update({
+        where: { id: jobId },
+        data: { status: "running", currentPhase: "consistency_check", currentStep: "consistency" },
+      });
+      await executeConsistencyCheckPhase(ctx, jobId);
     });
   } catch (error: any) {
     await prisma.pipelineJob.update({
@@ -82,11 +108,40 @@ export function buildPreviousVolumeSummary(allChapterOutlines: any, currentVolId
   for (let i = 0; i < currentVolIdx; i++) {
     const group = allChapterOutlines.chapterOutlines[i];
     if (!group) continue;
+    const chapters = group.chapters || [];
     const volTitle = `第${i + 1}卷`;
-    const chapterLines = (group.chapters || []).map((ch: any, idx: number) =>
-      `  第${idx + 1}章 ${ch.title}：${ch.goal || ""} | 钩子：${ch.hook || "无"}`
-    ).join("\n");
-    summaryParts.push(`【${volTitle}】\n${chapterLines}`);
+    const volGoal = group.volumeGoal || chapters[0]?.goal || "";
+    const volConflict = group.volumeConflict || chapters[0]?.conflict || "";
+
+    // 距离当前卷越远，摘要越精简
+    const distance = currentVolIdx - i - 1;
+    if (distance >= 2) {
+      // 远距离卷：只传卷级摘要（~50 tokens）
+      const firstCh = chapters[0];
+      const lastCh = chapters[chapters.length - 1];
+      summaryParts.push(
+        `【${volTitle}】目标：${volGoal} | 冲突：${volConflict}\n` +
+        `开篇：${firstCh?.title || ""} → 结局：${lastCh?.title || ""}（${lastCh?.hook || ""}）`
+      );
+    } else {
+      // 相邻卷：传首尾章节 + 关键转折（~150 tokens）
+      const keyChapters = [];
+      if (chapters.length > 0) keyChapters.push(`开篇：${chapters[0].title} — ${chapters[0].goal || ""}`);
+      // 取中间转折章（约 1/3 和 2/3 处）
+      const mid1 = chapters[Math.floor(chapters.length / 3)];
+      const mid2 = chapters[Math.floor(chapters.length * 2 / 3)];
+      if (mid1 && mid1 !== chapters[0] && mid1 !== chapters[chapters.length - 1]) {
+        keyChapters.push(`转折：${mid1.title} — ${mid1.conflict || mid1.goal || ""}`);
+      }
+      if (mid2 && mid2 !== mid1 && mid2 !== chapters[0] && mid2 !== chapters[chapters.length - 1]) {
+        keyChapters.push(`转折：${mid2.title} — ${mid2.conflict || mid2.goal || ""}`);
+      }
+      if (chapters.length > 1) {
+        const last = chapters[chapters.length - 1];
+        keyChapters.push(`结局：${last.title} — ${last.hook || last.goal || ""}`);
+      }
+      summaryParts.push(`【${volTitle}】目标：${volGoal} | 冲突：${volConflict}\n${keyChapters.join("\n")}`);
+    }
   }
   return summaryParts.join("\n\n");
 }

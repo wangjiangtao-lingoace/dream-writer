@@ -2,9 +2,15 @@ import { prisma } from "../../db/prisma";
 import { parseLlmJson } from "../../utils/parseJson";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext } from "./pipelineUtils";
-import { updateStoryState, extractMemories } from "./postProcessing";
+import { mergedPostProcessing } from "./postProcessing";
+import { autoManageMemories } from "../MemoryCompressionService";
+import { ContextAssembler } from "./contextAssembler";
+import { validateChapterQuality } from "./qualityCheck";
+import { QUALITY_THRESHOLDS } from "./writingRules";
+import { runPeriodicConsistencyCheck, persistPeriodicCheckResults } from "./periodicCheck";
+import { getCharacterForbiddenKnowledge } from "./characterKnowledge";
 
-export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
+export async function executeWritingPhase(ctx: PhaseContext, jobId: string, startOrder?: number) {
   const job = await prisma.pipelineJob.findUnique({
     where: { id: jobId },
     include: { novel: true },
@@ -12,11 +18,11 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
   if (!job) return;
 
   const config = JSON.parse(job.config) as PipelineConfig;
-  const draftCount = Math.max(1, Math.min(config.autoDraftChapters || 3, 3));
+  const draftCount = Math.max(1, config.autoDraftChapters || 3);
 
   try {
     await ctx.updateJobProgress(jobId, "writing", "chapter_drafts");
-    const chapters = await generateInitialChapterDrafts(ctx, jobId, job.novelId, config, draftCount);
+    const chapters = await generateInitialChapterDrafts(ctx, jobId, job.novelId, config, draftCount, startOrder);
     await ctx.savePhaseResult(jobId, "writing", "chapter_drafts", {
       imitationPlanId: config.imitationPlanId,
       bookAnalysisId: config.bookAnalysisId,
@@ -24,28 +30,67 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
     }, { chapters });
     await ctx.saveToKnowledgeBase(job.novelId, "chapter_draft", "自动仿写样章", { chapters });
 
-    // 续写模式后处理：更新 StoryState + 提取记忆
-    if (config.mode === "continue") {
-      for (const ch of chapters) {
-        if ((ch as any).skipped || !ch.content) continue;
-        try {
-          await updateStoryState(job.novelId, ch.order, ch.content);
-          await extractMemories(job.novelId, ch.id, ch.content);
-        } catch (e) {
-          console.warn(`[writingPhase] 第${ch.order}章后处理失败:`, e);
+    // 重建 enrichedChaptersMap（用于后处理）
+    const enrichedChaptersMap: Map<number, any> = new Map();
+    const volumeCount = config.volumeCount || 5;
+    let globalOrder = 1;
+    for (let v = 1; v <= volumeCount; v++) {
+      const volRes = await prisma.phaseResult.findUnique({
+        where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${v}` } },
+      });
+      if (volRes) {
+        const parsed = parseLlmJson(volRes.output) || {};
+        for (const ch of (parsed?.chapters || [])) {
+          enrichedChaptersMap.set(globalOrder, ch);
+          globalOrder++;
         }
       }
     }
 
-    await prisma.pipelineJob.update({
-      where: { id: jobId },
-      data: {
-        status: "completed",
-        currentPhase: "writing",
-        currentStep: "completed",
-        progress: 100,
-      },
-    });
+    // 后处理：合并为 1 次 LLM 调用（storyState + memories + characterStatus + knowledge）
+    for (const ch of chapters) {
+      if ((ch as any).skipped || !ch.content) continue;
+      try {
+        const enrichedChapter = enrichedChaptersMap.get(ch.order) || {};
+        await mergedPostProcessing(job.novelId, ch.id, ch.order, ch.content, enrichedChapter);
+        await autoManageMemories(job.novelId, ch.order);
+      } catch (e) {
+        console.warn(`[writingPhase] 第${ch.order}章后处理失败:`, e);
+      }
+    }
+
+    // 章纲修正：写完一卷后检查偏离度，修正下一卷章纲
+    if (config.pipelineVersion && config.pipelineVersion >= 2) {
+      await correctNextVolumeOutlines(ctx, jobId, job.novelId, config, chapters).catch((e) => {
+        console.warn("[writingPhase] 章纲修正失败:", e);
+      });
+    }
+
+    // 检查是否有部分章节失败
+    const writtenCount = chapters.filter((c: any) => !c.skipped).length;
+    const skippedCount = chapters.filter((c: any) => c.skipped).length;
+
+    if (writtenCount === 0 && skippedCount === 0) {
+      await prisma.pipelineJob.update({
+        where: { id: jobId },
+        data: {
+          status: "error",
+          currentPhase: "writing",
+          currentStep: "chapter_drafts",
+          lastError: "所有章节生成失败。",
+        },
+      });
+    } else {
+      await prisma.pipelineJob.update({
+        where: { id: jobId },
+        data: {
+          status: "completed",
+          currentPhase: "writing",
+          currentStep: "completed",
+          progress: 100,
+        },
+      });
+    }
   } catch (error: any) {
     await prisma.pipelineJob.update({
       where: { id: jobId },
@@ -59,7 +104,7 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string) {
   }
 }
 
-async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, novelId: string, config: PipelineConfig, count: number) {
+async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, novelId: string, config: PipelineConfig, count: number, startOrder?: number) {
   const novel = await prisma.novel.findUnique({
     where: { id: novelId },
     include: { chapters: { orderBy: { order: "asc" } } },
@@ -68,7 +113,9 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
 
   const pipelineVersion = config.pipelineVersion || 1;
 
-  const [plan, outlineResult, chapterOutlineResult, workspaceContext, styleProfile] = await Promise.all([
+  const assembler = new ContextAssembler(novelId);
+
+  const [plan, outlineResult, chapterOutlineResult] = await Promise.all([
     config.imitationPlanId
       ? prisma.imitationPlan.findFirst({ where: { id: config.imitationPlanId, novelId } })
       : Promise.resolve(null),
@@ -82,8 +129,6 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       : prisma.phaseResult.findUnique({
           where: { jobId_phase_step: { jobId, phase: "structuring", step: "chapter_outline" } },
         }),
-    ctx.buildWorkspaceAssetContext(novelId, jobId),
-    prisma.styleProfile.findFirst({ where: { novelId, isDefault: true } }),
   ]);
 
   const blueprint = ctx.safeJson(plan?.blueprint, {});
@@ -91,15 +136,9 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   const sampleDrafts = ctx.safeJson(plan?.sampleDrafts, []);
   const outline = outlineResult ? parseLlmJson(outlineResult.output) || {} : {};
   const chapterOutline = chapterOutlineResult ? parseLlmJson(chapterOutlineResult.output) || {} : {};
-  const enhancedFields = styleProfile ? ctx.safeJson(styleProfile.customRules, {}) : {};
-  const style = styleProfile ? {
-    name: styleProfile.name,
-    description: styleProfile.description,
-    ...enhancedFields,
-  } : {};
 
-  // 新流程：从 planning 阶段加载所有卷的富化章纲
-  let enrichedChaptersMap: Map<number, any> = new Map();
+  // 从 planning 阶段加载所有卷的富化章纲
+  const enrichedChaptersMap: Map<number, any> = new Map();
   if (pipelineVersion >= 2) {
     const volumeCount = config.volumeCount || 5;
     let globalOrder = 1;
@@ -118,88 +157,191 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   }
 
   const chapterCards = resolveChapterCards(chapterTemplate, chapterOutline, count);
-  const previousChapters: Array<{ order: number; title: string; content: string }> = [];
+  const previousChapters: Array<{ order: number; title: string; summary: string; ending: string }> = [];
   const generated = [];
+  const failedChapters: Array<{ order: number; error: string }> = [];
+  const offset = (startOrder || 1) - 1;
 
   for (let index = 0; index < count; index += 1) {
-    const order = index + 1;
-    const card = chapterCards[index] ?? {};
-    const baseTitle = card.title || card.chapterTitle || `第${order}章`;
-    const title = await resolveGeneratedChapterTitle(ctx, {
-      novel,
-      outline,
-      blueprint,
-      card,
-      order,
-      baseTitle,
-    });
-    const summary = [
-      card.goal ? `目标：${card.goal}` : "",
-      card.function ? `功能：${card.function}` : "",
-      card.conflict ? `冲突：${card.conflict}` : "",
-      card.hook ? `钩子：${card.hook}` : "",
-    ].filter(Boolean).join("\n") || `基于仿写方案生成第 ${order} 章。`;
+    const order = offset + index + 1;
+    const card = enrichedChaptersMap.get(order) || (chapterCards[index] ?? {});
 
-    const existing = await prisma.chapter.findUnique({
-      where: { novelId_order: { novelId, order } },
-    });
-    if (existing?.content?.trim() && !config.overwriteExistingChapters) {
-      previousChapters.push({ order, title: existing.title, content: existing.content.slice(0, 1200) });
-      generated.push({
-        ...existing,
-        skipped: true,
-        skipReason: "existing_content",
+    try {
+      const baseTitle = card.title || card.chapterTitle || `第${order}章`;
+      const title = await resolveGeneratedChapterTitle(ctx, {
+        novel,
+        outline,
+        blueprint,
+        card,
+        order,
+        baseTitle,
       });
-      continue;
-    }
+      const summary = [
+        card.goal ? `目标：${card.goal}` : "",
+        card.function ? `功能：${card.function}` : "",
+        card.conflict ? `冲突：${card.conflict}` : "",
+        card.hook ? `钩子：${card.hook}` : "",
+      ].filter(Boolean).join("\n") || `基于仿写方案生成第 ${order} 章。`;
 
-    const chapter = existing ?? await prisma.chapter.create({
-      data: {
-        novelId,
+      const existing = await prisma.chapter.findUnique({
+        where: { novelId_order: { novelId, order } },
+      });
+      if (existing?.content?.trim() && !config.overwriteExistingChapters) {
+        previousChapters.push({
+          order,
+          title: existing.title,
+          summary: existing.summary || existing.content.slice(0, 100),
+          ending: existing.content.slice(-300),
+        });
+        generated.push({
+          ...existing,
+          skipped: true,
+          skipReason: "existing_content",
+        });
+        continue;
+      }
+
+      const chapter = existing ?? await prisma.chapter.create({
+        data: {
+          novelId,
+          order,
+          title,
+          summary,
+          status: "planned",
+          source: "imitation_pipeline",
+        },
+      });
+      if (existing) {
+        await prisma.chapter.update({
+          where: { id: existing.id },
+          data: { title, summary, source: "imitation_pipeline" },
+        });
+      }
+
+      // 使用 ContextAssembler 组装精简上下文（~1,500 tokens vs 旧 ~15,000）
+      const compactContext = await assembler.assembleForChapter(order, enrichedChaptersMap.get(order) || card);
+      const targetWordCount = config.targetWordCount || 2500;
+
+      // 角色知识边界检查：获取禁忌知识列表
+      const charNames = (card?.characters || []).map((c: any) => c.name).filter(Boolean);
+      const forbiddenKnowledge = await getCharacterForbiddenKnowledge(novelId, order, charNames).catch(() => []);
+
+      // 写作 + 质量后验循环（最多重试 MAX_RETRY_COUNT 次）
+      let draft = await generateChapterDraft(ctx, {
+        novel,
+        outline,
+        blueprint,
+        chapterTemplate,
+        sampleDrafts,
+        card,
         order,
         title,
         summary,
-        status: "planned",
-        source: "imitation_pipeline",
-      },
-    });
-    if (existing) {
-      await prisma.chapter.update({
-        where: { id: existing.id },
-        data: { title, summary, source: "imitation_pipeline" },
+        previousChapters,
+        compactContext,
+        targetWordCount,
+        forbiddenKnowledge,
       });
+
+      let retryCount = 0;
+      let qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
+
+      while (!qualityResult.passed && qualityResult.shouldRetry && retryCount < QUALITY_THRESHOLDS.MAX_RETRY_COUNT) {
+        retryCount++;
+        console.log(`[writingPhase] 第${order}章质量不合格，第${retryCount}次重试：${qualityResult.retryHint}`);
+        draft = await generateChapterDraft(ctx, {
+          novel,
+          outline,
+          blueprint,
+          chapterTemplate,
+          sampleDrafts,
+          card,
+          order,
+          title,
+          summary,
+          previousChapters,
+          compactContext,
+          targetWordCount,
+          retryHint: qualityResult.retryHint,
+        });
+        qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
+      }
+
+      // 保存质量日志
+      await prisma.chapterQualityLog.create({
+        data: {
+          novelId,
+          chapterOrder: order,
+          checkType: "post_gen",
+          scores: JSON.stringify(qualityResult.scores),
+          issues: JSON.stringify(qualityResult.issues),
+          retryCount,
+          passed: qualityResult.passed,
+        },
+      }).catch((e) => console.warn(`[writingPhase] 质量日志保存失败:`, e));
+
+      // 更新 Chapter 质量字段（基于 AI 味和字数合规度计算）
+      const qualityScore = qualityResult.passed ? 8 : 5;
+
+      const updated = await prisma.chapter.update({
+        where: { id: chapter.id },
+        data: {
+          title,
+          summary,
+          content: draft,
+          wordCount: ctx.countWords(draft),
+          status: "drafted",
+          source: config.imitationPlanId ? "imitation_pipeline" : "pipeline",
+          qualityScore,
+          aiSmellCount: Math.round(qualityResult.scores.aiSmell * draft.length / 100),
+          reviewStatus: qualityResult.passed ? "approved" : "reviewed",
+        },
+      });
+
+      // 章级概要（用正文前 100 字，不再调 LLM）
+      const quickSummary = draft.slice(0, 100).replace(/\n/g, " ");
+      previousChapters.push({ order, title, summary: quickSummary, ending: draft.slice(-300) });
+
+      // 每 10 章运行一次周期性一致性检查
+      if (order % 10 === 0) {
+        runPeriodicConsistencyCheck(ctx, novelId, order).then(async (checkResult) => {
+          await persistPeriodicCheckResults(novelId, order, checkResult);
+          const totalAlerts = checkResult.hookAlerts.length + checkResult.foreshadowAlerts.length +
+            checkResult.characterDrifts.length + checkResult.emotionIssues.length;
+          if (totalAlerts > 0) {
+            console.log(`[writingPhase] 第${order}章周期性检查发现${totalAlerts}个问题`);
+          }
+        }).catch((e) => console.warn(`[writingPhase] 周期性检查失败:`, e));
+      }
+
+      generated.push(updated);
+    } catch (e: any) {
+      console.warn(`[writingPhase] 第${order}章生成失败，继续下一章:`, e.message);
+      failedChapters.push({ order, error: e.message || "unknown" });
     }
 
-    const draft = await generateChapterDraft(ctx, {
-      novel,
-      outline,
-      blueprint,
-      chapterTemplate,
-      sampleDrafts,
-      card,
-      style,
-      order,
-      title,
-      summary,
-      previousChapters,
-      workspaceContext,
-      targetWordCount: config.targetWordCount || 1800,
-      enrichedChapter: enrichedChaptersMap.get(order),
-    });
-
-    const updated = await prisma.chapter.update({
-      where: { id: chapter.id },
+    // 章节级进度更新 + checkpoint
+    const chapterProgress = Math.round(((index + 1) / count) * 100);
+    await prisma.pipelineJob.update({
+      where: { id: jobId },
       data: {
-        title,
-        summary,
-        content: draft,
-        wordCount: ctx.countWords(draft),
-        status: "drafted",
-        source: config.imitationPlanId ? "imitation_pipeline" : "pipeline",
+        progress: chapterProgress,
+        currentStep: `chapter_${order}`,
       },
+    }).catch(() => {});
+  }
+
+  // 批次完成后报告失败章节
+  if (failedChapters.length > 0) {
+    console.warn(`[writingPhase] 批次完成，${failedChapters.length}章失败：`, failedChapters.map(f => `第${f.order}章`).join("、"));
+  }
+
+  // 自动续写调度（如果启用了 autoContinue）
+  if (config.autoContinue) {
+    const { scheduleNextBatch } = await import("./autoScheduler");
+    scheduleNextBatch(novelId, jobId, config).catch((e) => {
+      console.warn("[writingPhase] 自动续写调度失败:", e);
     });
-    previousChapters.push({ order, title, content: draft.slice(0, 1200) });
-    generated.push(updated);
   }
 
   return generated;
@@ -212,202 +354,112 @@ async function generateChapterDraft(ctx: PhaseContext, input: {
   chapterTemplate: any;
   sampleDrafts: any[];
   card: any;
-  style: any;
   order: number;
   title: string;
   summary: string;
-  previousChapters: Array<{ order: number; title: string; content: string }>;
-  workspaceContext: string;
+  previousChapters: Array<{ order: number; title: string; summary: string; ending: string }>;
+  compactContext: string;
   targetWordCount: number;
-  enrichedChapter?: any;
+  retryHint?: string;
+  forbiddenKnowledge?: string[];
 }) {
-  // 构建风格约束文本
-  const styleLines: string[] = [];
-  if (input.style && Object.keys(input.style).length > 0) {
-    const s = input.style;
-    if (s.toneAndAtmosphere) styleLines.push(`基调氛围：${s.toneAndAtmosphere}`);
-    if (s.emotionalRhythm) styleLines.push(`情绪节奏：${s.emotionalRhythm}`);
-    if (s.contrastPatterns) styleLines.push(`反差设计：${s.contrastPatterns}`);
-    if (s.humorStyle && s.humorStyle !== "无") styleLines.push(`幽默方式：${s.humorStyle}`);
-    if (s.tensionTechniques) styleLines.push(`紧张感技巧：${s.tensionTechniques}`);
-    if (s.suspenseTechniques) styleLines.push(`悬念技巧：${s.suspenseTechniques}`);
-    if (s.sentenceRhythm) styleLines.push(`句式节奏：${s.sentenceRhythm}`);
-    if (s.dialogueStyle) styleLines.push(`对话风格：${s.dialogueStyle}`);
-    if (s.chapterOpeningStyle) styleLines.push(`开篇方式：${s.chapterOpeningStyle}`);
-    if (s.chapterEndingStyle) styleLines.push(`收尾方式：${s.chapterEndingStyle}`);
-    if (Array.isArray(s.writingRules) && s.writingRules.length) {
-      styleLines.push(`写作规则：${s.writingRules.join("；")}`);
-    }
-    if (Array.isArray(s.avoidList) && s.avoidList.length) {
-      styleLines.push(`必须避免：${s.avoidList.join("；")}`);
-    }
-  }
-  const styleBlock = styleLines.length > 0
-    ? `\n${styleLines.join("\n")}\n`
+  const { WRITING_SYSTEM_PROMPT } = await import("./writingRules");
+  const system = WRITING_SYSTEM_PROMPT;
+
+  const retrySection = input.retryHint
+    ? `\n【重试修正要求 — 必须严格遵守】\n上一版存在以下问题，请务必修正：\n${input.retryHint}\n`
     : "";
 
-  // 提取人物卡信息
-  const characters = extractCharacterCards(input.workspaceContext);
-  const characterBlock = characters || "";
-
-  // 提取大纲核心信息
-  const outlineCore = extractOutlineCore(input.outline);
-
-  const system = `你是一位顶级中文网络小说作家，擅长写出让读者欲罢不能的故事。
-
-你的写作铁律：
-1. 禁止使用任何 AI 味词汇：不禁、不由得、宛如、仿佛、似乎在诉说、一缕、一抹、一丝、缓缓、淡淡地、静静地、默默地、轻轻地
-2. 禁止用「他心想」「她暗想」开头的大段内心独白，用行动和对话展现人物内心
-3. 禁止用「突然」作为转折词，用具体的感官描写制造意外感
-4. 禁止大段旁白式设定解释，设定融入对话和行动中自然展现
-5. 对话必须像真人说话：有口头禅、有停顿、有未说完的话、有答非所问
-6. 每个角色说话方式必须不同：粗人说粗话、文人引经据贵、小孩用短句
-7. 情节推进靠人物动机驱动，不是靠作者安排，每个人做事都要有理由
-8. 描写具体化：不说「他很生气」，说「他攥紧拳头，指节发白，咬肌鼓起」
-9. 场景描写要有功能性：推动情节、揭示人物、制造氛围，三选一，否则删掉
-10. 章末必须留钩子，让读者想看下一章`;
+  const forbiddenSection = input.forbiddenKnowledge?.length
+    ? `\n【角色知识边界 — 禁止提及】\n以下信息在本章中对应角色不应该知道，请勿在对话或内心活动中提及：\n${input.forbiddenKnowledge.join("\n")}\n`
+    : "";
 
   const prompt = `请为「${input.novel.title}」写第${input.order}章的完整正文。
 
-【故事核心 — 你的所有描写必须围绕这个核心展开】
-${outlineCore}
-
-${characterBlock}
-
-【本章任务】
-章节标题：${input.title}
-章节目标：${input.summary}
-
-${styleBlock}
-
-${buildEnrichedChapterBlock(input.enrichedChapter)}
-
-【前文衔接】
-${input.previousChapters.length
-  ? input.previousChapters.map((chapter) => `第${chapter.order}章 ${chapter.title}（摘要）：${chapter.content.slice(0, 600)}`).join("\n\n")
-  : "这是开篇第一章，需要快速建立人物、冲突和世界观。"}
+${input.compactContext}
 
 【写作要求】
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
-2. 目标字数：约 ${input.targetWordCount} 中文字
+2. 目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.8)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
 3. 场景转换用空行分隔，不要用「场景一」「场景二」这样的标记
 4. 对话用引号「」标注，不要用 ""
 5. 第一章必须在前 300 字内建立冲突或悬念，不要用风景描写开头
 6. 每段不超过 4 行，保持阅读节奏
-
+7. 必须使用第三人称视角（他/她/角色名），禁止使用「我」「我们」
+${forbiddenSection}${retrySection}
 请开始写作：`;
 
   const result = await ctx.llmService.completeText({
     system,
     prompt,
     temperature: 0.78,
-    maxTokens: Math.max(2000, Math.min(4500, Math.round(input.targetWordCount * 2))),
+    maxTokens: Math.max(3000, Math.min(5000, Math.round(input.targetWordCount * 2))),
   });
 
   return result?.trim() || ctx.buildFallbackChapterDraft(input);
 }
 
-function buildEnrichedChapterBlock(enriched: any): string {
-  if (!enriched) return "";
-
-  const parts: string[] = [];
-  parts.push("【本章详细规划 — 必须严格遵守】");
-
-  if (Array.isArray(enriched.characters) && enriched.characters.length > 0) {
-    const charDesc = enriched.characters.map((c: any) =>
-      `${c.name}（目标：${c.goal || "无"}，行动：${c.action || "无"}）`
-    ).join("、");
-    parts.push(`出场角色：${charDesc}`);
+/**
+ * 轻量章级概要生成（50-100字，maxTokens=150）
+ */
+export async function generateQuickSummary(ctx: PhaseContext, content: string): Promise<string> {
+  try {
+    const result = await ctx.llmService.completeText({
+      system: "用50-100字总结以下章节的核心内容。只输出摘要文本，不要JSON，不要其他内容。",
+      prompt: content.slice(0, 3000),
+      temperature: 0.2,
+      maxTokens: 150,
+    });
+    return result?.trim() || content.slice(0, 100);
+  } catch {
+    return content.slice(0, 100);
   }
-
-  if (Array.isArray(enriched.hooksPlanted) && enriched.hooksPlanted.length > 0) {
-    const hooksDesc = enriched.hooksPlanted.map((h: any) =>
-      `「${h.title}」（类型：${h.type}，强度：${h.intensity}，计划第${h.plannedResolveChapter || "?"}章揭示）：${h.description || ""}`
-    ).join("\n  ");
-    parts.push(`本章埋设钩子：\n  ${hooksDesc}`);
-  }
-
-  if (Array.isArray(enriched.hooksResolved) && enriched.hooksResolved.length > 0) {
-    const resolvedDesc = enriched.hooksResolved.map((h: any) =>
-      `「${h.title}」：${h.resolvedDescription || ""}`
-    ).join("、");
-    parts.push(`本章回收钩子：${resolvedDesc}`);
-  }
-
-  if (Array.isArray(enriched.foreshadowPlanted) && enriched.foreshadowPlanted.length > 0) {
-    const fsDesc = enriched.foreshadowPlanted.map((f: any) =>
-      `「${f.title}」（计划第${f.plannedPayoffChapter || "?"}章回收）：${f.description || ""}`
-    ).join("\n  ");
-    parts.push(`本章埋设伏笔：\n  ${fsDesc}`);
-  }
-
-  if (Array.isArray(enriched.foreshadowPayoff) && enriched.foreshadowPayoff.length > 0) {
-    const payoffDesc = enriched.foreshadowPayoff.map((f: any) =>
-      `「${f.title}」：${f.payoffDescription || ""}`
-    ).join("、");
-    parts.push(`本章回收伏笔：${payoffDesc}`);
-  }
-
-  if (enriched.pleasurePoint && typeof enriched.pleasurePoint === "object") {
-    const pp = enriched.pleasurePoint;
-    parts.push(`爽点设计：${pp.description || "无"}（类型：${pp.type || "无"}，强度：${pp.intensity || 5}）`);
-  }
-
-  if (enriched.emotionData && typeof enriched.emotionData === "object") {
-    const ed = enriched.emotionData;
-    const tags: string[] = [];
-    if (ed.isClimax) tags.push("高潮章");
-    if (ed.isTurningPoint) tags.push("转折章");
-    if (ed.isBreathing) tags.push("呼吸章");
-    parts.push(`情绪曲线：${ed.emotionType || "neutral"}（强度：${ed.intensity || 5}）${tags.length ? " [" + tags.join(",") + "]" : ""}`);
-  }
-
-  return parts.length > 1 ? parts.join("\n") + "\n" : "";
 }
 
-function extractCharacterCards(workspaceContext: string): string {
-  if (!workspaceContext) return "";
-  const lines = workspaceContext.split("\n");
-  const charLines: string[] = [];
-  let inCharSection = false;
-  for (const line of lines) {
-    if (line.includes("人物卡") || line.includes("## 人物")) {
-      inCharSection = true;
-      continue;
-    }
-    if (inCharSection && line.startsWith("## ")) {
-      break;
-    }
-    if (inCharSection && line.startsWith("- ")) {
-      charLines.push(line.slice(2));
-    }
-  }
-  if (charLines.length === 0) return "";
-  return `【人物卡 — 写作时必须保持人物性格一致】\n${charLines.map(c => `· ${c}`).join("\n")}`;
-}
+/**
+ * 结构化章级概要生成（存入 ChapterSummary 表，供 ContextAssembler 使用）
+ */
+export async function generateChapterSummary(
+  ctx: PhaseContext, chapterOrder: number, chapterTitle: string, content: string,
+): Promise<{ summary: string; keyEvents: string; characterStates: string; endingState: string; newHooks: string; resolvedHooks: string }> {
+  try {
+    const result = await ctx.llmService.completeText({
+      system: `你是一位小说编辑。分析章节内容，输出JSON概要。只输出JSON，无其他内容。`,
+      prompt: `第${chapterOrder}章「${chapterTitle}」
 
-function extractOutlineCore(outline: any): string {
-  if (!outline || typeof outline !== "object") return "暂无大纲信息。";
-  const parts: string[] = [];
-  if (outline.theme) parts.push(`主题：${outline.theme}`);
-  if (outline.coreSetting) parts.push(`核心设定：${outline.coreSetting}`);
-  if (outline.mainConflict) parts.push(`主要冲突：${outline.mainConflict}`);
-  if (outline.protagonist) {
-    const p = outline.protagonist;
-    parts.push(`主角：${p.name || "未命名"}，${p.identity || ""}，目标：${p.goal || ""}，成长线：${p.growth || ""}`);
+${content.slice(0, 3000)}
+
+请输出JSON：
+{
+  "summary": "100-200字的章节概要",
+  "keyEvents": ["关键事件1", "关键事件2"],
+  "characterStates": {"角色名": "该角色在本章的状态变化"},
+  "endingState": "章末状态描述（场景、人物处境、悬念）",
+  "newHooks": ["新开钩子1"],
+  "resolvedHooks": ["回收钩子1"]
+}`,
+      temperature: 0.2,
+      maxTokens: 400,
+    });
+    const parsed = parseLlmJson(result) || {};
+    return {
+      summary: parsed.summary || content.slice(0, 200),
+      keyEvents: JSON.stringify(parsed.keyEvents || []),
+      characterStates: JSON.stringify(parsed.characterStates || {}),
+      endingState: parsed.endingState || content.slice(-200),
+      newHooks: JSON.stringify(parsed.newHooks || []),
+      resolvedHooks: JSON.stringify(parsed.resolvedHooks || []),
+    };
+  } catch {
+    return {
+      summary: content.slice(0, 200),
+      keyEvents: "[]",
+      characterStates: "{}",
+      endingState: content.slice(-200),
+      newHooks: "[]",
+      resolvedHooks: "[]",
+    };
   }
-  if (outline.antagonist) {
-    const a = outline.antagonist;
-    parts.push(`对手：${a.name || "未命名"}，${a.identity || ""}，动机：${a.motivation || ""}`);
-  }
-  if (outline.plotStructure) {
-    const ps = outline.plotStructure;
-    if (ps.beginning) parts.push(`开篇：${ps.beginning}`);
-    if (ps.development) parts.push(`发展：${ps.development}`);
-    if (ps.climax) parts.push(`高潮：${ps.climax}`);
-    if (ps.resolution) parts.push(`结局：${ps.resolution}`);
-  }
-  return parts.join("\n") || "暂无大纲信息。";
 }
 
 async function resolveGeneratedChapterTitle(ctx: PhaseContext, input: {
@@ -457,4 +509,142 @@ function resolveChapterCards(chapterTemplate: any, chapterOutline: any, count: n
     ? chapterOutline.chapterOutlines.flatMap((volume: any) => Array.isArray(volume.chapters) ? volume.chapters : [])
     : [];
   return [...templateChapters, ...outlineChapters].slice(0, count);
+}
+
+/**
+ * 章纲修正：写完一卷后检查实际内容与计划的偏离度，修正下一卷章纲
+ */
+async function correctNextVolumeOutlines(
+  ctx: PhaseContext,
+  jobId: string,
+  novelId: string,
+  config: PipelineConfig,
+  writtenChapters: Array<{ order: number; title: string; content?: string }>,
+) {
+  const volumeCount = config.volumeCount || 5;
+  const chaptersPerVolume = config.chaptersPerVolume || 30;
+
+  // 计算已写完几卷
+  const totalWritten = await prisma.chapter.count({
+    where: { novelId, content: { not: "" } },
+  });
+  const completedVolumes = Math.floor(totalWritten / chaptersPerVolume);
+
+  if (completedVolumes <= 0 || completedVolumes >= volumeCount) return;
+
+  // 加载刚完成的那一卷的章纲
+  const completedVolRes = await prisma.phaseResult.findUnique({
+    where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${completedVolumes}` } },
+  });
+  if (!completedVolRes) return;
+
+  const plannedOutlines = parseLlmJson(completedVolRes.output)?.chapters || [];
+  if (plannedOutlines.length === 0) return;
+
+  // 加载实际写完的章节概要
+  const volStartOrder = (completedVolumes - 1) * chaptersPerVolume + 1;
+  const volEndOrder = completedVolumes * chaptersPerVolume;
+  const actualSummaries = await prisma.chapterSummary.findMany({
+    where: { novelId, chapterOrder: { gte: volStartOrder, lte: volEndOrder } },
+    orderBy: { chapterOrder: "asc" },
+    select: { chapterOrder: true, title: true, summary: true },
+  });
+
+  if (actualSummaries.length < plannedOutlines.length * 0.5) return;
+
+  // 用 LLM 检查偏离度
+  const plannedSummary = plannedOutlines.slice(0, 20).map((ch: any, i: number) =>
+    `第${volStartOrder + i}章 计划：${ch.title} | 目标：${ch.goal || ""} | 冲突：${ch.conflict || ""}`
+  ).join("\n");
+
+  const actualSummary = actualSummaries.slice(0, 20).map(ch =>
+    `第${ch.chapterOrder}章 实际：${ch.title} | 摘要：${ch.summary}`
+  ).join("\n");
+
+  const deviationPrompt = `请比较以下卷纲计划与实际写作内容的偏离度，从三个维度评分。
+
+【第${completedVolumes}卷计划章纲】
+${plannedSummary}
+
+【实际写作内容摘要】
+${actualSummary}
+
+请输出 JSON：
+{
+  "plotDeviation": 0-10（情节偏离：剧情走向是否与计划一致）,
+  "characterDeviation": 0-10（人设偏离：角色行为是否符合设定）,
+  "worldviewDeviation": 0-10（世界观偏离：设定是否与计划一致）,
+  "overallDeviation": 0-10（加权平均：plot*0.5 + character*0.3 + worldview*0.2）,
+  "keyDeviations": ["主要偏离点1", "主要偏离点2"],
+  "nextVolumeAdjustment": "对下一卷章纲的调整建议，如果无需调整则写'无需调整'"
+}
+
+只输出 JSON。`;
+
+  try {
+    const result = await ctx.llmService.completeText({ prompt: deviationPrompt, temperature: 0.3, maxTokens: 600 });
+    const deviation = parseLlmJson<any>(result);
+    if (!deviation) return;
+
+    // 三维度判定：情节偏离>=5 或 人设偏离>=4 或 世界观偏离>=4 → 修正
+    const needsCorrection =
+      (deviation.plotDeviation || 0) >= 5 ||
+      (deviation.characterDeviation || 0) >= 4 ||
+      (deviation.worldviewDeviation || 0) >= 4 ||
+      (deviation.overallDeviation || deviation.deviationScore || 0) >= 5;
+
+    if (!needsCorrection) return;
+
+    // 偏离度 >= 5，修正下一卷章纲
+    const nextVolIndex = completedVolumes; // 0-indexed
+    const nextVolRes = await prisma.phaseResult.findUnique({
+      where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${completedVolumes + 1}` } },
+    });
+    if (!nextVolRes) return;
+
+    const nextVolOutlines = parseLlmJson(nextVolRes.output);
+    if (!nextVolOutlines?.chapters) return;
+
+    const correctionPrompt = `根据以下偏离分析，修正第${completedVolumes + 1}卷的章纲。
+
+【偏离分析】
+${JSON.stringify(deviation, null, 2)}
+
+【当前第${completedVolumes + 1}卷章纲】
+${JSON.stringify(nextVolOutlines.chapters.slice(0, 10), null, 2)}
+
+【第${completedVolumes}卷实际结局摘要】
+${actualSummaries.slice(-3).map(ch => ch.summary).join("\n")}
+
+请输出修正后的章纲 JSON（结构与原章纲相同），确保承接上一卷的实际走向：
+{
+  "chapters": [
+    { "title": "", "goal": "", "conflict": "", "emotion": "", "hook": "", "characters": [] }
+  ]
+}
+
+只输出 JSON。`;
+
+    const correctedResult = await ctx.llmService.completeText({ prompt: correctionPrompt, temperature: 0.5, maxTokens: 4000 });
+    const corrected = parseLlmJson<any>(correctedResult);
+    if (!corrected?.chapters) return;
+
+    // 保存修正后的章纲
+    await prisma.phaseResult.update({
+      where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${completedVolumes + 1}` } },
+      data: {
+        output: JSON.stringify(corrected),
+        input: JSON.stringify({
+          correction: true,
+          deviationScore: deviation.deviationScore,
+          keyDeviations: deviation.keyDeviations,
+          basedOnVolume: completedVolumes,
+        }),
+      },
+    });
+
+    console.log(`[writingPhase] 第${completedVolumes + 1}卷章纲已修正（偏离度：${deviation.deviationScore}）`);
+  } catch (e) {
+    console.warn("[writingPhase] 章纲偏离度检查失败:", e);
+  }
 }

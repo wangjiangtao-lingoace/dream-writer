@@ -19,7 +19,19 @@ export async function generateOutline(
 - 只补充用户未涉及的部分，不改写已有内容
 - 如果用户的创意已经非常完整，你只需要做结构化整理和少量补充
 - 补充的内容要与用户的风格和调性保持一致
-- 绝不能丢失用户创意中的任何重要细节、人物设定、情节设计`;
+- 绝不能丢失用户创意中的任何重要细节、人物设定、情节设计
+
+语言要求：
+- 使用通俗白话，像真人作者写给编辑看的策划文档，不要书面腔
+- 禁止 AI 味词汇：不禁、不由得、宛如、仿佛、似乎在诉说、一缕、一抹、一丝、缓缓、淡淡地、静静地、默默地、轻轻地、娓娓道来、令人叹为观止
+- 禁止空洞修饰语和万能形容词：深刻地、极大地、令人震撼的、无与伦比的
+- 每个字段的描述必须包含具体信息（人名、地名、事件、因果），不能用抽象概括代替
+
+质量要求：
+- 大纲必须足够详细，能支撑起一部 100 万字以上的长篇小说
+- plotStructure 共 8 个阶段，每个阶段必须包含至少 3 个具体的情节事件（人名+地名+发生了什么），不能只写一句话概括
+- protagonist 和 antagonist 必须有完整的动机链和行为逻辑
+- mainConflict 必须说明冲突的起因、升级方式、最终如何收束`;
 
   const prompt = `请分析以下创意素材，将其整理为结构化的大纲。
 
@@ -59,18 +71,22 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
     "motivation": "从素材中提取"
   },
   "plotStructure": {
-    "beginning": "从素材中提取开篇情节，如无则补充具体的前10%情节",
-    "development": "从素材中提取发展阶段，如无则补充10%-40%的具体情节",
-    "climax": "从素材中提取高潮情节，如无则补充40%-80%的具体冲突升级",
-    "resolution": "从素材中提取结局，如无则补充80%-100%的收尾"
+    "setup": "开篇建立（前5%）：世界观呈现、主角出场、核心冲突引入，必须有具体事件和场景",
+    "rising_action": "上升发展（5%-20%）：主角被迫卷入冲突、初步对抗、能力/资源积累，至少3个具体事件",
+    "first_climax": "第一高潮（20%-35%）：阶段性胜利或重大挫败，主角处境根本性改变",
+    "deepening": "深度发展（35%-55%）：势力博弈、关系变化、世界观扩展、暗线推进，至少3个具体事件",
+    "major_turning": "重大转折（55%-70%）：核心真相揭露、阵营变化、主角认知颠覆",
+    "escalation": "冲突升级（70%-85%）：多方势力全面碰撞、代价升级、主角面临终极抉择",
+    "final_climax": "最终高潮（85%-95%）：主线冲突的决定性对决，所有伏线汇聚",
+    "resolution": "收束结局（95%-100%）：冲突收束、角色归宿、主题升华"
   },
   "highlights": "从素材中提取亮点，如无则提炼3个核心卖点",
   "targetAudience": "从素材中提取目标读者，如无则补充"
 }
 
-注意：输出的每个字段都应该尽量详细，保留原文的生动表达，不要压缩成干巴巴的概括。`;
+注意：输出的每个字段都应该尽量详细，保留原文的生动表达，不要压缩成干巴巴的概括。plotStructure 的 8 个阶段都必须填写。`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 4000 });
   return parseLlmJson(result) || {};
 }
 
@@ -87,7 +103,12 @@ export async function generateWorldview(
 - 大纲中的世界观设定是核心素材，必须最大程度保留原文内容
 - 只补充大纲中未涉及的部分（如：力量体系的具体等级、势力的详细分布等）
 - 如果大纲中的世界观已经非常完整，你只需要做结构化整理和少量补充
-- 保留原文的生动表达和独特设定`;
+- 保留原文的生动表达和独特设定
+
+核心约束：
+1. 所有生成内容必须与提供的大纲保持严格一致
+2. 不得引入与已有设定矛盾的新元素
+3. 力量体系、规则必须与大纲中的描述一致`;
 
   const prompt = `请分析以下大纲中的世界观设定，进行增量补充和结构化整理。
 
@@ -119,7 +140,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
   "specialElements": "从大纲中提取特殊元素，如无则补充"
 }`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 1500 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
   const parsed = parseLlmJson(result) || {};
   return Object.keys(parsed).length ? parsed : ctx.buildFallbackWorldview(outline);
 }
@@ -138,7 +159,13 @@ export async function generateCharacters(
 - 大纲中的人物设定是核心素材，必须最大程度保留原文内容
 - 只补充大纲中未涉及的部分（如：外貌细节、背景故事补充等）
 - 如果大纲中的人物已经非常完整，你只需要做结构化整理和少量补充
-- 保留原文的人物特色和关系描述`;
+- 保留原文的人物特色和关系描述
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观保持严格一致
+2. 人物能力必须与世界观的力量体系匹配
+3. 人物关系必须与大纲中的描述一致
+4. 不得引入与已有设定矛盾的新元素`;
 
   const prompt = `请分析以下大纲中的人物设定，进行增量补充和结构化整理。
 
@@ -182,6 +209,8 @@ export async function generateStyle(
   ctx: PhaseContext,
   novelId: string,
   outline: any,
+  worldview: any,
+  characters: any,
   config: PipelineConfig,
   userHint?: string,
 ): Promise<any> {
@@ -191,12 +220,29 @@ export async function generateStyle(
 工作原则：
 - 大纲中的风格描述是核心素材，必须最大程度保留原文内容
 - 风格约束必须具体到可执行层面，不能只是抽象标签
-- 要考虑反差、幽默、紧张感等情绪节奏的控制方式`;
+- 要考虑反差、幽默、紧张感等情绪节奏的控制方式
+- 风格描述必须与世界观的时代背景、人物性格相匹配
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定保持严格一致
+2. 不得引入与已有设定矛盾的新元素
+3. 风格基调必须与世界观的时代背景匹配（如古代背景不应出现现代网络用语）`;
+
+  const worldviewBrief = worldview?.name ? `${worldview.name}：${worldview.summary || ""}\n规则：${worldview.rules || "无"}` : JSON.stringify(worldview || {}, null, 2);
+  const characterBrief = Array.isArray(characters?.characters)
+    ? characters.characters.map((c: any) => `${c.name}（${c.role || ""}）：${c.personality || c.motivation || ""}`).join("\n")
+    : JSON.stringify(characters || {}, null, 2);
 
   const prompt = `请分析以下大纲中的风格描述，设计一套完整的风格约束体系。
 
 【大纲】
 ${JSON.stringify(outline, null, 2)}
+
+【世界观】
+${worldviewBrief}
+
+【人物设定】
+${characterBrief}
 
 【配置】
 类型：${config.genre || outline.genre || "自动判断"}
@@ -270,7 +316,26 @@ export async function generateVolumeOutline(
 - 情绪基调要有变化，不能每卷都一样
 - 要考虑整体字数分配的合理性
 - 每卷的目标、冲突、情绪必须明确且可执行
-- 卷与卷之间的衔接要自然，不能突兀跳转`;
+- 卷与卷之间的衔接要自然，不能突兀跳转
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
+2. 不得引入与已有设定矛盾的新元素
+3. 卷中涉及的场景必须存在于世界观的地理设定中
+4. 人物在各卷中的行为必须符合其性格和动机
+
+语言要求：
+- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地、娓娓道来）
+- 禁止空洞修饰语，每个描述必须包含具体信息（人名、事件、因果关系）
+- 不要写"本卷将探索…"、"读者将感受到…"这类 AI 套话
+
+卷纲质量要求：
+- 每卷的 keyEvents 至少包含 5 个具体事件，每个事件需说明涉及谁、发生了什么、导致什么结果
+- turningPoint 必须说明转折的具体内容和对主角的影响
+- climax 必须描述高潮场景的核心冲突和胜负手
+- endHook 必须是具体的悬念事件，不能是抽象的"更大的挑战即将到来"
+- 卷与卷之间必须有明确的承接关系：上一卷的 endHook 在下一卷如何被接住
+- newChars 必须说明该角色为何在这一卷出场，与主线有什么关系`;
 
   const characterSummary = Array.isArray(characters?.characters)
     ? characters.characters.map((c: any) => `${c.name}（${c.role || "未知"}）：${c.motivation || ""}`).join("\n")
@@ -344,7 +409,23 @@ export async function generateChapterOutlines(
 - 每章结尾要有钩子（悬念、反转、新信息），让读者想看下一章
 - 关键章节（开篇、转折、高潮）要有更高的信息密度和情感强度
 - 要考虑每章的字数目标和阅读时长
-- 人物成长和关系变化要有自然的过渡`;
+- 人物成长和关系变化要有自然的过渡
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
+2. 章节中人物的行为必须符合其性格设定和能力水平
+3. 场景必须存在于世界观设定中
+4. 冲突必须符合世界观的力量体系规则
+
+语言要求：
+- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地）
+- 禁止空洞修饰，每个字段都要有具体信息
+
+章纲质量要求——每章必须独立可执行：
+- goal：不能只写"推进剧情"，必须说明本章要完成什么具体事件
+- conflict：不能只写"面临挑战"，必须说明谁和谁冲突、冲突的核心矛盾是什么
+- hook：不能只写"留下悬念"，必须写出具体的悬念内容（某人说了什么话、发现了什么东西、做了什么决定）
+- 以上字段即使脱离上下文，一个写手也能据此写出完整章节`;
 
   const prompt = `请为每卷设计${chaptersPerVolume}章的章纲。
 
@@ -405,7 +486,12 @@ export async function generateMainlinesAndHooks(
 - 钩子类型要多样：悬念、反转、新信息、情感冲突、实力展示
 - 钩子强度要递进，越到后面越强
 - 主线和钩子要与人物成长弧线紧密结合
-- 要考虑风格调性：如果风格偏轻松幽默，钩子也可以有趣味性；如果风格偏压抑紧张，钩子要更有压迫感`;
+- 要考虑风格调性：如果风格偏轻松幽默，钩子也可以有趣味性；如果风格偏压抑紧张，钩子要更有压迫感
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定保持严格一致
+2. 主线和钩子必须与世界观规则和人物动机一致
+3. 不得引入与已有设定矛盾的新元素`;
 
   const prompt = `请根据以下信息，规划主线和钩子。
 
@@ -483,11 +569,29 @@ export async function generateEnrichedChapterOutlines(
 - 钩子和伏笔必须在后续章节有明确回收计划，不能悬空
 - 爽点分布要有节奏，不能连续出现也不能长期缺失
 - 角色出场要有逻辑，不能凭空出现
-- 情绪曲线要有起伏，不能全是高潮或全是低谷`;
+- 情绪曲线要有起伏，不能全是高潮或全是低谷
 
-  const characterNames = Array.isArray(characters?.characters)
-    ? characters.characters.map((c: any) => c.name).join("、")
-    : "未知";
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
+2. 章节中人物的行为必须符合其性格设定和能力水平
+3. 场景必须存在于世界观设定中
+4. 冲突必须符合世界观的力量体系规则
+5. 不得引入与已有设定矛盾的新元素
+
+语言要求：
+- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地）
+- 禁止空洞修饰，每个字段都要有具体信息
+
+章纲质量要求——每章必须独立可执行：
+- goal：不能只写"推进剧情"，必须说明本章要完成什么具体事件
+- conflict：不能只写"面临挑战"，必须说明谁和谁冲突、核心矛盾是什么
+- hook：不能只写"留下悬念"，必须写出具体的悬念内容
+- characters：必须列出本章出场的角色及其在本章的具体行为
+- 以上所有字段必须做到：一个写手即使不看上下文，仅凭单章章纲也能写出完整章节`;
+
+  const characterProfiles = Array.isArray(characters?.characters)
+    ? characters.characters.map((c: any) => `${c.name}（${c.role || ""}）：身份=${c.identity || ""}，性格=${c.personality || ""}，能力=${c.abilities || ""}，动机=${c.motivation || ""}`).join("\n")
+    : JSON.stringify(characters || {}, null, 2);
 
   const prompt = `请为第${volumeNumber}卷设计${chaptersPerVolume}章的详细章纲。
 
@@ -497,14 +601,14 @@ ${typeof outline === "string" ? outline : JSON.stringify(outline, null, 2)}
 【第${volumeNumber}卷卷纲】
 ${JSON.stringify(volume, null, 2)}
 
-【世界观摘要】
-${worldview?.name ? `${worldview.name}：${worldview.summary || ""}` : JSON.stringify(worldview, null, 2)}
+【世界观规则】（创作时必须遵守）
+${worldview?.name ? `${worldview.name}：${worldview.summary || ""}\n规则：${worldview.rules || "无"}\n力量体系：${typeof worldview.powerSystem === "string" ? worldview.powerSystem : JSON.stringify(worldview.powerSystem || {})}` : JSON.stringify(worldview || {}, null, 2)}
 
-【可用角色】
-${characterNames}
+【人物档案】（创作时必须严格参照，人物行为不得与设定矛盾）
+${characterProfiles}
 
 【风格约束】
-${style?.name ? `${style.name}：${style.description || ""}` : JSON.stringify(style, null, 2)}
+${style?.name ? `${style.name}：${style.description || ""}` : JSON.stringify(style || {}, null, 2)}
 ${previousSummary ? `\n【前序卷章纲摘要】\n${previousSummary}` : ""}
 ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 
@@ -592,7 +696,12 @@ export async function generateStoryArcs(
 - 跨卷钩子要有递进关系，强度逐步升级
 - 情绪曲线要有整体节奏感：三章一小高潮，十章大高潮
 - 伏笔的埋设和回收要形成完整闭环
-- 主线的里程碑事件必须被章节的 goal 覆盖`;
+- 主线的里程碑事件必须被章节的 goal 覆盖
+
+核心约束：
+1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
+2. 主线和钩子必须与世界观规则和人物动机一致
+3. 不得引入与已有设定矛盾的新元素`;
 
   const prompt = `请根据以下完整的章纲规划，设计跨卷故事弧线。
 
@@ -610,6 +719,9 @@ ${worldview?.name ? `${worldview.name}：${worldview.summary || ""}` : JSON.stri
 
 【人物】
 ${Array.isArray(characters?.characters) ? characters.characters.map((c: any) => `${c.name}（${c.role}）`).join("、") : JSON.stringify(characters, null, 2)}
+
+【风格要求】
+${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.toneAndAtmosphere || ""}\n情绪节奏：${style.emotionalRhythm || ""}` : JSON.stringify(style || {}, null, 2)}
 
 请生成JSON格式的故事弧线：
 {
@@ -659,6 +771,10 @@ export async function generateConsistencyCheck(
   ctx: PhaseContext,
   novelId: string,
   planSummary: string,
+  outline?: any,
+  worldview?: any,
+  characters?: any,
+  style?: any,
 ): Promise<any> {
   const system = `你是一位资深网文故事编辑，擅长检查长篇小说规划的一致性和逻辑性。
 
@@ -671,10 +787,29 @@ export async function generateConsistencyCheck(
 4. 主线覆盖：主线的里程碑事件是否都被章节目标覆盖？主线的结局方向是否在最后几卷有铺垫？
 5. 情绪节奏：是否有连续3章以上都是高潮？是否有连续5章以上都是低谷？开篇和结尾章节的情绪是否合适？
 6. 爽点分布：爽点间隔是否合理（不能太密也不能太稀）？爽点类型是否多样？
-7. 冲突递进：卷与卷之间的冲突是否有升级？是否有冲突重复？`;
+7. 冲突递进：卷与卷之间的冲突是否有升级？是否有冲突重复？
+8. 人物一致性：角色名、能力、性格是否前后一致，是否符合人物设定？人物行为是否符合其动机和性格？
+9. 世界观一致性：场景、规则、力量体系是否前后一致？是否有违反世界观规则的情节？
+10. 风格一致性：叙事风格、语调是否统一？是否有风格突变？`;
+
+  let coreAssets = "";
+  if (outline) {
+    coreAssets += `\n\n【大纲】\n${typeof outline === "string" ? outline : JSON.stringify(outline, null, 2)}`;
+  }
+  if (worldview) {
+    coreAssets += `\n\n【世界观】\n${JSON.stringify(worldview, null, 2)}`;
+  }
+  if (characters) {
+    coreAssets += `\n\n【人物设定】\n${JSON.stringify(characters, null, 2)}`;
+  }
+  if (style) {
+    coreAssets += `\n\n【风格设定】\n${JSON.stringify(style, null, 2)}`;
+  }
 
   const prompt = `请检查以下完整的故事规划，找出所有一致性问题。
+${coreAssets}
 
+【章节规划摘要】
 ${planSummary}
 
 请以JSON格式返回校验结果：

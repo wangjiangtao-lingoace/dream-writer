@@ -27,12 +27,26 @@ interface ResolvedModelConfig {
   apiKey?: string;
 }
 
+// 模型配置缓存：避免每次 LLM 调用都查数据库
+let _configCache: { config: ResolvedModelConfig | null; ts: number } | null = null;
+const CONFIG_TTL_MS = 60_000; // 60秒缓存
+
+/** 清除模型配置缓存（用户切换 AI 配置时调用） */
+export function clearLlmConfigCache(): void {
+  _configCache = null;
+}
+
 async function resolveModelConfig(): Promise<ResolvedModelConfig | null> {
+  if (_configCache && Date.now() - _configCache.ts < CONFIG_TTL_MS) {
+    return _configCache.config;
+  }
+
   // 优先级: DB 默认配置 > .env 环境变量
+  let config: ResolvedModelConfig | null = null;
   try {
     const dbConfig = await prisma.aIConfig.findFirst({ where: { isDefault: true } });
     if (dbConfig) {
-      return {
+      config = {
         provider: dbConfig.provider as LLMProvider,
         model: dbConfig.model,
         baseURL: dbConfig.baseUrl || getProviderDefaultBaseUrl(dbConfig.provider as LLMProvider) || "https://api.openai.com/v1",
@@ -43,20 +57,26 @@ async function resolveModelConfig(): Promise<ResolvedModelConfig | null> {
     // DB 查询失败时静默降级到 .env
   }
 
-  const provider = (process.env.DEFAULT_LLM_PROVIDER?.trim() || "openai") as LLMProvider;
-  const model = process.env.DEFAULT_LLM_MODEL?.trim()
-    || getProviderEnvModel(provider)
-    || "gpt-5-mini";
-  const baseURL = process.env.DEFAULT_LLM_BASE_URL?.trim()
-    || getProviderEnvBaseUrl(provider)
-    || getProviderDefaultBaseUrl(provider)
-    || "https://api.openai.com/v1";
-  const apiKey = process.env.DEFAULT_LLM_API_KEY?.trim() || getProviderEnvApiKey(provider);
+  if (!config) {
+    const provider = (process.env.DEFAULT_LLM_PROVIDER?.trim() || "openai") as LLMProvider;
+    const model = process.env.DEFAULT_LLM_MODEL?.trim()
+      || getProviderEnvModel(provider)
+      || "gpt-5-mini";
+    const baseURL = process.env.DEFAULT_LLM_BASE_URL?.trim()
+      || getProviderEnvBaseUrl(provider)
+      || getProviderDefaultBaseUrl(provider)
+      || "https://api.openai.com/v1";
+    const apiKey = process.env.DEFAULT_LLM_API_KEY?.trim() || getProviderEnvApiKey(provider);
 
-  if (providerRequiresApiKey(provider) && !apiKey) {
-    return null;
+    if (providerRequiresApiKey(provider) && !apiKey) {
+      _configCache = { config: null, ts: Date.now() };
+      return null;
+    }
+    config = { provider, model, baseURL, apiKey };
   }
-  return { provider, model, baseURL, apiKey };
+
+  _configCache = { config, ts: Date.now() };
+  return config;
 }
 
 function buildPrompt(input: ChapterDraftInput): string {

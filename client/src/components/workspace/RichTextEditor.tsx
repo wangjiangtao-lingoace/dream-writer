@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef } from "react";
+import React, { useMemo, useCallback, useRef, useEffect } from "react";
 import {
   Plate,
   PlateContent,
@@ -180,6 +180,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const newValue = deserializeFromText(content);
+    editor.tf.setValue(newValue);
+    lastContentRef.current = content;
+  }, [content, editor]);
 
   const handleChange = useCallback(({ value }: { editor: any; value: Value }) => {
     const text = serializeToText(value);

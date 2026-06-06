@@ -1,8 +1,9 @@
 import { prisma } from "../../db/prisma";
 import { getRagRetrieveService } from "../RagRetrieveService";
 import { PipelineConfig } from "../PipelineService";
-import { PhaseContext } from "./pipelineUtils";
+import { PhaseContext, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateWorldview, generateCharacters, generateStyle } from "./generators";
+import { executePlanningPhase_unified } from "./planningPhase";
 
 export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
@@ -64,7 +65,10 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
     await ctx.saveToKnowledgeBase(novelId, 'character', '人物设定', charactersResult);
   }
 
-  // 风格
+  // 风格（依赖世界观和人物，需在它们之后生成）
+  const styleWorldview = await ctx.getPhaseOutput(jobId, "assets", "worldview").catch(() => ({}));
+  const styleCharacters = await ctx.getPhaseOutput(jobId, "assets", "characters").catch(() => ({}));
+
   if (existingStyle) {
     await ctx.updateJobProgress(jobId, "assets", "style");
     const enhancedStyle = ctx.safeJson(existingStyle.customRules, {});
@@ -76,13 +80,16 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
       });
   } else {
     await ctx.updateJobProgress(jobId, "assets", "style");
-    const styleResult = await generateStyle(ctx, novelId, outlineResult, config);
+    const styleResult = await generateStyle(ctx, novelId, outlineResult, styleWorldview, styleCharacters, config);
     await ctx.savePhaseResult(jobId, "assets", "style", { outline: outlineResult }, styleResult);
     await ctx.saveToKnowledgeBase(novelId, 'style', '写作风格', styleResult);
   }
 
-  await prisma.pipelineJob.update({
-    where: { id: jobId },
-    data: { status: "paused", currentPhase: "assets", currentStep: "waiting_confirm" },
+  await autoAdvanceOrPause(jobId, "assets", async () => {
+    await prisma.pipelineJob.update({
+      where: { id: jobId },
+      data: { status: "running", currentPhase: "planning", currentStep: "volume_outline" },
+    });
+    await executePlanningPhase_unified(ctx, jobId);
   });
 }

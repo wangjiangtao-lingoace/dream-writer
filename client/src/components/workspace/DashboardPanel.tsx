@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { translateChapterSource, translateAdoptionKey, translateAdoptionValue, translateAssetType, translatePipelineStatus } from "../../utils/translate";
+import PipelineConfigModal, { PipelineConfig } from "../PipelineConfigModal";
 import "../../styles/components/dashboard.css";
 
 interface WorkflowStatus {
@@ -46,6 +47,8 @@ const DashboardPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ key: string; mode: "create" | "imitation"; defaults?: Partial<PipelineConfig>; imitationPlanId?: string | null } | null>(null);
 
   useEffect(() => {
     loadStatus();
@@ -62,68 +65,74 @@ const DashboardPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
     }
   }
 
-  async function runDraft(planId?: string | null) {
-    if (!planId) {
-      navigate(`/novel/${novelId}/analysis`);
-      return;
-    }
-    setNotice("正在启动自动创作：会生成蓝图、章纲和 1-3 章，已有正文默认不覆盖。");
+  async function runDraftWithConfig(planId: string, config: PipelineConfig) {
+    setNotice("正在启动自动创作...");
     await api.post(`/api/imitation-plans/${planId}/apply-to-pipeline`, {
-      autoContinue: true,
-      autoDraftChapters: 3,
-      volumeCount: 1,
-      chaptersPerVolume: 3,
-      targetWordCount: 1800,
+      autoContinue: config.autoContinue,
+      autoDraftChapters: config.autoDraftChapters,
+      volumeCount: config.volumeCount,
+      chaptersPerVolume: config.chaptersPerVolume,
+      targetWordCount: config.targetWordCount,
       sourcePolicy: "verified_only",
-      overwriteExistingChapters: false,
+      overwriteExistingChapters: config.overwriteExistingChapters,
     });
     navigate(`/novel/${novelId}/pipeline`);
   }
 
-  const handleAction = async (action: WorkflowStatus["nextActions"][number]) => {
+  const handleAction = (action: WorkflowStatus["nextActions"][number]) => {
     if (action.key === "analysis" || action.key === "imitation") {
       navigate(`/novel/${novelId}/analysis`);
       return;
     }
     if (action.key === "standalone") {
-      setActionLoading(action.key);
-      setNotice("正在从灵感生成大纲，请稍候...");
-      try {
-        await api.post("/api/pipeline/start", {
-          novelId,
-          config: { mode: "standalone", autoDraftChapters: 3 },
-        });
-        navigate(`/novel/${novelId}/pipeline`);
-      } catch (error) {
-        setNotice(error instanceof Error ? error.message : "启动生成流程失败。");
-      } finally {
-        setActionLoading(null);
-      }
+      setPendingAction({ key: "standalone", mode: "create" });
+      setConfigModalOpen(true);
       return;
     }
     if (action.key === "draft") {
-      setActionLoading(action.key);
-      try {
-        await runDraft(action.imitationPlanId);
-      } finally {
-        setActionLoading(null);
+      if (!action.imitationPlanId) {
+        navigate(`/novel/${novelId}/analysis`);
+        return;
       }
+      setPendingAction({ key: "draft", mode: "imitation", imitationPlanId: action.imitationPlanId });
+      setConfigModalOpen(true);
       return;
     }
     if (action.key === "continue") {
-      setActionLoading(action.key);
-      setNotice("正在启动智能续写流程...");
-      try {
+      setPendingAction({ key: "continue", mode: "create" });
+      setConfigModalOpen(true);
+    }
+  };
+
+  const handleConfigConfirm = async (config: PipelineConfig) => {
+    setConfigModalOpen(false);
+    if (!pendingAction) return;
+    setActionLoading(pendingAction.key);
+    try {
+      if (pendingAction.key === "draft" && pendingAction.imitationPlanId) {
+        await runDraftWithConfig(pendingAction.imitationPlanId, config);
+      } else {
+        const sourceType = pendingAction.key === "continue" ? "content" : "idea";
         await api.post("/api/pipeline/start", {
           novelId,
-          config: { mode: "continue", autoDraftChapters: 3 },
+          config: {
+            mode: "create",
+            sourceType,
+            autoContinue: config.autoContinue,
+            autoDraftChapters: config.autoDraftChapters,
+            volumeCount: config.volumeCount,
+            chaptersPerVolume: config.chaptersPerVolume,
+            targetWordCount: config.targetWordCount,
+            overwriteExistingChapters: config.overwriteExistingChapters,
+          },
         });
         navigate(`/novel/${novelId}/pipeline`);
-      } catch (error) {
-        setNotice(error instanceof Error ? error.message : "启动续写流程失败。");
-      } finally {
-        setActionLoading(null);
       }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "启动流程失败。");
+    } finally {
+      setActionLoading(null);
+      setPendingAction(null);
     }
   };
 
@@ -403,6 +412,13 @@ const DashboardPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           </div>
         </div>
       </section>
+
+      <PipelineConfigModal
+        open={configModalOpen}
+        onClose={() => { setConfigModalOpen(false); setPendingAction(null); }}
+        onConfirm={handleConfigConfirm}
+        mode={pendingAction?.mode || "create"}
+      />
     </div>
   );
 };

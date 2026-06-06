@@ -6,7 +6,7 @@ const router = Router();
 const idSchema = z.object({ id: z.string().trim().min(1) });
 const applySchema = z.object({
   autoContinue: z.boolean().optional(),
-  autoDraftChapters: z.number().int().min(1).max(3).optional(),
+  autoDraftChapters: z.number().int().min(1).max(999).optional(),
   volumeCount: z.number().int().min(1).max(10).optional(),
   chaptersPerVolume: z.number().int().min(1).max(30).optional(),
   targetWordCount: z.number().int().min(500).max(8000).optional(),

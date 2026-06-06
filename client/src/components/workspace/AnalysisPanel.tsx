@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { translateChapterSource } from "../../utils/translate";
 import BlueprintViewer from "./BlueprintViewer";
+import PipelineConfigModal, { PipelineConfig } from "../PipelineConfigModal";
 
 interface BookAnalysisSection {
   id: string;
@@ -109,6 +110,7 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
   const [sectionDraft, setSectionDraft] = useState("");
   const [sectionNotes, setSectionNotes] = useState("");
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
 
   const activeAnalysis = useMemo(
     () => bookAnalyses.find((a) => a.id === activeAnalysisId) ?? bookAnalyses[0] ?? null,
@@ -319,15 +321,22 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
 
   async function applyPlanToPipeline() {
     if (!activePlan) return;
+    setConfigModalOpen(true);
+  }
+
+  async function handleConfigConfirm(config: PipelineConfig) {
+    if (!activePlan) return;
+    setConfigModalOpen(false);
     setLoading(true);
     setNotice(null);
     try {
       await api.post(`/api/imitation-plans/${activePlan.id}/apply-to-pipeline`, {
-        autoContinue: true,
-        autoDraftChapters: 3,
-        volumeCount: 1,
-        chaptersPerVolume: 3,
-        targetWordCount: 1800,
+        autoContinue: config.autoContinue,
+        autoDraftChapters: config.autoDraftChapters,
+        volumeCount: config.volumeCount,
+        chaptersPerVolume: config.chaptersPerVolume,
+        targetWordCount: config.targetWordCount,
+        overwriteExistingChapters: config.overwriteExistingChapters,
       });
       setNotice("已将仿写方案交给自动创作流程，将自动生成前 1-3 章草稿。");
       navigate(`/novel/${novelId}/pipeline`);
@@ -1018,6 +1027,13 @@ const AnalysisPanel: React.FC<{ novelId: string }> = ({ novelId }) => {
           )}
         </div>
       </div>
+
+      <PipelineConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        onConfirm={handleConfigConfirm}
+        mode="imitation"
+      />
     </div>
   );
 };

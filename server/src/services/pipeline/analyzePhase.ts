@@ -14,26 +14,73 @@ export async function executeAnalyzePhase(
   const novel = await prisma.novel.findUnique({ where: { id: novelId } });
   if (!novel) throw new Error("作品不存在");
 
-  const inspiration = novel.inspiration || "";
+  const sourceType = config.sourceType || "idea";
+  let analysisInput: string;
+  let outlineSourceTag: string;
 
-  // 1. 分析用户输入包含哪些内容
+  if (sourceType === "content") {
+    // 续写模式：加载已有章节内容（最近 10 章，最多约 8000 字）
+    const chapters = await prisma.chapter.findMany({
+      where: { novelId, content: { not: "" } },
+      orderBy: { order: "asc" },
+    });
+
+    if (chapters.length === 0) {
+      throw new Error("没有已有章节内容，无法进行续写分析");
+    }
+
+    let chapterContent = "";
+    const recentChapters = chapters.slice(-10);
+    for (const ch of recentChapters) {
+      if (ch.content?.trim()) {
+        chapterContent += `\n\n--- 第${ch.order}章 ${ch.title || ""} ---\n${ch.content}`;
+      }
+    }
+    if (chapterContent.length > 8000) {
+      chapterContent = chapterContent.slice(0, 8000) + "\n...(内容截断)";
+    }
+
+    analysisInput = `【作品标题】${novel.title}\n${novel.genre ? `【类型】${novel.genre}\n` : ""}${novel.synopsis ? `【简介】${novel.synopsis}\n` : ""}\n【已有章节内容】${chapterContent}`;
+    outlineSourceTag = "existing_chapters";
+  } else {
+    // 默认 idea 模式：使用灵感/创意素材
+    analysisInput = novel.inspiration || "";
+    outlineSourceTag = "inspiration";
+  }
+
+  // imitation 模式：注入拆书分析作为额外参考
+  if (config.mode === "imitation" && config.bookAnalysisId) {
+    const bookAnalysisContext = await ctx.buildBookAnalysisContext(novelId, config, jobId);
+    if (bookAnalysisContext) {
+      analysisInput += `\n\n${bookAnalysisContext}`;
+    }
+  }
+
+  // 1. 分析输入包含哪些内容
   await ctx.updateJobProgress(jobId, "outline", "analyze");
-  const analysis = await analyzeInput(ctx, inspiration);
-  await ctx.savePhaseResult(jobId, "outline", "analyze", { inspiration }, analysis);
+  const analysis = await analyzeInput(ctx, analysisInput);
+  await ctx.savePhaseResult(jobId, "outline", "analyze", { source: outlineSourceTag }, analysis);
 
   // 2. 拆解已有内容入库
   await ctx.updateJobProgress(jobId, "outline", "decompose");
-  const decomposed = await decomposeIntoAssets(ctx, novelId, inspiration, analysis, config);
-  await ctx.savePhaseResult(jobId, "outline", "decompose", { inspiration, analysis }, decomposed);
+  const decomposed = await decomposeIntoAssets(ctx, novelId, analysisInput, analysis, config);
+  await ctx.savePhaseResult(jobId, "outline", "decompose", { source: outlineSourceTag, analysis }, decomposed);
 
-  // 3. 生成大纲（增量补充模式）
+  // 3. 生成大纲
   await ctx.updateJobProgress(jobId, "outline", "outline");
+  const knowledgeQuery = sourceType === "content"
+    ? `${novel.title} ${novel.genre || ""} 章节内容分析`
+    : `${novel.title} ${analysisInput} ${config.genre || ""}`;
   const knowledgeContext = await getRagRetrieveService()?.retrieve(
-    `${novel.title} ${inspiration} ${config.genre || ""}`,
+    knowledgeQuery,
     { novelId, topK: 10 }
   ) ?? "";
-  const outlineResult = await generateOutline(ctx, novelId, inspiration, knowledgeContext, config);
-  await ctx.savePhaseResult(jobId, "outline", "outline", { inspiration }, outlineResult);
+
+  const outlineResult = sourceType === "content"
+    ? await generateOutlineFromChapters(ctx, novelId, analysisInput, knowledgeContext, config)
+    : await generateOutline(ctx, novelId, analysisInput, knowledgeContext, config);
+
+  await ctx.savePhaseResult(jobId, "outline", "outline", { source: outlineSourceTag }, outlineResult);
   await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
 }
 
@@ -93,7 +140,7 @@ ${inspiration}
   };
 }
 
-async function decomposeIntoAssets(
+export async function decomposeIntoAssets(
   ctx: PhaseContext,
   novelId: string,
   inspiration: string,
@@ -209,7 +256,9 @@ async function decomposeIntoAssets(
 
 async function decomposeOutline(ctx: PhaseContext, inspiration: string, config: PipelineConfig): Promise<any> {
   const system = `你是一位资深网文策划师。你的任务是将用户提供的创作素材整理为结构化大纲。
-核心原则：最大程度保留原文内容和表达，只做结构化整理，不改写、不压缩、不丢失任何细节。`;
+核心原则：最大程度保留原文内容和表达，只做结构化整理，不改写、不压缩、不丢失任何细节。
+
+语言要求：保留原文的通俗白话表达，禁止替换成 AI 味的书面语。如果原文用了口语化的描述，保持原样。`;
 
   const prompt = `请将以下创作素材整理为结构化大纲JSON。
 
@@ -395,63 +444,6 @@ ${inspiration}
   return parseLlmJson(result) || {};
 }
 
-// ==================== 续写模式分析阶段 ====================
-
-export async function executeAnalyzePhase_continue(
-  ctx: PhaseContext,
-  jobId: string,
-  novelId: string,
-  config: PipelineConfig,
-) {
-  const novel = await prisma.novel.findUnique({ where: { id: novelId } });
-  if (!novel) throw new Error("作品不存在");
-
-  // 加载已有章节内容（最近 10 章，最多约 8000 字）
-  const chapters = await prisma.chapter.findMany({
-    where: { novelId, content: { not: "" } },
-    orderBy: { order: "asc" },
-  });
-
-  if (chapters.length === 0) {
-    throw new Error("没有已有章节内容，无法进行续写分析");
-  }
-
-  // 拼接已有章节内容作为分析输入
-  let chapterContent = "";
-  const recentChapters = chapters.slice(-10);
-  for (const ch of recentChapters) {
-    if (ch.content?.trim()) {
-      chapterContent += `\n\n--- 第${ch.order}章 ${ch.title || ""} ---\n${ch.content}`;
-    }
-  }
-  // 截断到约 8000 字
-  if (chapterContent.length > 8000) {
-    chapterContent = chapterContent.slice(0, 8000) + "\n...(内容截断)";
-  }
-
-  const analysisInput = `【作品标题】${novel.title}\n${novel.genre ? `【类型】${novel.genre}\n` : ""}${novel.synopsis ? `【简介】${novel.synopsis}\n` : ""}\n【已有章节内容】${chapterContent}`;
-
-  // 1. 分析已有内容包含哪些资产
-  await ctx.updateJobProgress(jobId, "outline", "analyze");
-  const analysis = await analyzeInput(ctx, analysisInput);
-  await ctx.savePhaseResult(jobId, "outline", "analyze", { source: "existing_chapters" }, analysis);
-
-  // 2. 拆解已有内容入库
-  await ctx.updateJobProgress(jobId, "outline", "decompose");
-  const decomposed = await decomposeIntoAssets(ctx, novelId, analysisInput, analysis, config);
-  await ctx.savePhaseResult(jobId, "outline", "decompose", { source: "existing_chapters", analysis }, decomposed);
-
-  // 3. 从已有章节推断大纲
-  await ctx.updateJobProgress(jobId, "outline", "outline");
-  const knowledgeContext = await getRagRetrieveService()?.retrieve(
-    `${novel.title} ${novel.genre || ""} 章节内容分析`,
-    { novelId, topK: 10 }
-  ) ?? "";
-  const outlineResult = await generateOutlineFromChapters(ctx, novelId, analysisInput, knowledgeContext, config);
-  await ctx.savePhaseResult(jobId, "outline", "outline", { source: "existing_chapters" }, outlineResult);
-  await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
-}
-
 async function generateOutlineFromChapters(
   ctx: PhaseContext,
   novelId: string,
@@ -460,7 +452,10 @@ async function generateOutlineFromChapters(
   config: PipelineConfig,
 ): Promise<any> {
   const system = `你是一位资深网文策划师。你的任务是从已有的章节内容中推断完整的故事弧线，并规划后续卷结构。
-核心原则：基于已有内容推断故事走向，保留已有设定，补充缺失的宏观结构。`;
+核心原则：基于已有内容推断故事走向，保留已有设定，补充缺失的宏观结构。
+
+语言要求：使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地）。从已有章节中提取描述时保持原文风格，不要替换成书面腔。
+质量要求：大纲必须足够详细支撑百万字长篇创作，plotStructure 每个阶段至少包含 3 个具体情节事件。`;
 
   const prompt = `以下是一部小说的已有章节内容。请从中推断完整的故事大纲，并规划后续卷结构。
 

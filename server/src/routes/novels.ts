@@ -717,4 +717,202 @@ ${finalContent.substring(0, 2000)}
   }
 });
 
+// ─── 作品健康仪表盘 API ───
+
+/**
+ * GET /api/novels/:id/health
+ * 返回作品的全面健康指标
+ */
+router.get("/:id/health", async (req, res) => {
+  const parseResult = idSchema.safeParse(req.params);
+  if (!parseResult.success) {
+    return res.status(400).json({ success: false, error: "无效的作品 ID。" });
+  }
+
+  try {
+    const novelId = parseResult.data.id;
+
+    // 并行查询所有指标
+    const [
+      novel,
+      totalChapters,
+      totalWords,
+      hooks,
+      foreshadows,
+      mainlines,
+      characters,
+      avgQuality,
+      qualityLogs,
+      recentEmotions,
+      consistencyIssues,
+    ] = await Promise.all([
+      prisma.novel.findUnique({ where: { id: novelId }, select: { targetWordCount: true } }),
+      prisma.chapter.count({ where: { novelId, content: { not: "" } } }),
+      prisma.chapter.aggregate({ where: { novelId, content: { not: "" } }, _sum: { wordCount: true } }),
+      prisma.hook.findMany({ where: { novelId }, select: { status: true } }),
+      prisma.foreshadow.findMany({ where: { novelId }, select: { status: true } }),
+      prisma.mainline.findMany({ where: { novelId }, select: { status: true } }),
+      prisma.character.findMany({ where: { novelId }, select: { name: true, lastAppear: true } }),
+      prisma.chapter.aggregate({ where: { novelId, qualityScore: { not: null } }, _avg: { qualityScore: true } }),
+      prisma.chapterQualityLog.findMany({
+        where: { novelId, checkType: "post_gen" },
+        orderBy: { chapterOrder: "asc" },
+        select: { chapterOrder: true, scores: true, passed: true, retryCount: true },
+      }),
+      prisma.emotionCurve.findMany({
+        where: { novelId },
+        orderBy: { chapterOrder: "desc" },
+        take: 50,
+        select: { chapterOrder: true, isClimax: true, intensity: true, emotionType: true },
+      }),
+      prisma.consistencyIssue.findMany({
+        where: { novelId, status: "open" },
+        select: { type: true, severity: true },
+      }),
+    ]);
+
+    const targetWords = novel?.targetWordCount || 300000;
+    const currentWords = totalWords._sum.wordCount || 0;
+    const progress = targetWords > 0 ? Math.round((currentWords / targetWords) * 100) : 0;
+
+    // 钩子回收率
+    const hookTotal = hooks.length;
+    const hookResolved = hooks.filter(h => h.status === "resolved").length;
+    const hookRate = hookTotal > 0 ? Math.round((hookResolved / hookTotal) * 100) : 100;
+    const hookOverdue = hooks.filter(h => h.status !== "resolved" && h.status !== "abandoned").length;
+
+    // 伏笔回收率
+    const fsTotal = foreshadows.length;
+    const fsResolved = foreshadows.filter(f => f.status === "paid_off").length;
+    const fsRate = fsTotal > 0 ? Math.round((fsResolved / fsTotal) * 100) : 100;
+
+    // 主线完成度
+    const mainlineTotal = mainlines.length;
+    const mainlineCompleted = mainlines.filter(m => m.status === "completed").length;
+    const mainlineRate = mainlineTotal > 0 ? Math.round((mainlineCompleted / mainlineTotal) * 100) : 100;
+
+    // 沉默角色
+    const silentCharacters = characters.filter(c =>
+      c.lastAppear && c.lastAppear < totalChapters - 50
+    ).length;
+
+    // 质量指标
+    const qualityScores = qualityLogs.map(log => {
+      try { return JSON.parse(log.scores); } catch { return null; }
+    }).filter(Boolean);
+
+    const avgAiSmell = qualityScores.length > 0
+      ? Math.round(qualityScores.reduce((sum, s) => sum + (s.aiSmell || 0), 0) / qualityScores.length * 100) / 100
+      : 0;
+
+    const wordCountCompliant = qualityLogs.filter(log => {
+      try { return JSON.parse(log.scores)?.wordCount >= 8; } catch { return false; }
+    }).length;
+    const wordCountRate = qualityLogs.length > 0 ? Math.round((wordCountCompliant / qualityLogs.length) * 100) : 100;
+
+    // 情绪节奏
+    const emotions = recentEmotions.reverse();
+    let consecutiveClimax = 0;
+    let maxConsecutiveClimax = 0;
+    let consecutiveLow = 0;
+    let maxConsecutiveLow = 0;
+    for (const emo of emotions) {
+      if (emo.isClimax) {
+        consecutiveClimax++;
+        maxConsecutiveClimax = Math.max(maxConsecutiveClimax, consecutiveClimax);
+        consecutiveLow = 0;
+      } else {
+        consecutiveClimax = 0;
+        if (emo.intensity <= 3) {
+          consecutiveLow++;
+          maxConsecutiveLow = Math.max(maxConsecutiveLow, consecutiveLow);
+        } else {
+          consecutiveLow = 0;
+        }
+      }
+    }
+
+    // 一致性问题统计
+    const issueCounts = {
+      hook: consistencyIssues.filter(i => i.type === "hook").length,
+      foreshadow: consistencyIssues.filter(i => i.type === "foreshadow").length,
+      character: consistencyIssues.filter(i => i.type === "character").length,
+      emotion: consistencyIssues.filter(i => i.type === "emotion").length,
+      total: consistencyIssues.length,
+    };
+
+    // 质量趋势（最近 20 章）
+    const qualityTrend = qualityLogs.slice(-20).map(log => {
+      try {
+        const scores = JSON.parse(log.scores);
+        return {
+          chapterOrder: log.chapterOrder,
+          style: scores.style || 0,
+          infoDensity: scores.infoDensity || 0,
+          character: scores.character || 0,
+          emotion: scores.emotion || 0,
+          passed: log.passed,
+          retryCount: log.retryCount,
+        };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    res.json({
+      success: true,
+      data: {
+        overview: {
+          totalChapters,
+          totalWords: currentWords,
+          targetWords,
+          progress,
+          avgChapterQuality: Math.round(avgQuality._avg.qualityScore || 0),
+        },
+        quality: {
+          aiSmellRate: avgAiSmell,
+          wordCountRate,
+          styleScore: qualityScores.length > 0
+            ? Math.round(qualityScores.reduce((sum, s) => sum + (s.style || 0), 0) / qualityScores.length * 10) / 10
+            : 0,
+          infoDensityScore: qualityScores.length > 0
+            ? Math.round(qualityScores.reduce((sum, s) => sum + (s.infoDensity || 0), 0) / qualityScores.length * 10) / 10
+            : 0,
+        },
+        lifecycle: {
+          hookResolutionRate: hookRate,
+          hookTotal,
+          hookResolved,
+          hookOverdue,
+          foreshadowResolutionRate: fsRate,
+          foreshadowTotal: fsTotal,
+          foreshadowResolved: fsResolved,
+          mainlineCompletionRate: mainlineRate,
+        },
+        characters: {
+          total: characters.length,
+          silent: silentCharacters,
+        },
+        emotion: {
+          consecutiveClimax: maxConsecutiveClimax,
+          consecutiveLow: maxConsecutiveLow,
+          recentEmotions: emotions.slice(-20).map(e => ({
+            chapterOrder: e.chapterOrder,
+            intensity: e.intensity,
+            type: e.emotionType,
+            isClimax: e.isClimax,
+          })),
+        },
+        consistency: issueCounts,
+        qualityTrend,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "获取健康指标失败。",
+    });
+  }
+});
+
 export default router;

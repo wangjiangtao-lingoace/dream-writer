@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma";
-import { PhaseContext, safeJson } from "./pipelineUtils";
+import { PhaseContext, safeJson, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateConsistencyCheck } from "./generators";
+import { executeWritingPhase } from "./writingPhase";
 
 export async function executeConsistencyCheckPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
@@ -22,19 +23,50 @@ export async function executeConsistencyCheckPhase(ctx: PhaseContext, jobId: str
       prisma.emotionCurve.findMany({ where: { novelId }, orderBy: { chapterOrder: "asc" } }),
     ]);
 
+    // 加载核心资产（大纲、世界观、人物、风格）
+    const [outlineAsset, worldviewAsset, characterAsset, styleAsset] = await Promise.all([
+      prisma.knowledgeAsset.findFirst({ where: { novelId, category: "outline" }, orderBy: { updatedAt: "desc" } }),
+      prisma.knowledgeAsset.findFirst({ where: { novelId, category: "worldview" }, orderBy: { updatedAt: "desc" } }),
+      prisma.knowledgeAsset.findFirst({ where: { novelId, category: "character" }, orderBy: { updatedAt: "desc" } }),
+      prisma.knowledgeAsset.findFirst({ where: { novelId, category: "style" }, orderBy: { updatedAt: "desc" } }),
+    ]);
+
+    const outline = outlineAsset ? safeJson(outlineAsset.content, null) : null;
+    const worldview = worldviewAsset ? safeJson(worldviewAsset.content, null) : null;
+    const characters = characterAsset ? safeJson(characterAsset.content, null) : null;
+    const style = styleAsset ? safeJson(styleAsset.content, null) : null;
+
     // 构建规划摘要
     const planSummary = buildPlanSummaryForConsistency(
       chapterOutlines, hooks, foreshadows, mainlines, pleasurePoints, emotionCurves,
     );
 
     await ctx.updateJobProgress(jobId, "consistency_check", "consistency");
-    const result = await generateConsistencyCheck(ctx, novelId, planSummary);
+    const result = await generateConsistencyCheck(ctx, novelId, planSummary, outline, worldview, characters, style);
     await ctx.savePhaseResult(jobId, "consistency_check", "consistency",
       { planSummaryLength: planSummary.length }, result);
 
-    await prisma.pipelineJob.update({
-      where: { id: jobId },
-      data: { status: "paused", currentPhase: "consistency_check", currentStep: "waiting_confirm" },
+    // 将一致性问题写入 ConsistencyIssue 表
+    if (Array.isArray(result?.issues) && result.issues.length > 0) {
+      await prisma.consistencyIssue.createMany({
+        data: result.issues.map((issue: any) => ({
+          novelId,
+          type: issue.type || "character",
+          severity: issue.severity || "medium",
+          description: issue.description || "",
+          evidence: Array.isArray(issue.chapters) ? `相关章节：第${issue.chapters.join("、")}章` : "",
+          suggestion: issue.suggestion || "",
+          status: "open",
+        })),
+      });
+    }
+
+    await autoAdvanceOrPause(jobId, "consistency_check", async () => {
+      await prisma.pipelineJob.update({
+        where: { id: jobId },
+        data: { status: "running", currentPhase: "writing", currentStep: "chapter_drafts" },
+      });
+      await executeWritingPhase(ctx, jobId);
     });
   } catch (error: any) {
     await prisma.pipelineJob.update({

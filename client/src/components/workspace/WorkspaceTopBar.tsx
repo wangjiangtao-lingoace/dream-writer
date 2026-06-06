@@ -15,6 +15,7 @@ interface WorkspaceTopBarProps {
     rhythm: string;
     climax: boolean;
   };
+  exportButton?: React.ReactNode;
 }
 
 const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -34,7 +35,7 @@ const Pill: React.FC<{ color: string; bg: string; children: React.ReactNode }> =
   </span>
 );
 
-const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, writingStats, signals }) => {
+const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, writingStats, signals, exportButton }) => {
   const progressPct = writingStats.targetWordCount > 0
     ? Math.min(100, Math.round((writingStats.todayWordCount / writingStats.targetWordCount) * 100))
     : 0;
@@ -87,8 +88,9 @@ const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, w
         <Metric label="连续创作" value={`${writingStats.streakDays}天`} />
       </div>
 
-      {/* Right: Signals */}
+      {/* Right: Export + Signals */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", justifyContent: "flex-end" }}>
+        {exportButton}
         <Pill color="#c2410c" bg="rgba(234,179,8,0.1)">当前情绪：{signals.mood}</Pill>
         <Pill color="#047857" bg="rgba(34,197,94,0.1)">节奏：{signals.rhythm}</Pill>
         <Pill color="#3159d4" bg="rgba(79,124,255,0.1)">{signals.climax ? "高潮临近" : "高潮：稳定"}</Pill>

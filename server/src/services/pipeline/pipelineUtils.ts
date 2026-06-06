@@ -9,7 +9,7 @@ export interface PhaseContext {
   llmService: {
     completeText: (opts: { system?: string; prompt: string; temperature?: number; maxTokens?: number }) => Promise<string | null>;
   };
-  selfReview: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>;
+  selfReview?: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>;
   savePhaseResult: (jobId: string, phase: string, step: string, input: any, output: any) => Promise<void>;
   getPhaseOutput: (jobId: string, phase: string, step: string) => Promise<any>;
   confirmPhaseResults: (jobId: string, phase: string) => Promise<void>;
@@ -29,7 +29,7 @@ export interface PhaseContext {
     order: number;
     title: string;
     summary: string;
-    previousChapters: Array<{ order: number; title: string; content: string }>;
+    previousChapters: Array<{ order: number; title: string; content?: string; summary?: string; ending?: string }>;
   }) => string;
 }
 
@@ -74,45 +74,37 @@ export function formatNovelOutline(outline: any) {
 
 export function buildFallbackWorldview(outline: any) {
   return {
-    name: `${outline.genre || "当前作品"}世界观`,
-    summary: outline.coreSetting || outline.theme || "围绕当前作品主线建立的基础世界观。",
-    rules: outline.mainConflict || "世界规则必须为人物选择、案件推进、资源争夺和情感冲突服务。",
-    geography: "以主角当前活动区域为核心，逐步扩展王府、京城、朝堂、边境等关键场景。",
-    factions: "主角阵营、男主势力、反派家族、朝堂官僚、民间线索网络。",
-    history: "前史围绕旧案、家族利益和权力更替展开，作为后续伏笔来源。",
-    powerSystem: "现实制度、身份等级、医学/验尸知识、权谋资源共同构成冲突系统。",
-    specialElements: ["身份压迫", "专业知识降维", "案件证据链", "权谋反转"],
+    name: `${outline?.genre || "当前作品"}世界观`,
+    summary: outline?.coreSetting || outline?.theme || "围绕当前作品主线建立的基础世界观。",
+    rules: outline?.mainConflict || "",
+    geography: "",
+    factions: "",
+    history: "",
+    powerSystem: { name: "", levels: "", rules: "" },
+    specialElements: "",
   };
 }
 
 export function buildFallbackStyle(outline: any, config: PipelineConfig) {
   return {
-    name: `${outline.genre || config.genre || "默认"}风格`,
-    description: `服务于${outline.genre || config.genre || "当前类型"}的节奏型写法。`,
-    toneAndAtmosphere: "快节奏推进，情绪有压迫感，关键时刻有释放。",
-    emotionalRhythm: "三章一个小高潮，十章一个大高潮，紧张与舒缓交替。",
-    contrastPatterns: "强弱反差：主角表面弱势实际有底牌；明暗对比：表面平静暗藏危机。",
-    humorStyle: "无",
-    tensionTechniques: "信息不对称：读者知道危险但角色不知道；限时压力制造紧迫感。",
-    suspenseTechniques: "每章末尾留一个未解问题；关键信息分段揭露。",
+    name: `${outline?.genre || config?.genre || "默认"}风格`,
+    description: `服务于${outline?.genre || config?.genre || "当前类型"}的写作风格。`,
+    toneAndAtmosphere: "",
+    emotionalRhythm: "",
+    contrastPatterns: "",
+    humorStyle: "",
+    tensionTechniques: "",
+    suspenseTechniques: "",
     narrativePov: "third_person",
     tense: "past",
-    pacing: "fast",
-    sentenceRhythm: "短句为主制造紧张，长句铺垫制造氛围。",
+    pacing: "balanced",
+    sentenceRhythm: "",
     vocabularyLevel: "现代白话，避免生僻字。",
-    dialogueStyle: "简洁有力，潜台词丰富。",
-    chapterOpeningStyle: "直接进入冲突或悬念，不要大段铺垫。",
-    chapterEndingStyle: "必须留钩子，让读者想看下一章。",
-    writingRules: [
-      "每章必须有一个情绪高点（爽点/泪点/笑点）。",
-      "少解释设定，多用行动、证据、对话推进。",
-      "专业判断必须给出可见证据，避免无根据开挂。",
-    ],
-    avoidList: [
-      "不要用「他心想」开头的大段内心独白。",
-      "不要用「突然」作为转折词。",
-      "避免大段旁白式设定解释。",
-    ],
+    dialogueStyle: "",
+    chapterOpeningStyle: "",
+    chapterEndingStyle: "",
+    writingRules: [],
+    avoidList: [],
   };
 }
 
@@ -121,7 +113,7 @@ export function buildFallbackChapterDraft(input: {
   order: number;
   title: string;
   summary: string;
-  previousChapters: Array<{ order: number; title: string; content: string }>;
+  previousChapters: Array<{ order: number; title: string; content?: string; summary?: string; ending?: string }>;
 }) {
   const lead = input.previousChapters.length
     ? "前一章留下的线索还没有冷却，新的压力已经压到门前。"
@@ -155,9 +147,20 @@ export async function savePhaseResult(
   step: string,
   input: any,
   output: any,
-  selfReviewFn: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>,
+  selfReviewFn?: (content: any, type: string) => Promise<{ score: number; comment: string; issues: string[] }>,
 ) {
-  const review = await selfReviewFn(output, step);
+  // selfReview 改为可选：有则调用，无则跳过（节省 LLM 调用）
+  let score = 0;
+  let comment = "";
+  let issues: string[] = [];
+  if (selfReviewFn) {
+    try {
+      const review = await selfReviewFn(output, step);
+      score = review.score;
+      comment = review.comment;
+      issues = review.issues;
+    } catch {}
+  }
 
   await prisma.phaseResult.upsert({
     where: { jobId_phase_step: { jobId, phase, step } },
@@ -167,17 +170,17 @@ export async function savePhaseResult(
       step,
       input: JSON.stringify(input),
       output: JSON.stringify(output),
-      selfScore: review.score,
-      selfComment: review.comment,
-      issues: JSON.stringify(review.issues),
+      selfScore: score,
+      selfComment: comment,
+      issues: JSON.stringify(issues),
       status: "completed",
     },
     update: {
       input: JSON.stringify(input),
       output: JSON.stringify(output),
-      selfScore: review.score,
-      selfComment: review.comment,
-      issues: JSON.stringify(review.issues),
+      selfScore: score,
+      selfComment: comment,
+      issues: JSON.stringify(issues),
       status: "completed",
     },
   });
@@ -280,24 +283,31 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
     }
 
     if (category === "worldview" && content?.name) {
+      // 确保所有字段都是字符串（LLM 可能返回数组）
+      const ensureString = (val: any): string => {
+        if (Array.isArray(val)) return val.join("\n");
+        if (typeof val === "object") return JSON.stringify(val);
+        return val || "";
+      };
+
       await prisma.worldview.upsert({
         where: { novelId_name: { novelId, name: content.name } },
         create: {
           novelId,
           name: content.name,
-          summary: content.summary || "",
-          rules: content.rules || "",
-          geography: content.geography || "",
-          factions: content.factions || "",
-          history: content.history || "",
+          summary: ensureString(content.summary),
+          rules: ensureString(content.rules),
+          geography: ensureString(content.geography),
+          factions: ensureString(content.factions),
+          history: ensureString(content.history),
           powerSystem: typeof content.powerSystem === "string" ? content.powerSystem : JSON.stringify(content.powerSystem || {}),
         },
         update: {
-          summary: content.summary || "",
-          rules: content.rules || "",
-          geography: content.geography || "",
-          factions: content.factions || "",
-          history: content.history || "",
+          summary: ensureString(content.summary),
+          rules: ensureString(content.rules),
+          geography: ensureString(content.geography),
+          factions: ensureString(content.factions),
+          history: ensureString(content.history),
           powerSystem: typeof content.powerSystem === "string" ? content.powerSystem : JSON.stringify(content.powerSystem || {}),
         },
       });
@@ -479,6 +489,29 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
   }
 }
 
+// ===== 自动推进 =====
+
+export async function autoAdvanceOrPause(
+  jobId: string,
+  phase: string,
+  nextPhaseFn: () => void | Promise<void>,
+) {
+  const job = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+  if (!job) return;
+
+  const config = job.config ? JSON.parse(job.config) as PipelineConfig : {};
+
+  if (config.autoContinue) {
+    await confirmPhaseResults(jobId, phase);
+    await nextPhaseFn();
+  } else {
+    await prisma.pipelineJob.update({
+      where: { id: jobId },
+      data: { status: "paused", currentPhase: phase, currentStep: "waiting_confirm" },
+    });
+  }
+}
+
 // ===== 创建 PhaseContext =====
 
 export function createPhaseContext(
@@ -491,8 +524,9 @@ export function createPhaseContext(
   return {
     llmService,
     selfReview: selfReviewFn,
+    // 不再传 selfReviewFn 给 savePhaseResult，跳过自评 LLM 调用
     savePhaseResult: (jobId, phase, step, input, output) =>
-      savePhaseResult(jobId, phase, step, input, output, selfReviewFn),
+      savePhaseResult(jobId, phase, step, input, output),
     getPhaseOutput,
     confirmPhaseResults,
     updateJobProgress,

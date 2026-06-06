@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "../components/ui/toast";
+import PipelineConfigModal, { PipelineConfig } from "../components/PipelineConfigModal";
 
 const NovelForm: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const NovelForm: React.FC = () => {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string>("");
   const [creating, setCreating] = useState(false);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -42,14 +44,17 @@ const NovelForm: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formData.title.trim()) {
       toast.error("请输入作品标题");
       return;
     }
+    setConfigModalOpen(true);
+  };
 
+  const handleConfigConfirm = async (config: PipelineConfig) => {
+    setConfigModalOpen(false);
     try {
       setCreating(true);
       const novel = await api.post<{ id: string }>("/api/novels", formData);
@@ -65,14 +70,22 @@ const NovelForm: React.FC = () => {
 
       if (novel?.id) {
         toast.success("作品创建成功，AI 正在分析...");
-        // Auto-start pipeline for standalone creation
         try {
           await api.post("/api/pipeline/start", {
             novelId: novel.id,
-            config: { mode: "standalone", autoDraftChapters: 3 },
+            config: {
+              mode: "create",
+              sourceType: "idea",
+              autoContinue: config.autoContinue,
+              autoDraftChapters: config.autoDraftChapters,
+              volumeCount: config.volumeCount,
+              chaptersPerVolume: config.chaptersPerVolume,
+              targetWordCount: config.targetWordCount,
+              overwriteExistingChapters: config.overwriteExistingChapters,
+            },
           });
         } catch {
-          // Pipeline start failure is non-blocking; user can start manually from dashboard
+          // Pipeline start failure is non-blocking
         }
         navigate(`/novel/${novel.id}`);
       }
@@ -317,6 +330,13 @@ const NovelForm: React.FC = () => {
           </div>
         </form>
       </main>
+
+      <PipelineConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        onConfirm={handleConfigConfirm}
+        mode="create"
+      />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { encryptApiKey, decryptApiKey } from "../utils/crypto";
+import { clearLlmConfigCache } from "../services/llm/LlmInvokeService";
 
 const router = Router();
 
@@ -60,6 +61,7 @@ router.post("/", async (req, res, next) => {
       },
       select: { id: true, provider: true, model: true, baseUrl: true, isDefault: true, createdAt: true, updatedAt: true },
     });
+    clearLlmConfigCache();
     res.status(201).json({ success: true, data: config });
   } catch (error) {
     next(error);
@@ -71,6 +73,7 @@ router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     await prisma.aIConfig.delete({ where: { id } });
+    clearLlmConfigCache();
     res.json({ success: true, data: null });
   } catch (error) {
     next(error);

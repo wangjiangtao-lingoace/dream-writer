@@ -1,144 +1,14 @@
 import { prisma } from "../db/prisma";
 import { LlmInvokeService } from "./llm/LlmInvokeService";
 import { parseLlmJson } from "../utils/parseJson";
-import { updateStoryState, extractMemories } from "./pipeline/postProcessing";
+import { mergedPostProcessing } from "./pipeline/postProcessing";
+import { autoManageMemories } from "./MemoryCompressionService";
+import { ContextAssembler } from "./pipeline/contextAssembler";
+import { generateChapterSummary } from "./pipeline/writingPhase";
+import { validateChapterQuality } from "./pipeline/qualityCheck";
+import { WRITING_SYSTEM_PROMPT, QUALITY_THRESHOLDS } from "./pipeline/writingRules";
 
 const llmService = new LlmInvokeService();
-
-// ─── 10 条铁律系统 prompt（复用 writingPhase） ───
-
-const WRITING_SYSTEM_PROMPT = `你是一位顶级中文网络小说作家，擅长写出让读者欲罢不能的故事。
-
-你的写作铁律：
-1. 禁止使用任何 AI 味词汇：不禁、不由得、宛如、仿佛、似乎在诉说、一缕、一抹、一丝、缓缓、淡淡地、静静地、默默地、轻轻地
-2. 禁止用「他心想」「她暗想」开头的大段内心独白，用行动和对话展现人物内心
-3. 禁止用「突然」作为转折词，用具体的感官描写制造意外感
-4. 禁止大段旁白式设定解释，设定融入对话和行动中自然展现
-5. 对话必须像真人说话：有口头禅、有停顿、有未说完的话、有答非所问
-6. 每个角色说话方式必须不同：粗人说粗话、文人引经据贵、小孩用短句
-7. 情节推进靠人物动机驱动，不是靠作者安排，每个人做事都要有理由
-8. 描写具体化：不说「他很生气」，说「他攥紧拳头，指节发白，咬肌鼓起」
-9. 场景描写要有功能性：推动情节、揭示人物、制造氛围，三选一，否则删掉
-10. 章末必须留钩子，让读者想看下一章`;
-
-// ─── 上下文加载 ───
-
-async function loadContinuationContext(novelId: string) {
-  const [
-    novel,
-    characters,
-    worldviews,
-    hooks,
-    foreshadows,
-    mainlines,
-    memories,
-    styleProfile,
-    storyState,
-    recentChapters,
-  ] = await Promise.all([
-    prisma.novel.findUnique({ where: { id: novelId } }),
-    prisma.character.findMany({ where: { novelId }, orderBy: { updatedAt: "desc" }, take: 12 }),
-    prisma.worldview.findMany({ where: { novelId }, orderBy: { updatedAt: "desc" }, take: 4 }),
-    prisma.hook.findMany({ where: { novelId, status: "active" }, orderBy: { updatedAt: "desc" }, take: 8 }),
-    prisma.foreshadow.findMany({ where: { novelId, status: "planted" }, orderBy: { updatedAt: "desc" }, take: 8 }),
-    prisma.mainline.findMany({ where: { novelId }, orderBy: { updatedAt: "desc" }, take: 6 }),
-    prisma.memory.findMany({ where: { novelId }, orderBy: [{ importance: "desc" }, { updatedAt: "desc" }], take: 12 }),
-    prisma.styleProfile.findFirst({ where: { novelId, isDefault: true } }),
-    prisma.storyState.findUnique({ where: { novelId } }),
-    prisma.chapter.findMany({
-      where: { novelId, status: "drafted" },
-      orderBy: { order: "desc" },
-      take: 5,
-      select: { order: true, title: true, content: true, summary: true },
-    }),
-  ]);
-
-  return { novel, characters, worldviews, hooks, foreshadows, mainlines, memories, styleProfile, storyState, recentChapters };
-}
-
-// ─── 上下文文本构建 ───
-
-function buildCharacterBlock(characters: any[]): string {
-  if (!characters.length) return "";
-  const lines = characters.map((c) =>
-    `- ${c.name}：${[c.role, c.identity, c.motivation, c.arcSummary].filter(Boolean).join(" / ")}`
-  );
-  return `【人物卡 — 写作时必须保持人物性格一致】\n${lines.join("\n")}`;
-}
-
-function buildStyleBlock(style: any): string {
-  if (!style) return "";
-  const lines: string[] = [];
-  const fields = [
-    ["toneAndAtmosphere", "基调氛围"],
-    ["emotionalRhythm", "情绪节奏"],
-    ["contrastPatterns", "反差设计"],
-    ["humorStyle", "幽默方式"],
-    ["tensionTechniques", "紧张感技巧"],
-    ["suspenseTechniques", "悬念技巧"],
-    ["sentenceRhythm", "句式节奏"],
-    ["dialogueStyle", "对话风格"],
-    ["chapterOpeningStyle", "开篇方式"],
-    ["chapterEndingStyle", "收尾方式"],
-  ];
-
-  let customRules: any = {};
-  try { customRules = JSON.parse(style.customRules || "{}"); } catch {}
-
-  for (const [key, label] of fields) {
-    const val = style[key] || customRules[key];
-    if (val && val !== "无") lines.push(`${label}：${val}`);
-  }
-
-  if (Array.isArray(customRules.writingRules) && customRules.writingRules.length) {
-    lines.push(`写作规则：${customRules.writingRules.join("；")}`);
-  }
-  if (Array.isArray(customRules.avoidList) && customRules.avoidList.length) {
-    lines.push(`必须避免：${customRules.avoidList.join("；")}`);
-  }
-
-  return lines.length > 0 ? `\n${lines.join("\n")}\n` : "";
-}
-
-function buildPreviousChaptersBlock(chapters: any[]): string {
-  if (!chapters.length) return "【前文衔接】\n这是作品的第一章，需要快速建立人物、冲突和世界观。";
-  const sorted = [...chapters].sort((a, b) => a.order - b.order);
-  const lines = sorted.map((c) =>
-    `第${c.order}章 ${c.title}（摘要）：${(c.content || "").slice(0, 600)}`
-  );
-  return `【前文衔接 — 保持剧情连贯性】\n${lines.join("\n\n")}`;
-}
-
-function buildHooksBlock(hooks: any[], foreshadows: any[]): string {
-  const parts: string[] = [];
-  if (hooks.length) {
-    parts.push("【未解决的钩子 — 适当推进或回收】");
-    for (const h of hooks) {
-      parts.push(`- ${h.title}：${h.description || ""}（计划第${h.plannedChapter || "?"}章揭示）`);
-    }
-  }
-  if (foreshadows.length) {
-    parts.push("【未回收的伏笔 — 适时安排回收】");
-    for (const f of foreshadows) {
-      parts.push(`- ${f.title}：${f.description || ""}（计划第${f.payoffChapter || "?"}章回收）`);
-    }
-  }
-  return parts.join("\n");
-}
-
-function buildStoryStateBlock(state: any): string {
-  if (!state) return "";
-  const parts: string[] = ["【当前剧情状态】"];
-  parts.push(`当前进度：第${state.currentVolume}卷 第${state.currentChapter}章`);
-  parts.push(`剧情阶段：${state.currentPhase}`);
-  if (state.protagonistLevel) parts.push(`主角等级：${state.protagonistLevel}`);
-  if (state.protagonistGoal) parts.push(`主角目标：${state.protagonistGoal}`);
-  if (state.protagonistStatus) parts.push(`主角处境：${state.protagonistStatus}`);
-  parts.push(`当前情绪：${state.currentEmotion}（强度${state.emotionIntensity}/10）`);
-  if (state.tensionAccumulation > 0) parts.push(`累积压抑值：${state.tensionAccumulation}`);
-  if (state.lastPleasureChapter > 0) parts.push(`上次爽点：第${state.lastPleasureChapter}章`);
-  return parts.join("\n");
-}
 
 // ─── 章节大纲生成 ───
 
@@ -156,7 +26,7 @@ async function generateChapterOutline(params: {
   const recentSummary = recentChapters.length
     ? recentChapters
         .sort((a, b) => a.order - b.order)
-        .map((c) => `第${c.order}章 ${c.title}：${(c.content || "").slice(0, 300)}`)
+        .map((c) => `第${c.order}章 ${c.title}：${(c.summary || "").slice(0, 300)}`)
         .join("\n")
     : "尚无已写章节。";
 
@@ -220,61 +90,39 @@ ${storyState ? `【剧情状态】\n阶段：${storyState.currentPhase}，主角
 
 async function generateChapterContent(params: {
   novel: any;
-  outline: string;
   card: any;
-  style: any;
   order: number;
   title: string;
-  previousChapters: Array<{ order: number; title: string; content: string }>;
-  workspaceContext: string;
+  compactContext: string;
   targetWordCount: number;
+  retryHint?: string;
 }): Promise<string> {
-  const { novel, outline, card, style, order, title, previousChapters, workspaceContext, targetWordCount } = params;
+  const { novel, order, title, compactContext, targetWordCount, retryHint } = params;
 
-  const characterBlock = buildCharacterBlock(
-    (workspaceContext.match(/^- .+$/gm) || []).map((line) => {
-      const parts = line.slice(2).split("：");
-      return { name: parts[0], role: parts[1]?.split(" / ")[0], identity: parts[1]?.split(" / ")[1] };
-    })
-  );
-
-  const styleBlock = buildStyleBlock(style);
-  const prevBlock = buildPreviousChaptersBlock(previousChapters);
-
-  const summary = [card.goal, card.conflict, card.hook].filter(Boolean).join("；");
+  const retrySection = retryHint
+    ? `\n【重试修正要求 — 必须严格遵守】\n上一版存在以下问题，请务必修正：\n${retryHint}\n`
+    : "";
 
   const prompt = `请为「${novel.title}」写第${order}章的完整正文。
 
-【故事核心】
-${outline || novel.outline || novel.inspiration || "暂无大纲"}
-
-${characterBlock}
-
-【本章任务】
-章节标题：${title}
-章节目标：${summary || "继续推进剧情"}
-
-${styleBlock}
-
-${card.characters?.length ? `【出场角色】\n${card.characters.map((c: any) => `${c.name}（目标：${c.goal || "无"}，行动：${c.action || "无"}）`).join("、")}` : ""}
-
-${prevBlock}
+${compactContext}
 
 【写作要求】
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
-2. 目标字数：约 ${targetWordCount} 中文字
+2. 目标字数：${targetWordCount} 中文字（不少于 ${Math.round(targetWordCount * 0.8)} 字，不超过 ${Math.round(targetWordCount * 1.2)} 字）
 3. 场景转换用空行分隔，不要用「场景一」「场景二」这样的标记
 4. 对话用引号「」标注，不要用 ""
 5. 每段不超过 4 行，保持阅读节奏
 6. 章末必须留钩子
-
+7. 必须使用第三人称视角（他/她/角色名），禁止使用「我」「我们」
+${retrySection}
 请开始写作：`;
 
   const result = await llmService.completeText({
     system: WRITING_SYSTEM_PROMPT,
     prompt,
     temperature: 0.78,
-    maxTokens: Math.max(2000, Math.min(4500, Math.round(targetWordCount * 2))),
+    maxTokens: Math.max(3000, Math.min(5000, Math.round(targetWordCount * 2))),
   });
 
   return result?.trim() || "";
@@ -291,11 +139,11 @@ export class ContinuationService {
     chapterCount?: number;
     targetWordCount?: number;
   }): Promise<Array<{ id: string; order: number; title: string; content: string }>> {
-    const { novelId, chapterCount = 1, targetWordCount = 1800 } = params;
+    const { novelId, chapterCount = 1, targetWordCount = 2500 } = params;
 
-    // 加载上下文
-    const ctx = await loadContinuationContext(novelId);
-    if (!ctx.novel) throw new Error("小说不存在");
+    // 校验小说存在
+    const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+    if (!novel) throw new Error("小说不存在");
 
     // 获取当前最大章节序号
     const maxChapter = await prisma.chapter.findFirst({
@@ -305,16 +153,44 @@ export class ContinuationService {
     });
     const startOrder = (maxChapter?.order || 0) + 1;
 
-    // 构建工作台上下文
-    const workspaceContext = this.buildWorkspaceContext(ctx);
+    // 创建 ContextAssembler
+    const assembler = new ContextAssembler(novelId);
 
-    // 构建故事核心
-    const outline = ctx.novel.outline || ctx.novel.inspiration || "";
+    // 优先从 ChapterSummary 表加载前章概要，回退到 Chapter 表
+    const summaryRecords = await prisma.chapterSummary.findMany({
+      where: { novelId },
+      orderBy: { chapterOrder: "desc" },
+      take: 5,
+      select: { chapterOrder: true, title: true, summary: true, endingState: true },
+    });
+    let previousChapters: Array<{ order: number; title: string; summary: string; ending: string }>;
+    if (summaryRecords.length > 0) {
+      previousChapters = summaryRecords.reverse().map(s => ({
+        order: s.chapterOrder, title: s.title, summary: s.summary, ending: s.endingState,
+      }));
+    } else {
+      const recentChapters = await prisma.chapter.findMany({
+        where: { novelId, status: "drafted" },
+        orderBy: { order: "desc" },
+        take: 5,
+        select: { order: true, title: true, summary: true, content: true },
+      });
+      previousChapters = recentChapters.reverse().map(ch => ({
+        order: ch.order, title: ch.title,
+        summary: ch.summary || ch.content.slice(0, 100),
+        ending: ch.content.slice(-300),
+      }));
+    }
+
+    // 加载全量角色列表（大纲生成需要）
+    const [characters, hooks, foreshadows, storyState] = await Promise.all([
+      prisma.character.findMany({ where: { novelId }, orderBy: { updatedAt: "desc" }, take: 12 }),
+      prisma.hook.findMany({ where: { novelId, status: "active" }, orderBy: { updatedAt: "desc" }, take: 8 }),
+      prisma.foreshadow.findMany({ where: { novelId, status: "planted" }, orderBy: { updatedAt: "desc" }, take: 8 }),
+      prisma.storyState.findUnique({ where: { novelId } }),
+    ]);
 
     const results: Array<{ id: string; order: number; title: string; content: string }> = [];
-    const previousChapters = ctx.recentChapters
-      .sort((a, b) => a.order - b.order)
-      .map((c) => ({ order: c.order, title: c.title, content: (c.content || "").slice(0, 1200) }));
 
     for (let i = 0; i < chapterCount; i++) {
       const nextOrder = startOrder + i;
@@ -322,25 +198,25 @@ export class ContinuationService {
 
       // 1. 生成章节大纲
       const card = await generateChapterOutline({
-        novel: ctx.novel,
-        characters: ctx.characters,
-        hooks: ctx.hooks,
-        foreshadows: ctx.foreshadows,
-        storyState: ctx.storyState,
+        novel,
+        characters,
+        hooks,
+        foreshadows,
+        storyState,
         recentChapters: previousChapters.slice(-5),
         nextOrder,
       });
 
-      // 2. 生成章节正文
-      const content = await generateChapterContent({
-        novel: ctx.novel,
-        outline,
+      // 2. 组装精简上下文
+      const compactContext = await assembler.assembleForChapter(nextOrder, card);
+
+      // 3. 生成章节正文 + 质量后验循环
+      let content = await generateChapterContent({
+        novel,
         card,
-        style: ctx.styleProfile,
         order: nextOrder,
         title: card.title || `第${nextOrder}章`,
-        previousChapters: previousChapters.slice(-5),
-        workspaceContext,
+        compactContext,
         targetWordCount,
       });
 
@@ -349,7 +225,45 @@ export class ContinuationService {
         continue;
       }
 
-      // 3. 保存章节
+      // 质量后验：正则检测 + LLM 评分，不合格则重试
+      let retryCount = 0;
+      let qualityResult = await validateChapterQuality(
+        { llmService } as any, novelId, nextOrder, content, targetWordCount, card,
+      );
+
+      while (!qualityResult.passed && qualityResult.shouldRetry && retryCount < QUALITY_THRESHOLDS.MAX_RETRY_COUNT) {
+        retryCount++;
+        console.log(`[ContinuationService] 第${nextOrder}章质量不合格，第${retryCount}次重试`);
+        content = await generateChapterContent({
+          novel,
+          card,
+          order: nextOrder,
+          title: card.title || `第${nextOrder}章`,
+          compactContext,
+          targetWordCount,
+          retryHint: qualityResult.retryHint,
+        });
+        qualityResult = await validateChapterQuality(
+          { llmService } as any, novelId, nextOrder, content, targetWordCount, card,
+        );
+      }
+
+      // 保存质量日志
+      await prisma.chapterQualityLog.create({
+        data: {
+          novelId,
+          chapterOrder: nextOrder,
+          checkType: "post_gen",
+          scores: JSON.stringify(qualityResult.scores),
+          issues: JSON.stringify(qualityResult.issues),
+          retryCount,
+          passed: qualityResult.passed,
+        },
+      }).catch((e) => console.warn(`[ContinuationService] 质量日志保存失败:`, e));
+
+      // 4. 保存章节（含质量字段）
+      const qualityScore = qualityResult.passed ? 8 : 5;
+
       const chapter = await prisma.chapter.create({
         data: {
           novelId,
@@ -360,17 +274,21 @@ export class ContinuationService {
           wordCount: content.length,
           status: "drafted",
           source: "continuation",
+          qualityScore,
+          aiSmellCount: Math.round(qualityResult.scores.aiSmell * content.length / 100),
+          reviewStatus: qualityResult.passed ? "approved" : "reviewed",
         },
       });
 
-      // 4. 更新 StoryState
-      await updateStoryState(novelId, nextOrder, content);
+      // 5. 合并后处理：1次LLM调用完成 storyState + 记忆 + 角色状态 + 知识边界
+      await mergedPostProcessing(novelId, chapter.id, nextOrder, content, card).catch((e) =>
+        console.warn(`[ContinuationService] 第${nextOrder}章后处理失败:`, e)
+      );
+      await autoManageMemories(novelId, nextOrder).catch((e) =>
+        console.warn(`[ContinuationService] 第${nextOrder}章记忆管理失败:`, e)
+      );
 
-      // 5. 提取记忆
-      const memoryCount = await extractMemories(novelId, chapter.id, content);
-      console.log(`[ContinuationService] 第${nextOrder}章完成，提取${memoryCount}条记忆`);
-
-      // 6. 保存知识资产
+      // 7. 保存知识资产
       await prisma.knowledgeAsset.create({
         data: {
           novelId,
@@ -380,51 +298,26 @@ export class ContinuationService {
         },
       });
 
-      // 更新前文上下文
-      previousChapters.push({ order: nextOrder, title: card.title, content: content.slice(0, 1200) });
+      // 8. 快速摘要直接取正文前100字（省1次LLM调用）
+      const quickSummary = content.slice(0, 100);
+      previousChapters.push({ order: nextOrder, title: card.title, summary: quickSummary, ending: content.slice(-300) });
+
+      // 9. 结构化概要存入 ChapterSummary 表（异步，不阻塞）
+      generateChapterSummary({ llmService } as any, nextOrder, card.title, content).then(async (structured) => {
+        try {
+          await prisma.chapterSummary.upsert({
+            where: { novelId_chapterOrder: { novelId, chapterOrder: nextOrder } },
+            create: { novelId, chapterOrder: nextOrder, title: card.title, ...structured },
+            update: { title: card.title, ...structured, updatedAt: new Date() },
+          });
+        } catch (e) {
+          console.warn(`[ContinuationService] 第${nextOrder}章概要存储失败:`, e);
+        }
+      }).catch(() => {});
+
       results.push({ id: chapter.id, order: nextOrder, title: card.title, content });
     }
 
     return results;
-  }
-
-  private buildWorkspaceContext(ctx: Awaited<ReturnType<typeof loadContinuationContext>>): string {
-    const lines: string[] = ["【当前作品已入库资产】"];
-
-    if (ctx.novel?.outline) {
-      lines.push("## 当前作品大纲", ctx.novel.outline);
-    }
-    if (ctx.characters.length) {
-      lines.push("## 人物卡");
-      for (const c of ctx.characters) {
-        lines.push(`- ${c.name}：${[c.role, c.identity, c.motivation, c.arcSummary].filter(Boolean).join(" / ")}`);
-      }
-    }
-    if (ctx.worldviews.length) {
-      lines.push("## 世界观");
-      for (const w of ctx.worldviews) {
-        lines.push(`- ${w.name}：${[w.summary, w.rules, w.powerSystem].filter(Boolean).join(" / ")}`);
-      }
-    }
-    if (ctx.mainlines.length) {
-      lines.push("## 主线");
-      for (const m of ctx.mainlines) {
-        lines.push(`- ${m.title}：${m.description || ""}`);
-      }
-    }
-    if (ctx.hooks.length) {
-      lines.push("## 活跃钩子");
-      for (const h of ctx.hooks) {
-        lines.push(`- ${h.title}：${h.description || ""}（状态：${h.status}）`);
-      }
-    }
-    if (ctx.memories.length) {
-      lines.push("## 高优先级记忆");
-      for (const m of ctx.memories) {
-        lines.push(`- ${m.title}：${m.content.slice(0, 260)}`);
-      }
-    }
-
-    return lines.join("\n");
   }
 }

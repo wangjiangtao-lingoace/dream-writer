@@ -74,6 +74,9 @@ const NovelWorkspace: React.FC = () => {
   const [aiProgress, setAiProgress] = useState<{ message: string; progress?: number } | null>(null);
   const pipelinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Export dropdown state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   useEffect(() => {
     if (id) {
       loadNovel(id);
@@ -204,27 +207,38 @@ const NovelWorkspace: React.FC = () => {
   // New handlers for 3-column layout
   const handleSelectChapter = useCallback(async (chapterId: string) => {
     setActiveChapterId(chapterId);
+    setActiveChapterData(null);
   }, []);
 
+  const activeChapterRef = useRef(activeChapterData);
+  activeChapterRef.current = activeChapterData;
+
   const handleEditorChange = useCallback((content: string) => {
-    if (!activeChapterData) return;
-    setActiveChapterData({ ...activeChapterData, content });
+    const ch = activeChapterRef.current;
+    if (!ch) return;
+    setActiveChapterData({ ...ch, content });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       try {
-        await api.put(`/api/novels/${id}/chapters/${activeChapterData.id}`, {
-          title: activeChapterData.title,
+        await api.put(`/api/novels/${id}/chapters/${ch.id}`, {
+          title: ch.title,
           content,
         });
       } catch {
         toast.error("自动保存失败，请检查网络后手动保存");
       }
     }, 2000);
-  }, [activeChapterData, id]);
+  }, [id]);
 
   const handleToolbarAction = useCallback((action: string) => {
     toast.info(`工具栏操作: ${action}`);
   }, []);
+
+  const handleExport = useCallback((type: string) => {
+    if (!id) return;
+    setShowExportMenu(false);
+    window.open(`/api/export/${id}/${type}`, "_blank");
+  }, [id]);
 
   const handleCreateChapter = useCallback(async () => {
     if (!id) return;
@@ -786,6 +800,53 @@ const NovelWorkspace: React.FC = () => {
             onBack={() => navigate("/")}
             writingStats={workspaceData?.writingStats || defaultWritingStats}
             signals={workspaceData?.signals || defaultSignals}
+            exportButton={
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                    padding: "0.375rem 0.75rem", borderRadius: "8px",
+                    background: "var(--accent)", color: "#fff",
+                    border: "none", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  导出
+                </button>
+                {showExportMenu && (
+                  <div style={{
+                    position: "absolute", top: "100%", right: 0, marginTop: "4px",
+                    background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    border: "1px solid var(--border-default)", zIndex: 100, minWidth: "160px",
+                  }}>
+                    {[
+                      { type: "full", label: "全书正文 TXT" },
+                      { type: "outline", label: "大纲设定 TXT" },
+                      { type: "characters", label: "人物设定 TXT" },
+                      { type: "worldview", label: "世界观设定 TXT" },
+                    ].map((item) => (
+                      <div
+                        key={item.type}
+                        onClick={() => handleExport(item.type)}
+                        style={{
+                          padding: "0.5rem 0.75rem", cursor: "pointer", fontSize: "0.8125rem",
+                          color: "var(--text-primary)", borderBottom: "1px solid var(--border-default)",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        {item.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            }
           />
 
           <div className="workspace-write-body">
@@ -810,6 +871,7 @@ const NovelWorkspace: React.FC = () => {
                       wordCount={activeChapterData.wordCount || 0}
                     />
                     <RichTextEditor
+                      key={activeChapterId}
                       content={activeChapterData.content || ""}
                       onChange={handleEditorChange}
                       placeholder="开始写作..."
