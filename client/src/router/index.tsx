@@ -9,6 +9,7 @@ import PipelinePage from "@/pages/PipelinePage";
 import GeneralKnowledge from "@/pages/GeneralKnowledge";
 import AnalyzeCreate from "@/pages/AnalyzeCreate";
 import ImportContinue from "@/pages/ImportContinue";
+import CharacterImportPage from "@/pages/CharacterImportPage";
 import Settings from "@/pages/Settings";
 import GuidePage from "@/pages/GuidePage";
 
@@ -25,6 +26,7 @@ const routes: RouteObject[] = [
       { path: "novel/:id", element: <NovelWorkspace /> },
       { path: "novel/:id/:tab", element: <NovelWorkspace /> },
       { path: "novel/:id/pipeline", element: <PipelinePage /> },
+      { path: "novel/:novelId/characters/import", element: <CharacterImportPage /> },
       { path: "knowledge", element: <GeneralKnowledge /> },
       { path: "settings", element: <Settings /> },
       { path: "guide", element: <GuidePage /> },

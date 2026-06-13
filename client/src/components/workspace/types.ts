@@ -5,6 +5,7 @@ export type WorkspaceTab =
   | "outline"
   | "volumes"
   | "characters"
+  | "relations"
   | "worldviews"
   | "memory"
   | "consistency"
@@ -37,7 +38,7 @@ export interface TabGroup {
   }[];
 }
 
-export type WorkspaceGroupId = "writing" | "dashboard" | "planning" | "assets" | "quality";
+export type WorkspaceGroupId = "writing" | "outline" | "assets" | "quality";
 
 export interface WorkspaceGroupDef {
   id: WorkspaceGroupId;

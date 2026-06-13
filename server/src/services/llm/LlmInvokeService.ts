@@ -127,26 +127,62 @@ export class LlmError extends Error {
 }
 
 export class LlmInvokeService {
-  async completeTextOrThrow(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string> {
+  async completeTextOrThrow(input: {
+    system?: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+    provider?: LLMProvider;
+  }): Promise<string> {
     return withRetry(() => this.doCompleteText(input));
   }
 
-  private async doCompleteText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string> {
+  private async doCompleteText(input: {
+    system?: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+    provider?: LLMProvider;
+  }): Promise<string> {
     const config = await resolveModelConfig();
-    const provider = config?.provider ?? "unknown";
+    const provider = input.provider || config?.provider || "unknown";
     const model = config?.model ?? "unknown";
-    if (!config) {
+
+    // 如果指定了 provider，覆盖默认配置
+    let finalConfig: ResolvedModelConfig;
+    if (input.provider && input.provider !== config?.provider) {
+      const baseURL = getProviderEnvBaseUrl(input.provider) || getProviderDefaultBaseUrl(input.provider) || "https://api.openai.com/v1";
+      const apiKey = getProviderEnvApiKey(input.provider);
+      const providerModel = getProviderEnvModel(input.provider) || model;
+
+      if (providerRequiresApiKey(input.provider) && !apiKey) {
+        throw new LlmError(`Provider ${input.provider} 未配置 API Key`, input.provider, providerModel);
+      }
+
+      finalConfig = {
+        provider: input.provider,
+        model: providerModel,
+        baseURL,
+        apiKey,
+      };
+    } else if (!config) {
       throw new LlmError("未配置 LLM", provider, model);
+    } else {
+      finalConfig = config;
     }
 
-    const response = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
+    console.log(`[LLM Request] Provider: ${finalConfig.provider}, Model: ${finalConfig.model}`);
+    console.log(`[LLM Request] Base URL: ${finalConfig.baseURL}`);
+    console.log(`[LLM Request] API Key: ${finalConfig.apiKey ? finalConfig.apiKey.substring(0, 10) + '...' : 'NONE'}`);
+
+    const response = await fetch(`${finalConfig.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+        ...(finalConfig.apiKey ? { Authorization: `Bearer ${finalConfig.apiKey}` } : {}),
       },
       body: JSON.stringify({
-        model: config.model,
+        model: finalConfig.model,
         stream: false,
         temperature: input.temperature ?? 0.35,
         max_tokens: input.maxTokens ?? 1800,
@@ -158,7 +194,7 @@ export class LlmInvokeService {
     });
 
     if (!response.ok) {
-      throw new LlmError(`LLM 请求失败: ${response.status}`, config.provider, config.model, response.status);
+      throw new LlmError(`LLM 请求失败: ${response.status}`, finalConfig.provider, finalConfig.model, response.status);
     }
 
     const json = await response.json() as {
@@ -166,12 +202,18 @@ export class LlmInvokeService {
     };
     const content = json.choices?.[0]?.message?.content?.trim();
     if (!content) {
-      throw new LlmError("LLM 返回空内容", config.provider, config.model);
+      throw new LlmError("LLM 返回空内容", finalConfig.provider, finalConfig.model);
     }
     return content;
   }
 
-  async completeText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): Promise<string | null> {
+  async completeText(input: {
+    system?: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+    provider?: LLMProvider;
+  }): Promise<string | null> {
     try {
       return await this.completeTextOrThrow(input);
     } catch {

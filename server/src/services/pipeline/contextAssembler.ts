@@ -14,7 +14,7 @@ export class ContextAssembler {
    * 组装某章的精简创作上下文
    */
   async assembleForChapter(chapterOrder: number, chapterOutline: any): Promise<string> {
-    const [characters, worldview, style, summaryData, novel, ragContext, memories, storyState, activeHooks, plantedForeshadows] = await Promise.all([
+    const [characters, worldview, style, summaryData, novel, ragContext, memories, storyState, activeHooks, plantedForeshadows, mainlines, characterRelations, emotionCurve] = await Promise.all([
       this.loadInvolvedCharacters(chapterOutline),
       this.loadWorldviewSummary(),
       this.loadStyleCompact(),
@@ -22,9 +22,12 @@ export class ContextAssembler {
       this.loadNovelMeta(),
       this.loadRagContext(chapterOutline),
       this.loadRelevantMemories(chapterOrder),
-      this.loadStoryState(),
+      this.loadStoryState(chapterOrder),
       this.loadActiveHooks(),
       this.loadPlantedForeshadows(),
+      this.loadMainlines(chapterOrder),
+      this.loadCharacterRelations(chapterOutline),
+      this.loadEmotionCurve(chapterOrder),
     ]);
 
     return buildCompactContext({
@@ -41,6 +44,9 @@ export class ContextAssembler {
       storyState,
       activeHooks,
       plantedForeshadows,
+      mainlines,
+      characterRelations,
+      emotionCurve,
     });
   }
 
@@ -53,7 +59,7 @@ export class ContextAssembler {
 
     return prisma.character.findMany({
       where: { novelId: this.novelId, name: { in: names } },
-      select: { name: true, role: true, identity: true, motivation: true, arcSummary: true },
+      select: { name: true, role: true, identity: true, motivation: true, arcSummary: true, speechStyle: true },
     });
   }
 
@@ -81,12 +87,17 @@ export class ContextAssembler {
   }
 
   /**
-   * 只加载风格精简信息
+   * 加载完整风格配置（包括所有维度）
    */
   private async loadStyleCompact() {
     const sp = await prisma.styleProfile.findFirst({
       where: { novelId: this.novelId, isDefault: true },
-      select: { name: true, description: true, pacing: true, customRules: true },
+      select: {
+        name: true, description: true, pacing: true, customRules: true,
+        narrativePov: true, tense: true, sentenceLength: true, vocabulary: true,
+        dialogueRatio: true, emotionIntensity: true, humorLevel: true,
+        avoidAIWords: true, useShortSentences: true, useDialogue: true, useSensoryDetail: true,
+      },
     });
     if (!sp) return null;
 
@@ -103,6 +114,15 @@ export class ContextAssembler {
       dialogueStyle: rules.dialogueStyle?.slice(0, 50) || "",
       writingRules: Array.isArray(rules.writingRules) ? rules.writingRules.slice(0, 3) : [],
       avoidList: Array.isArray(rules.avoidList) ? rules.avoidList.slice(0, 3) : [],
+      // 完整风格维度
+      narrativePov: sp.narrativePov,
+      tense: sp.tense,
+      sentenceLength: sp.sentenceLength,
+      vocabulary: sp.vocabulary,
+      dialogueRatio: sp.dialogueRatio,
+      emotionIntensity: sp.emotionIntensity,
+      humorLevel: sp.humorLevel,
+      masterWriterStyle: rules.masterWriterStyle || "",
     };
   }
 
@@ -111,7 +131,6 @@ export class ContextAssembler {
    * 返回 { recent, milestones } 结构
    */
   private async loadRecentSummaries(currentOrder: number, count: number) {
-    // 1. 最近 N 章详细概要
     const summaries = await prisma.chapterSummary.findMany({
       where: {
         novelId: this.novelId,
@@ -130,7 +149,6 @@ export class ContextAssembler {
         }))
       : await this.loadRecentChaptersFallback(currentOrder, count);
 
-    // 2. 每 50 章一个的里程碑摘要（写第 300 章时，包含第 250、200、150... 章的摘要）
     const milestones: Array<{ order: number; title: string; summary: string }> = [];
     const milestoneOrders: number[] = [];
     for (let m = Math.floor((currentOrder - 1) / 50) * 50; m > 0; m -= 50) {
@@ -194,7 +212,6 @@ export class ContextAssembler {
     const ragService = getRagRetrieveService();
     if (!ragService) return "";
 
-    // 用章纲的关键信息作为检索 query
     const queryParts: string[] = [];
     if (chapterOutline?.title) queryParts.push(chapterOutline.title);
     if (chapterOutline?.goal) queryParts.push(chapterOutline.goal);
@@ -214,10 +231,8 @@ export class ContextAssembler {
 
   /**
    * 加载高重要度记忆（角色关系、关键剧情、世界观规则等）
-   * 同时更新记忆访问追踪
    */
   private async loadRelevantMemories(chapterOrder: number): Promise<Array<{ type: string; title: string; content: string }>> {
-    // 加载重要度 >= 6 的记忆，按重要度降序，最多 10 条
     const memories = await prisma.memory.findMany({
       where: {
         novelId: this.novelId,
@@ -228,7 +243,6 @@ export class ContextAssembler {
       select: { id: true, type: true, title: true, content: true },
     });
 
-    // 更新访问追踪（异步，不阻塞主流程）
     if (memories.length > 0) {
       prisma.memory.updateMany({
         where: { id: { in: memories.map(m => m.id) } },
@@ -270,14 +284,18 @@ export class ContextAssembler {
   }
 
   /**
-   * 加载当前剧情状态
+   * 加载当前剧情状态（包含禁止/允许列表和爽点冷却）
    */
-  private async loadStoryState(): Promise<{
+  private async loadStoryState(chapterOrder: number): Promise<{
     currentPhase: string;
     protagonistStatus: string;
     protagonistGoal: string;
     currentEmotion: string;
     activeForeshadows: string[];
+    forbiddenActions: string[];
+    allowedActions: string[];
+    pleasureCooldown: number;
+    mainConflict: string;
   } | null> {
     const state = await prisma.storyState.findUnique({
       where: { novelId: this.novelId },
@@ -287,12 +305,25 @@ export class ContextAssembler {
         protagonistGoal: true,
         currentEmotion: true,
         activeForeshadows: true,
+        forbiddenActions: true,
+        allowedActions: true,
+        pleasureCooldown: true,
+        lastPleasureChapter: true,
+        mainConflict: true,
       },
     });
     if (!state) return null;
 
     let foreshadows: string[] = [];
     try { foreshadows = JSON.parse(state.activeForeshadows || "[]"); } catch { /* ignore */ }
+    let forbidden: string[] = [];
+    try { forbidden = JSON.parse(state.forbiddenActions || "[]"); } catch { /* ignore */ }
+    let allowed: string[] = [];
+    try { allowed = JSON.parse(state.allowedActions || "[]"); } catch { /* ignore */ }
+
+    // 计算实际冷却值：如果距离上次爽点不足冷却值，保持冷却
+    const chaptersSincePleasure = chapterOrder - state.lastPleasureChapter;
+    const effectiveCooldown = Math.max(0, state.pleasureCooldown - chaptersSincePleasure);
 
     return {
       currentPhase: state.currentPhase || "",
@@ -300,7 +331,75 @@ export class ContextAssembler {
       protagonistGoal: state.protagonistGoal || "",
       currentEmotion: state.currentEmotion || "",
       activeForeshadows: foreshadows,
+      forbiddenActions: forbidden,
+      allowedActions: allowed,
+      pleasureCooldown: effectiveCooldown,
+      mainConflict: state.mainConflict || "",
     };
+  }
+
+  /**
+   * 加载当前章节范围内的活跃主线剧情
+   */
+  private async loadMainlines(chapterOrder: number): Promise<Array<{ title: string; type: string; description: string | null; priority: number }>> {
+    const mainlines = await prisma.mainline.findMany({
+      where: {
+        novelId: this.novelId,
+        status: "active",
+        OR: [
+          { startChapter: null, endChapter: null },
+          { startChapter: { lte: chapterOrder }, endChapter: null },
+          { startChapter: null, endChapter: { gte: chapterOrder } },
+          { startChapter: { lte: chapterOrder }, endChapter: { gte: chapterOrder } },
+        ],
+      },
+      orderBy: { priority: "desc" },
+      take: 5,
+      select: { title: true, type: true, description: true, priority: true },
+    });
+    return mainlines;
+  }
+
+  /**
+   * 加载本章出场角色之间的关系
+   */
+  private async loadCharacterRelations(outline: any): Promise<Array<{ charA: string; charB: string; relType: string; description: string | null }>> {
+    const names: string[] = (outline?.characters || []).map((c: any) => c.name).filter(Boolean);
+    if (names.length < 2) return [];
+
+    const relations = await prisma.characterRelation.findMany({
+      where: {
+        novelId: this.novelId,
+        status: "active",
+        charA: { name: { in: names } },
+        charB: { name: { in: names } },
+      },
+      include: { charA: { select: { name: true } }, charB: { select: { name: true } } },
+      take: 10,
+    });
+    return relations.map(r => ({ charA: r.charA.name, charB: r.charB.name, relType: r.relType, description: r.description }));
+  }
+
+  /**
+   * 加载当前章节的情绪曲线数据
+   */
+  private async loadEmotionCurve(chapterOrder: number): Promise<{
+    emotionType: string;
+    intensity: number;
+    isClimax: boolean;
+    isTurningPoint: boolean;
+    isBreathing: boolean;
+    description: string;
+  } | null> {
+    const curve = await prisma.emotionCurve.findFirst({
+      where: { novelId: this.novelId, chapterOrder },
+      select: {
+        emotionType: true, intensity: true,
+        isClimax: true, isTurningPoint: true, isBreathing: true,
+        description: true,
+      },
+    });
+    return curve;
   }
 }
 
@@ -315,33 +414,62 @@ export function buildCompactContext(input: {
   style: any;
   previousChapters: Array<{ order: number; title: string; summary: string; ending: string }>;
   milestoneSummaries?: Array<{ order: number; title: string; summary: string }>;
-  characters?: Array<{ name: string; role?: string | null; identity?: string | null; motivation?: string | null; arcSummary?: string | null }>;
+  characters?: Array<{ name: string; role?: string | null; identity?: string | null; motivation?: string | null; arcSummary?: string | null; speechStyle?: string | null }>;
   worldview?: { name: string; summary: string; rules: string; powerSystem: string } | null;
   ragContext?: string;
   memories?: Array<{ type: string; title: string; content: string }>;
-  storyState?: { currentPhase: string; protagonistStatus: string; protagonistGoal: string; currentEmotion: string; activeForeshadows: string[] } | null;
+  storyState?: {
+    currentPhase: string; protagonistStatus: string; protagonistGoal: string; currentEmotion: string;
+    activeForeshadows: string[]; forbiddenActions: string[]; allowedActions: string[];
+    pleasureCooldown: number; mainConflict: string;
+  } | null;
   activeHooks?: Array<{ title: string; description: string | null; type: string; intensity: number }>;
   plantedForeshadows?: Array<{ title: string; description: string; plantChapter: number | null }>;
+  mainlines?: Array<{ title: string; type: string; description: string | null; priority: number }>;
+  characterRelations?: Array<{ charA: string; charB: string; relType: string; description: string | null }>;
+  emotionCurve?: { emotionType: string; intensity: number; isClimax: boolean; isTurningPoint: boolean; isBreathing: boolean; description: string } | null;
 }): string {
   const parts: string[] = [];
 
-  // 1. 作品信息（~50 tokens）
-  parts.push(`【作品】${input.novelMeta.title}${input.novelMeta.genre ? `（${input.novelMeta.genre}）` : ""}`);
+  // 1. 作品信息 + 主题约束（~80 tokens）
+  let genreLine = `【作品】${input.novelMeta.title}`;
+  if (input.novelMeta.genre) {
+    genreLine += `（${input.novelMeta.genre}）`;
+    genreLine += `\n【主题硬约束】本作品类型为「${input.novelMeta.genre}」，所有内容必须严格围绕此类型展开。禁止出现与该类型不符的元素（如都市文中禁止出现修仙、异能、穿越等玄幻元素）。`;
+  }
+  parts.push(genreLine);
 
-  // 2. 本章出场角色（~200 tokens，只传精简卡片）
+  // 2. 主线剧情（~150 tokens）
+  if (input.mainlines && input.mainlines.length > 0) {
+    const mlLines = input.mainlines.map(ml =>
+      `「${ml.title}」（${ml.type}，优先级${ml.priority}）：${(ml.description || "").slice(0, 80)}`
+    );
+    parts.push(`【主线剧情 — 必须围绕以下主线展开】\n${mlLines.join("\n")}`);
+  }
+
+  // 3. 本章出场角色（~200 tokens）
   if (input.characters && input.characters.length > 0) {
     const charLines = input.characters.map(c => {
-      const parts = [c.name];
-      if (c.role) parts.push(`角色：${c.role}`);
-      if (c.identity) parts.push(`身份：${c.identity}`);
-      if (c.motivation) parts.push(`动机：${c.motivation}`);
-      if (c.arcSummary) parts.push(`特点：${c.arcSummary}`);
-      return parts.join("，");
+      const p = [c.name];
+      if (c.role) p.push(`角色：${c.role}`);
+      if (c.identity) p.push(`身份：${c.identity}`);
+      if (c.motivation) p.push(`动机：${c.motivation}`);
+      if (c.arcSummary) p.push(`特点：${c.arcSummary}`);
+      if (c.speechStyle) p.push(`语言风格：${c.speechStyle}`);
+      return p.join("，");
     });
     parts.push(`【本章角色】\n${charLines.join("\n")}`);
   }
 
-  // 3. 世界观锚点（~100 tokens）
+  // 4. 角色关系（~100 tokens）
+  if (input.characterRelations && input.characterRelations.length > 0) {
+    const relLines = input.characterRelations.map(r =>
+      `${r.charA} ↔ ${r.charB}：${r.relType}${r.description ? `（${r.description.slice(0, 40)}）` : ""}`
+    );
+    parts.push(`【角色关系】\n${relLines.join("\n")}`);
+  }
+
+  // 5. 世界观锚点（~100 tokens）
   if (input.worldview) {
     const wvLines: string[] = [];
     if (input.worldview.name) wvLines.push(`世界：${input.worldview.name}`);
@@ -351,18 +479,43 @@ export function buildCompactContext(input: {
     parts.push(`【世界设定】\n${wvLines.join("\n")}`);
   }
 
-  // 4. 本章详细规划（章纲是核心蓝图，完整保留，~500 tokens）
+  // 6. 本章详细规划（章纲是核心蓝图，完整保留，~500 tokens）
   if (input.enrichedChapter) {
     const enrichedBlock = buildEnrichedChapterBlockLocal(input.enrichedChapter);
     if (enrichedBlock) parts.push(enrichedBlock);
   }
 
-  // 5. 风格约束精简版（~150 tokens）
+  // 7. 风格约束完整版（~200 tokens）
   if (input.style) {
     const styleLines: string[] = [];
     if (input.style.name) styleLines.push(`风格：${input.style.name} — ${input.style.description || ""}`);
+    if (input.style.masterWriterStyle) styleLines.push(`【作家风格模仿】${input.style.masterWriterStyle}`);
     if (input.style.toneAndAtmosphere) styleLines.push(`基调：${input.style.toneAndAtmosphere}`);
     if (input.style.pacing) styleLines.push(`节奏：${input.style.pacing}`);
+    if (input.style.narrativePov) {
+      const povMap: Record<string, string> = { first_person: "第一人称", third_person: "第三人称有限视角", mixed: "灵活切换视角" };
+      styleLines.push(`叙事视角：${povMap[input.style.narrativePov] || input.style.narrativePov}`);
+    }
+    if (input.style.tense) {
+      const tenseMap: Record<string, string> = { past: "过去时态", present: "现在时态" };
+      styleLines.push(`时态：${tenseMap[input.style.tense] || input.style.tense}`);
+    }
+    if (input.style.sentenceLength) {
+      const lenMap: Record<string, string> = { short: "多用短句", long: "可用长句", mixed: "长短句结合" };
+      styleLines.push(`句式：${lenMap[input.style.sentenceLength] || input.style.sentenceLength}`);
+    }
+    if (input.style.dialogueRatio) {
+      const ratioMap: Record<string, string> = { low: "少对话多叙述", balanced: "对话叙述平衡", high: "多对话推进" };
+      styleLines.push(`对话比例：${ratioMap[input.style.dialogueRatio] || input.style.dialogueRatio}`);
+    }
+    if (input.style.emotionIntensity) {
+      const eiMap: Record<string, string> = { low: "情感克制内敛", medium: "情感适度", high: "情感强烈饱满" };
+      styleLines.push(`情感强度：${eiMap[input.style.emotionIntensity] || input.style.emotionIntensity}`);
+    }
+    if (input.style.humorLevel && input.style.humorLevel !== "none") {
+      const hlMap: Record<string, string> = { low: "偶尔轻松", medium: "适当幽默", high: "多用幽默调侃" };
+      styleLines.push(`幽默程度：${hlMap[input.style.humorLevel] || input.style.humorLevel}`);
+    }
     if (input.style.chapterOpeningStyle) styleLines.push(`开篇：${input.style.chapterOpeningStyle}`);
     if (input.style.chapterEndingStyle) styleLines.push(`收尾：${input.style.chapterEndingStyle}`);
     if (input.style.dialogueStyle) styleLines.push(`对话：${input.style.dialogueStyle}`);
@@ -375,7 +528,20 @@ export function buildCompactContext(input: {
     if (styleLines.length > 0) parts.push(`【风格约束】\n${styleLines.join("\n")}`);
   }
 
-  // 6. 前文回顾（~300 tokens）
+  // 8. 情绪曲线指导（~80 tokens）
+  if (input.emotionCurve) {
+    const ec = input.emotionCurve;
+    const tags: string[] = [];
+    if (ec.isClimax) tags.push("高潮章");
+    if (ec.isTurningPoint) tags.push("转折章");
+    if (ec.isBreathing) tags.push("呼吸章");
+    let ecLine = `目标情绪：${ec.emotionType}（强度：${ec.intensity}）`;
+    if (tags.length) ecLine += ` [${tags.join(",")}]`;
+    if (ec.description) ecLine += `\n情绪描述：${ec.description.slice(0, 60)}`;
+    parts.push(`【情绪曲线指导】\n${ecLine}`);
+  }
+
+  // 9. 前文回顾（~300 tokens）
   if (input.previousChapters.length > 0) {
     const review = input.previousChapters.map(ch =>
       `第${ch.order}章 ${ch.title}：${ch.summary}${ch.ending ? `\n章末：${ch.ending}` : ""}`
@@ -385,7 +551,7 @@ export function buildCompactContext(input: {
     parts.push("【前文回顾】这是开篇第一章，需要快速建立人物、冲突和世界观。");
   }
 
-  // 6b. 里程碑摘要（每 50 章一个，帮助理解长程剧情走向）
+  // 10. 里程碑摘要
   if (input.milestoneSummaries && input.milestoneSummaries.length > 0) {
     const milestoneLines = input.milestoneSummaries.map(ms =>
       `第${ms.order}章 ${ms.title}：${ms.summary.slice(0, 100)}`
@@ -393,12 +559,12 @@ export function buildCompactContext(input: {
     parts.push(`【剧情里程碑】\n${milestoneLines.join("\n")}`);
   }
 
-  // 7. RAG 检索的历史相关上下文（~200 tokens）
+  // 11. RAG 检索的历史相关上下文
   if (input.ragContext?.trim()) {
     parts.push(`【历史参考】\n${input.ragContext.slice(0, 800)}`);
   }
 
-  // 8. 关键记忆（~150 tokens）
+  // 12. 关键记忆
   if (input.memories && input.memories.length > 0) {
     const memLines = input.memories.map(m =>
       `[${m.type}] ${m.title}：${m.content.slice(0, 80)}`
@@ -406,19 +572,33 @@ export function buildCompactContext(input: {
     parts.push(`【重要记忆】\n${memLines.join("\n")}`);
   }
 
-  // 9. 当前剧情状态（~100 tokens）
+  // 13. 当前剧情状态（含禁止/允许列表）
   if (input.storyState) {
     const stateLines: string[] = [];
     if (input.storyState.protagonistStatus) stateLines.push(`主角处境：${input.storyState.protagonistStatus}`);
     if (input.storyState.protagonistGoal) stateLines.push(`当前目标：${input.storyState.protagonistGoal}`);
     if (input.storyState.currentPhase) stateLines.push(`剧情阶段：${input.storyState.currentPhase}`);
+    if (input.storyState.mainConflict) stateLines.push(`核心矛盾：${input.storyState.mainConflict}`);
     if (input.storyState.activeForeshadows.length > 0) {
       stateLines.push(`活跃伏笔：${input.storyState.activeForeshadows.slice(0, 5).join("、")}`);
     }
     if (stateLines.length > 0) parts.push(`【剧情状态】\n${stateLines.join("\n")}`);
+
+    // 禁止/允许列表
+    if (input.storyState.forbiddenActions.length > 0) {
+      parts.push(`【禁止剧情 — 本章绝对不能出现】\n${input.storyState.forbiddenActions.join("、")}`);
+    }
+    if (input.storyState.allowedActions.length > 0) {
+      parts.push(`【允许剧情 — 本章可以展开】\n${input.storyState.allowedActions.join("、")}`);
+    }
+
+    // 爽点冷却约束
+    if (input.storyState.pleasureCooldown > 0) {
+      parts.push(`【爽点冷却】当前处于爽点冷却期（剩余${input.storyState.pleasureCooldown}章），本章禁止出现爽点（金手指、复仇、震撼、逆袭等高能情节）。应以铺垫、过渡、人物互动为主。`);
+    }
   }
 
-  // 10. 活跃钩子（~100 tokens）
+  // 14. 活跃钩子
   if (input.activeHooks && input.activeHooks.length > 0) {
     const hookLines = input.activeHooks.map(h =>
       `「${h.title}」（${h.type}，强度${h.intensity}）：${(h.description || "").slice(0, 60)}`
@@ -426,7 +606,7 @@ export function buildCompactContext(input: {
     parts.push(`【未解决钩子】\n${hookLines.join("\n")}`);
   }
 
-  // 11. 已埋设伏笔（~100 tokens）
+  // 15. 已埋设伏笔
   if (input.plantedForeshadows && input.plantedForeshadows.length > 0) {
     const fsLines = input.plantedForeshadows.map(f =>
       `「${f.title}"（第${f.plantChapter || "?"}章埋设）：${(f.description || "").slice(0, 60)}`

@@ -66,7 +66,12 @@ ${foreshadowsToPayoff.join("、") || "无"}
     "emotionIntensity": 5,
     "tensionAccumulation": 0,
     "activeForeshadows": ["活跃伏笔标题"],
-    "pendingPayoffs": ["待回收伏笔标题"]
+    "pendingPayoffs": ["待回收伏笔标题"],
+    "forbiddenActions": ["下一章禁止出现的剧情，如：主角不能死亡、不能出现时间穿越等"],
+    "allowedActions": ["下一章允许展开的剧情，如：主角获得新技能、配角出场等"],
+    "mainConflict": "当前核心矛盾",
+    "lastPleasureChapter": 0,
+    "pleasureCooldown": 0
   },
   "memories": [
     { "type": "world/character/plot/foreshadow", "title": "记忆标题", "content": "记忆内容", "importance": 8 }
@@ -113,6 +118,11 @@ ${foreshadowsToPayoff.join("、") || "无"}
           tensionAccumulation: ss.tensionAccumulation || 0,
           activeForeshadows: JSON.stringify(ss.activeForeshadows || []),
           pendingPayoffs: JSON.stringify(ss.pendingPayoffs || []),
+          forbiddenActions: JSON.stringify(ss.forbiddenActions || []),
+          allowedActions: JSON.stringify(ss.allowedActions || []),
+          mainConflict: ss.mainConflict || "",
+          lastPleasureChapter: ss.lastPleasureChapter || 0,
+          pleasureCooldown: ss.pleasureCooldown || 0,
         },
         create: {
           novelId,

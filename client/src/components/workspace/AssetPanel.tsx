@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import AIScoreCircle from "./AIScoreCircle";
+import ChapterRevisionHistory from "../ChapterRevisionHistory";
 
 interface Character { id: string; name: string; role: string; arcSummary?: string; }
 interface Worldview { id: string; name: string; summary: string; }
@@ -10,9 +11,11 @@ interface AssetPanelProps {
   worldviews: Worldview[];
   foreshadows: Foreshadow[];
   aiReview?: { score: number; suggestions: string[] };
+  activeChapterId?: string | null;
+  onRevisionRollback?: () => void;
 }
 
-const TABS = ["AI编辑", "角色", "世界观", "伏笔"] as const;
+const TABS = ["AI编辑", "角色", "世界观", "伏笔", "版本"] as const;
 
 const statusBadge: Record<string, { bg: string; color: string; label: string }> = {
   planted: { bg: "rgba(234,179,8,0.1)", color: "#c2410c", label: "已埋" },
@@ -20,7 +23,7 @@ const statusBadge: Record<string, { bg: string; color: string; label: string }> 
   expired: { bg: "var(--bg-elevated)", color: "var(--text-muted)", label: "过期" },
 };
 
-const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foreshadows, aiReview }) => {
+const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foreshadows, aiReview, activeChapterId, onRevisionRollback }) => {
   const [tab, setTab] = useState<number>(0);
 
   return (
@@ -119,6 +122,19 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foresha
             })}
             {foreshadows.length === 0 && <div style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.8125rem", padding: "1.5rem 0" }}>暂无伏笔</div>}
           </div>
+        )}
+
+        {tab === 4 && (
+          activeChapterId ? (
+            <ChapterRevisionHistory
+              chapterId={activeChapterId}
+              onRollback={onRevisionRollback || (() => {})}
+            />
+          ) : (
+            <div style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.8125rem", padding: "1.5rem 0" }}>
+              请先选择一个章节
+            </div>
+          )
         )}
       </div>
     </div>

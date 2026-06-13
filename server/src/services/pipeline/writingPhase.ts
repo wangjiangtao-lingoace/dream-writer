@@ -8,7 +8,6 @@ import { ContextAssembler } from "./contextAssembler";
 import { validateChapterQuality } from "./qualityCheck";
 import { QUALITY_THRESHOLDS } from "./writingRules";
 import { runPeriodicConsistencyCheck, persistPeriodicCheckResults } from "./periodicCheck";
-import { getCharacterForbiddenKnowledge } from "./characterKnowledge";
 
 export async function executeWritingPhase(ctx: PhaseContext, jobId: string, startOrder?: number) {
   const job = await prisma.pipelineJob.findUnique({
@@ -222,9 +221,12 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       const compactContext = await assembler.assembleForChapter(order, enrichedChaptersMap.get(order) || card);
       const targetWordCount = config.targetWordCount || 2500;
 
-      // 角色知识边界检查：获取禁忌知识列表
-      const charNames = (card?.characters || []).map((c: any) => c.name).filter(Boolean);
-      const forbiddenKnowledge = await getCharacterForbiddenKnowledge(novelId, order, charNames).catch(() => []);
+      // 构建人物约束（知识边界 + 人设 + 言语风格 + 关系状态）
+      const { buildCharacterConstraints } = await import("./characterConstraints");
+      const characterConstraints = await buildCharacterConstraints(novelId, order).catch((e) => {
+        console.warn(`[writingPhase] 人物约束构建失败:`, e);
+        return "";
+      });
 
       // 写作 + 质量后验循环（最多重试 MAX_RETRY_COUNT 次）
       let draft = await generateChapterDraft(ctx, {
@@ -240,7 +242,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
         previousChapters,
         compactContext,
         targetWordCount,
-        forbiddenKnowledge,
+        characterConstraints,
       });
 
       let retryCount = 0;
@@ -262,6 +264,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
           previousChapters,
           compactContext,
           targetWordCount,
+          characterConstraints,
           retryHint: qualityResult.retryHint,
         });
         qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
@@ -361,7 +364,7 @@ async function generateChapterDraft(ctx: PhaseContext, input: {
   compactContext: string;
   targetWordCount: number;
   retryHint?: string;
-  forbiddenKnowledge?: string[];
+  characterConstraints?: string;
 }) {
   const { WRITING_SYSTEM_PROMPT } = await import("./writingRules");
   const system = WRITING_SYSTEM_PROMPT;
@@ -370,14 +373,14 @@ async function generateChapterDraft(ctx: PhaseContext, input: {
     ? `\n【重试修正要求 — 必须严格遵守】\n上一版存在以下问题，请务必修正：\n${input.retryHint}\n`
     : "";
 
-  const forbiddenSection = input.forbiddenKnowledge?.length
-    ? `\n【角色知识边界 — 禁止提及】\n以下信息在本章中对应角色不应该知道，请勿在对话或内心活动中提及：\n${input.forbiddenKnowledge.join("\n")}\n`
+  const characterSection = input.characterConstraints
+    ? `\n${input.characterConstraints}\n`
     : "";
 
   const prompt = `请为「${input.novel.title}」写第${input.order}章的完整正文。
 
 ${input.compactContext}
-
+${characterSection}
 【写作要求】
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
 2. 目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.8)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
@@ -386,7 +389,12 @@ ${input.compactContext}
 5. 第一章必须在前 300 字内建立冲突或悬念，不要用风景描写开头
 6. 每段不超过 4 行，保持阅读节奏
 7. 必须使用第三人称视角（他/她/角色名），禁止使用「我」「我们」
-${forbiddenSection}${retrySection}
+8. ⚠️ 必须严格遵守【人物约束】中的所有规则：
+   - 角色不能做"绝不会做"的事
+   - 角色不能知道他们"不应该知道"的信息
+   - 言语风格必须符合设定
+   - 角色关系必须符合当前章节状态
+${retrySection}
 请开始写作：`;
 
   const result = await ctx.llmService.completeText({

@@ -3,6 +3,8 @@
  * Pipeline 模式和续写模式统一使用，确保规则一致性
  */
 
+import { AI_SMELL_WORDS, AI_SMELL_PHRASES } from "./aiSmellWords";
+
 // 15 条写作铁律（完整版）
 export const WRITING_SYSTEM_PROMPT = `你是一位顶级中文网络小说作家，擅长写出让读者欲罢不能的故事。
 
@@ -26,21 +28,8 @@ export const WRITING_SYSTEM_PROMPT = `你是一位顶级中文网络小说作家
 15. 禁止万能句式：「他感到一阵xxx」「一股xxx的感觉涌上心头」「他的眼神变得xxx」
 16. 必须使用第三人称视角写作（他/她/角色名），严禁使用第一人称（我/我们）`;
 
-// AI 味词汇列表（正则检测用）
-export const AI_SMELL_WORDS = [
-  "不禁", "不由得", "宛如", "仿佛", "似乎在诉说", "一缕", "一抹", "一丝",
-  "缓缓", "淡淡地", "静静地", "默默地", "轻轻地", "娓娓道来", "令人叹为观止",
-  "目光深邃", "嘴角微微上扬", "令人震撼", "无与伦比", "深刻地", "极大地",
-  "宛如一幅画", "如同一首诗", "仿佛在诉说", "似乎在低语",
-];
-
-// AI 味短语模式（正则检测用）
-export const AI_SMELL_PHRASES = [
-  "他心想", "她暗想", "他感到一阵", "一股.+的感觉涌上心头",
-  "他的眼神变得", "她的眼神变得", "他不禁", "她不禁",
-  "令人感到", "让人感到", "一股莫名的", "一阵莫名的",
-  "深深地", "重重地", "缓缓地", "静静地",
-];
+// Re-export from shared module for backward compatibility
+export { AI_SMELL_WORDS, AI_SMELL_PHRASES } from "./aiSmellWords";
 
 // 质量评分阈值
 export const QUALITY_THRESHOLDS = {

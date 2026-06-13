@@ -142,7 +142,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
   },
   mimo: {
     name: "MiMo",
-    baseURL: "https://token-plan-sgp.xiaomimimo.com/v1",
+    baseURL: "https://token-plan-cn.xiaomimimo.com/v1",
     defaultModel: "mimo-v2.5-pro",
     models: ["mimo-v2.5-pro", "mimo-v2.5-flash"],
     envKey: "MIMO_API_KEY",

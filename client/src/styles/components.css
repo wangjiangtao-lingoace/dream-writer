@@ -318,8 +318,8 @@
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  background: none;
-  border: 1px solid transparent;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -329,6 +329,23 @@
   color: var(--text-primary);
   background: var(--accent-muted);
   border-color: var(--accent-border);
+}
+
+.card-actions .btn-detail {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.card-actions .btn-detail:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.card-actions .btn-detail.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-default);
 }
 
 /* ─── CharacterCard 组件 ─── */

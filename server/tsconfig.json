@@ -17,5 +17,5 @@
     "noEmit": false
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "src/**/__tests__/**", "jest.config.ts"]
 }

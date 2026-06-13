@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
+import { CharacterImportService } from "../services/CharacterImportService";
 
 const router = Router();
+const importService = new CharacterImportService();
 
 const idSchema = z.object({ id: z.string().trim().min(1) });
 const novelIdSchema = z.object({ novelId: z.string().trim().min(1) });
@@ -90,6 +92,39 @@ router.delete("/:novelId/:id", async (req, res, next) => {
     const { id } = idSchema.parse(req.params);
     await prisma.character.delete({ where: { id, novelId } });
     res.json({ success: true, data: null });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 获取人物关系
+router.get("/relations/:novelId", async (req, res, next) => {
+  try {
+    const { novelId } = novelIdSchema.parse(req.params);
+    const relations = await prisma.characterRelation.findMany({
+      where: { novelId },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ success: true, data: relations });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 从文本导入人物卡
+router.post("/import/:novelId", async (req, res, next) => {
+  try {
+    const { novelId } = novelIdSchema.parse(req.params);
+    const { text } = z.object({ text: z.string().min(1, "文本内容不能为空") }).parse(req.body);
+
+    const result = await importService.importFromText(novelId, text);
+
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
+
+    res.json(result);
   } catch (error) {
     next(error);
   }

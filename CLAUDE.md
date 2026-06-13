@@ -83,7 +83,7 @@ dream-writer/
 
 ## 开发注意事项
 
-- **开发阶段**: 当前处于 P0（骨架联通）已完成，P1（小说主线）待启动状态，见 `IMPLEMENTATION_ROADMAP.md`
+- **开发阶段**: 当前处于 P4（打磨阶段），P0-P3 已完成，见 `IMPLEMENTATION_ROADMAP.md`
 - **环境变量**: server 需要 `.env` 文件（参考 `.env.example`），至少配置一个 LLM provider 的 API Key
 - **数据库初始化**: `pnpm dev:server` 会自动检查并生成 Prisma Client；首次需执行 `pnpm prisma:push`
 - **构建顺序**: shared 必须先构建，因为 server 和 client 都依赖它
@@ -95,9 +95,9 @@ dream-writer/
 | 阶段 | 主题 | 状态 |
 |------|------|------|
 | P0 | 骨架联通 | ✅ 完成 |
-| P1 | 小说主线（Novel/Chapter CRUD + LLM 生成） | 待启动 |
-| P2 | 世界观/人物/资料库 | 待启动 |
-| P3 | 检索增强（RAG） | 待启动 |
+| P1 | 小说主线（Novel/Chapter CRUD + LLM 生成 + Pipeline） | ✅ 完成（已超额） |
+| P2 | 世界观/人物/资料库/风格/记忆/一致性校验 | ✅ 完成（已超额） |
+| P3 | 检索增强（RAG） | ✅ 完成 |
 | P4 | 打磨（错误处理/配额/日志） | 待启动 |
 | P5 | 可选迁移（AI-Novel 旧库导入） | 待启动 |
 

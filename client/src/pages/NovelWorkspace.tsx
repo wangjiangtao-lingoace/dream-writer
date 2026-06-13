@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "../components/ui/toast";
 import CharacterCard from "../components/CharacterCard";
+import CharacterRelationGraph from "../components/CharacterRelationGraph";
 import WorldviewEditor from "../components/WorldviewEditor";
 import WorldviewViewer from "../components/WorldviewViewer";
 import OutlineViewer from "../components/OutlineViewer";
@@ -13,34 +13,16 @@ import VolumeEditor from "../components/VolumeEditor";
 import MemoryPanel from "../components/MemoryPanel";
 import ConsistencyPanel from "../components/ConsistencyPanel";
 import StylePanel from "../components/StylePanel";
-import { AIPanel } from "../components/layout/AIPanel";
 import {
   DashboardPanel,
-  WorkspaceSidebar,
   MainlinePanel,
   HookPanel,
-  WritePanel,
   AnalysisPanel,
-  WorkspaceTopBar,
-  WorkspaceBottomBar,
-  ChapterSidebar,
-  RichTextEditor,
-  ChapterHeaderView,
-  AssetPanel,
-  AIProgressBanner,
 } from "../components/workspace";
-import type { WorkspaceTab, TabGroup, WorkspaceGroupId, WorkspaceGroupDef, NovelDetail, WorkspaceData, RadarScores, AIReview } from "../components/workspace";
+import { WorkspaceWriteLayout } from "../components/workspace/WorkspaceWriteLayout";
+import { WorkspaceStandardLayout } from "../components/workspace/WorkspaceStandardLayout";
+import type { WorkspaceTab, WorkspaceGroupId, WorkspaceGroupDef, NovelDetail, WorkspaceData, RadarScores, AIReview } from "../components/workspace";
 import "../styles/pages/workspace.css";
-
-const defaultWritingStats = {
-  todayWordCount: 0,
-  targetWordCount: 3000,
-  totalWordCount: 0,
-  streakDays: 0,
-  estimatedTime: "--",
-};
-
-const defaultSignals = { mood: "neutral", rhythm: "development", climax: false };
 
 const NovelWorkspace: React.FC = () => {
   const navigate = useNavigate();
@@ -288,12 +270,13 @@ const NovelWorkspace: React.FC = () => {
   const TAB_TO_GROUP: Record<WorkspaceTab, WorkspaceGroupId> = {
     write: "writing",
     analysis: "writing",
-    dashboard: "dashboard",
-    outline: "planning",
-    volumes: "planning",
-    mainlines: "planning",
-    hooks: "planning",
+    dashboard: "writing",
+    outline: "outline",
+    volumes: "outline",
+    mainlines: "outline",
+    hooks: "outline",
     characters: "assets",
+    relations: "assets",
     worldviews: "assets",
     style: "assets",
     knowledge: "assets",
@@ -303,11 +286,11 @@ const NovelWorkspace: React.FC = () => {
 
   const activeGroupId = TAB_TO_GROUP[activeTab] || "writing";
 
-  // 5 大工作区定义
+  // 4 大工作区定义（精简版）
   const groupDefs: WorkspaceGroupDef[] = [
     {
       id: "writing",
-      label: "正文写作",
+      label: "写作",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M12 20h9" />
@@ -317,11 +300,23 @@ const NovelWorkspace: React.FC = () => {
       tabs: [
         {
           key: "write",
-          label: "写作",
+          label: "写作台",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          ),
+        },
+        {
+          key: "dashboard",
+          label: "总控台",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
             </svg>
           ),
         },
@@ -338,34 +333,8 @@ const NovelWorkspace: React.FC = () => {
       ],
     },
     {
-      id: "dashboard",
-      label: "创作总控",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <rect x="3" y="3" width="7" height="7" />
-          <rect x="14" y="3" width="7" height="7" />
-          <rect x="14" y="14" width="7" height="7" />
-          <rect x="3" y="14" width="7" height="7" />
-        </svg>
-      ),
-      tabs: [
-        {
-          key: "dashboard",
-          label: "总控",
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="3" width="7" height="7" />
-              <rect x="14" y="3" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" />
-            </svg>
-          ),
-        },
-      ],
-    },
-    {
-      id: "planning",
-      label: "故事规划",
+      id: "outline",
+      label: "大纲",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -424,7 +393,7 @@ const NovelWorkspace: React.FC = () => {
     },
     {
       id: "assets",
-      label: "创作资产",
+      label: "资产",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -439,6 +408,18 @@ const NovelWorkspace: React.FC = () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
+            </svg>
+          ),
+        },
+        {
+          key: "relations",
+          label: "关系图",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           ),
         },
@@ -482,7 +463,7 @@ const NovelWorkspace: React.FC = () => {
     },
     {
       id: "quality",
-      label: "质量校验",
+      label: "质量",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -684,6 +665,13 @@ const NovelWorkspace: React.FC = () => {
           </div>
         );
 
+      case "relations":
+        return (
+          <div style={{ height: "calc(100vh - 200px)", minHeight: "600px" }}>
+            <CharacterRelationGraph novelId={id!} />
+          </div>
+        );
+
       case "worldviews":
         return (
           <div className="worldviews-panel">
@@ -786,295 +774,47 @@ const NovelWorkspace: React.FC = () => {
   // 3-column layout for "writing" group (write + analysis)
   if (activeGroupId === "writing") {
     return (
-      <ErrorBoundary>
-        <div className="workspace-write-layout">
-          {aiProgress && (
-            <AIProgressBanner
-              message={aiProgress.message}
-              progress={aiProgress.progress}
-              onDetail={() => navigate(`/novel/${id}/pipeline`)}
-            />
-          )}
-          <WorkspaceTopBar
-            novelTitle={workspaceData?.novel?.title || novel?.title || ""}
-            onBack={() => navigate("/")}
-            writingStats={workspaceData?.writingStats || defaultWritingStats}
-            signals={workspaceData?.signals || defaultSignals}
-            exportButton={
-              <div style={{ position: "relative" }}>
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: "0.375rem",
-                    padding: "0.375rem 0.75rem", borderRadius: "8px",
-                    background: "var(--accent)", color: "#fff",
-                    border: "none", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  导出
-                </button>
-                {showExportMenu && (
-                  <div style={{
-                    position: "absolute", top: "100%", right: 0, marginTop: "4px",
-                    background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    border: "1px solid var(--border-default)", zIndex: 100, minWidth: "160px",
-                  }}>
-                    {[
-                      { type: "full", label: "全书正文 TXT" },
-                      { type: "outline", label: "大纲设定 TXT" },
-                      { type: "characters", label: "人物设定 TXT" },
-                      { type: "worldview", label: "世界观设定 TXT" },
-                    ].map((item) => (
-                      <div
-                        key={item.type}
-                        onClick={() => handleExport(item.type)}
-                        style={{
-                          padding: "0.5rem 0.75rem", cursor: "pointer", fontSize: "0.8125rem",
-                          color: "var(--text-primary)", borderBottom: "1px solid var(--border-default)",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {item.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            }
-          />
-
-          <div className="workspace-write-body">
-            <ChapterSidebar
-              chapters={workspaceData?.chapters || []}
-              activeChapterId={activeChapterId}
-              onSelectChapter={handleSelectChapter}
-              onCreateChapter={handleCreateChapter}
-              onContinue={handleContinue}
-              continuing={continuing}
-            />
-
-            <main className="workspace-write-main">
-              <div className="workspace-write-main-inner">
-                {activeChapterData ? (
-                  <>
-                    <ChapterHeaderView
-                      breadcrumb={getBreadcrumb()}
-                      title={activeChapterData.title}
-                      goals={activeChapterData.summary}
-                      mood={workspaceData?.storyState?.currentEmotion}
-                      wordCount={activeChapterData.wordCount || 0}
-                    />
-                    <RichTextEditor
-                      key={activeChapterId}
-                      content={activeChapterData.content || ""}
-                      onChange={handleEditorChange}
-                      placeholder="开始写作..."
-                      onToolbarAction={handleToolbarAction}
-                    />
-                  </>
-                ) : (
-                  <div className="workspace-write-empty">
-                    选择一个章节开始写作
-                  </div>
-                )}
-              </div>
-            </main>
-
-            <AssetPanel
-              characters={workspaceData?.characters || []}
-              worldviews={worldviews}
-              foreshadows={workspaceData?.foreshadows || []}
-              aiReview={aiReview}
-            />
-          </div>
-
-          <WorkspaceBottomBar
-            analysis={workspaceData?.storyState ? `${workspaceData.storyState.currentPhase}阶段，情绪${workspaceData.storyState.currentEmotion}` : undefined}
-            radarScores={radarScores || { pleasureDensity: 50, emotionWave: 50, infoRelease: 30 }}
-            nextSuggestion="继续创作下一章"
-          />
-        </div>
-      </ErrorBoundary>
+      <WorkspaceWriteLayout
+        workspaceData={workspaceData}
+        radarScores={radarScores}
+        activeChapterData={activeChapterData}
+        aiReview={aiReview}
+        worldviews={worldviews}
+        aiProgress={aiProgress}
+        activeChapterId={activeChapterId}
+        continuing={continuing}
+        showExportMenu={showExportMenu}
+        onNavigate={navigate}
+        onSelectChapter={handleSelectChapter}
+        onCreateChapter={handleCreateChapter}
+        onContinue={handleContinue}
+        onEditorChange={handleEditorChange}
+        onToolbarAction={handleToolbarAction}
+        onExport={handleExport}
+        onShowExportMenu={setShowExportMenu}
+        getBreadcrumb={getBreadcrumb}
+      />
     );
   }
 
   // Standard layout for non-writing groups (dashboard, planning, assets, quality)
   return (
-    <ErrorBoundary>
-    <div className="workspace">
-      {/* 中栏：编辑器 */}
-      <div className="workspace-editor">
-        {aiProgress && (
-          <AIProgressBanner
-            message={aiProgress.message}
-            progress={aiProgress.progress}
-            onDetail={() => navigate(`/novel/${id}/pipeline`)}
-          />
-        )}
-        <header className="workspace-header" style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0.75rem 1.5rem",
-          borderBottom: "1px solid var(--border-default)",
-          background: "var(--bg-surface)",
-          boxShadow: "var(--shadow-sm)",
-        }}>
-          <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <button className="btn-back" onClick={() => navigate("/")} style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.5rem 1rem",
-              background: "transparent",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-sm)",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-              transition: "all var(--transition-fast)",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-              返回书架
-            </button>
-            <div style={{ width: "1px", height: "24px", background: "var(--border-default)" }} />
-            <h1 style={{
-              fontFamily: "var(--font-serif)",
-              fontSize: "1.25rem",
-              color: "var(--text-primary)",
-              letterSpacing: "0.05em",
-              margin: 0,
-            }}>《{novel.title}》</h1>
-          </div>
-          <div className="header-actions" style={{ display: "flex", gap: "0.5rem" }}>
-            <button className="btn-pipeline" onClick={() => navigate(`/novel/${id}/pipeline`)} style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.5rem 1rem",
-              background: "transparent",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--border-default)",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "0.8125rem",
-              cursor: "pointer",
-              transition: "all var(--transition-fast)",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              流程
-            </button>
-            <button className="btn-save" onClick={handleSave} style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.5rem 1rem",
-              background: "var(--accent)",
-              color: "var(--text-inverse)",
-              border: "none",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "0.8125rem",
-              cursor: "pointer",
-              transition: "all var(--transition-fast)",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
-              </svg>
-              保存
-            </button>
-          </div>
-        </header>
-
-        {notice && (
-          <div className="notice-bar" style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            padding: "0.75rem 1.5rem",
-            background: notice.includes("失败") || notice.includes("错误") ? "var(--error-muted)" : "var(--accent-muted)",
-            color: notice.includes("失败") || notice.includes("错误") ? "var(--error)" : "var(--accent)",
-            fontSize: "0.875rem",
-            fontWeight: 500,
-            borderBottom: "1px solid var(--border-default)",
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            {notice}
-          </div>
-        )}
-
-        <div className="workspace-layout" style={{
-          display: "flex",
-          flex: 1,
-          overflow: "hidden",
-        }}>
-          <WorkspaceSidebar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            groups={groupDefs}
-            activeGroupId={activeGroupId}
-            onGroupClick={handleGroupClick}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-          />
-
-          <main className="workspace-content" style={{
-            flex: 1,
-            overflow: "auto",
-            display: "flex",
-            flexDirection: "column",
-          }}>
-            {/* 子 tab 栏：当分组有多个 tab 时显示 */}
-            {groupDefs.find(g => g.id === activeGroupId)?.tabs.length! > 1 && (
-              <div className="workspace-group-tabs">
-                {groupDefs.find(g => g.id === activeGroupId)?.tabs.map(t => (
-                  <button
-                    key={t.key}
-                    className={`group-tab ${activeTab === t.key ? "active" : ""}`}
-                    onClick={() => handleTabChange(t.key)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="workspace-content-inner">
-              <div style={{
-                background: "var(--bg-surface)",
-                borderRadius: "var(--radius-lg)",
-                border: "1px solid var(--border-default)",
-                boxShadow: "var(--shadow-sm)",
-                minHeight: "100%",
-                padding: "1.5rem",
-              }}>
-                {renderContent()}
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
-
-      {/* 右栏：AI 面板 */}
-      <AIPanel
-        context={activeTab || "工作台"}
-        actions={getAIActions()}
-        onAction={(key) => console.log("AI action:", key)}
-      />
-    </div>
-    </ErrorBoundary>
+    <WorkspaceStandardLayout
+      novel={novel}
+      aiProgress={aiProgress}
+      notice={notice}
+      activeTab={activeTab}
+      activeGroupId={activeGroupId}
+      groupDefs={groupDefs}
+      sidebarCollapsed={sidebarCollapsed}
+      onNavigate={navigate}
+      onSave={handleSave}
+      onTabChange={handleTabChange}
+      onGroupClick={handleGroupClick}
+      onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      getAIActions={getAIActions}
+      renderContent={renderContent}
+    />
   );
 };
 

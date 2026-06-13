@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
-import { ZodError } from "zod";
+import { errorHandler } from "./middleware/errorHandler";
 import novelRouter from "./routes/novels";
 import workspaceRouter from "./routes/workspace";
 import bookAnalysisRouter from "./routes/bookAnalysis";
@@ -158,17 +158,7 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({ success: false, error: `Not Found: ${req.method} ${req.path}` });
 });
 
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  if (res.headersSent) {
-    return;
-  }
-  if (err instanceof ZodError) {
-    res.status(400).json({ success: false, error: err.issues[0]?.message ?? "请求参数无效。" });
-    return;
-  }
-  console.error("Server error:", err);
-  res.status(500).json({ success: false, error: err.message });
-});
+app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";

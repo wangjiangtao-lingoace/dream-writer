@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ui/CommonComponents";
 
@@ -13,6 +14,15 @@ interface Character {
   background?: string | null;
   relationsText?: string | null;
   notes?: string | null;
+  powerLevel?: string | null;
+  firstAppear?: number | null;
+  arcSummary?: string | null;
+  arcDetail?: string | null;
+  speechStyle?: string | null;
+  lastAppear?: number | null;
+  appearanceCount?: number;
+  knowledgeScope?: string | null;
+  tags?: string | null;
 }
 
 interface CharacterCardProps {
@@ -32,12 +42,14 @@ const ROLE_OPTIONS = [
 ];
 
 export default function CharacterCard({ novelId, onNotice }: CharacterCardProps) {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [activeRoleFilter, setActiveRoleFilter] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     role: "",
@@ -166,7 +178,20 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
           <h2>人物卡管理</h2>
           <p>管理作品中的角色，记录人物设定和关系。</p>
         </div>
-        <button type="button" onClick={() => { resetForm(); setShowForm(true); }}>新建人物</button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            type="button"
+            onClick={() => navigate(`/novel/${novelId}/characters/import`)}
+            style={{
+              background: "var(--bg-surface)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-default)",
+            }}
+          >
+            导入
+          </button>
+          <button type="button" onClick={() => { resetForm(); setShowForm(true); }}>新建人物</button>
+        </div>
       </header>
 
       {/* 弹出表单 */}
@@ -327,81 +352,222 @@ export default function CharacterCard({ novelId, onNotice }: CharacterCardProps)
         ) : filteredCharacters.length === 0 ? (
           <p className="empty-note">{activeRoleFilter ? `没有"${activeRoleFilter}"类型的人物。` : "还没有人物。创建第一个人物卡吧。"}</p>
         ) : (
-          filteredCharacters.map((char) => (
-            <article
-              key={char.id}
-              className="character-card"
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-card)",
-                overflow: "hidden",
-                transition: "all var(--transition-fast)",
-              }}
-            >
-              <header style={{
-                padding: "0.75rem 1rem",
-                borderBottom: "1px solid var(--border)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}>
-                <strong style={{ fontSize: "1rem", color: "var(--text-primary)" }}>{char.name}</strong>
-                {char.role && (
-                  <span style={{
-                    padding: "0.125rem 0.5rem",
-                    fontSize: "0.75rem",
-                    borderRadius: "9999px",
-                    background: `${roleColorMap[char.role] || "#546e7a"}15`,
-                    color: roleColorMap[char.role] || "#546e7a",
-                    border: `1px solid ${roleColorMap[char.role] || "#546e7a"}40`,
-                  }}>
-                    {char.role}
+          filteredCharacters.map((char) => {
+            const isExpanded = expandedId === char.id;
+            return (
+              <article
+                key={char.id}
+                className="character-card"
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--bg-card)",
+                  overflow: "hidden",
+                  transition: "all var(--transition-fast)",
+                }}
+              >
+                <header
+                  style={{
+                    padding: "0.75rem 1rem",
+                    borderBottom: "1px solid var(--border)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setExpandedId(isExpanded ? null : char.id)}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <strong style={{ fontSize: "1rem", color: "var(--text-primary)" }}>{char.name}</strong>
+                    {char.role && (
+                      <span style={{
+                        padding: "0.125rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: "9999px",
+                        background: `${roleColorMap[char.role] || "#546e7a"}15`,
+                        color: roleColorMap[char.role] || "#546e7a",
+                        border: `1px solid ${roleColorMap[char.role] || "#546e7a"}40`,
+                      }}>
+                        {char.role}
+                      </span>
+                    )}
+                    {char.arcSummary && (
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {char.arcSummary}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                    {isExpanded ? "收起 ▲" : "展开 ▼"}
                   </span>
+                </header>
+
+                {/* 简略视图 */}
+                {!isExpanded && (
+                  <div style={{ padding: "0.75rem 1rem" }}>
+                    {char.identity && (
+                      <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "var(--text-secondary)" }}>
+                        {char.identity}
+                      </p>
+                    )}
+                    {char.motivation && (
+                      <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
+                        <span style={{ color: "var(--text-muted)" }}>动机：</span>
+                        {char.motivation.length > 50 ? char.motivation.slice(0, 50) + "..." : char.motivation}
+                      </p>
+                    )}
+                    {char.appearance && (
+                      <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
+                        <span style={{ color: "var(--text-muted)" }}>外貌：</span>
+                        {char.appearance.length > 50 ? char.appearance.slice(0, 50) + "..." : char.appearance}
+                      </p>
+                    )}
+                    {char.background && (
+                      <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
+                        <span style={{ color: "var(--text-muted)" }}>背景：</span>
+                        {char.background.length > 50 ? char.background.slice(0, 50) + "..." : char.background}
+                      </p>
+                    )}
+                    {char.relationsText && (
+                      <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
+                        <span style={{ color: "var(--text-muted)" }}>关系：</span>
+                        {char.relationsText.length > 50 ? char.relationsText.slice(0, 50) + "..." : char.relationsText}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </header>
-              <div style={{ padding: "0.75rem 1rem" }}>
-                {char.identity && (
-                  <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "var(--text-secondary)" }}>
-                    {char.identity}
-                  </p>
+
+                {/* 详细视图 */}
+                {isExpanded && (
+                  <div style={{ padding: "0.75rem 1rem" }}>
+                    {char.identity && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>身份背景</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{char.identity}</div>
+                      </div>
+                    )}
+                    {char.motivation && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>核心动机</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{char.motivation}</div>
+                      </div>
+                    )}
+                    {char.appearance && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>外貌描述</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{char.appearance}</div>
+                      </div>
+                    )}
+                    {char.background && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>人物背景</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{char.background}</div>
+                      </div>
+                    )}
+                    {char.relationsText && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>人物关系</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{char.relationsText}</div>
+                      </div>
+                    )}
+                    {char.arcDetail && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>角色弧线</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{char.arcDetail}</div>
+                      </div>
+                    )}
+                    {char.speechStyle && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>言语风格</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{char.speechStyle}</div>
+                      </div>
+                    )}
+                    {char.powerLevel && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>战力等级</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{char.powerLevel}</div>
+                      </div>
+                    )}
+                    {char.notes && (
+                      <div style={{ margin: "0 0 0.75rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>备注</div>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{char.notes}</div>
+                      </div>
+                    )}
+                    {(char.firstAppear != null || char.lastAppear != null || (char.appearanceCount != null && char.appearanceCount > 0)) && (
+                      <div style={{ margin: "0 0 0.75rem", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                        {char.firstAppear != null && (
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>首次出场：</span>
+                            <span style={{ fontSize: "0.8125rem" }}>第{char.firstAppear}章</span>
+                          </div>
+                        )}
+                        {char.lastAppear != null && (
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>最后出场：</span>
+                            <span style={{ fontSize: "0.8125rem" }}>第{char.lastAppear}章</span>
+                          </div>
+                        )}
+                        {char.appearanceCount != null && char.appearanceCount > 0 && (
+                          <div>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>出场次数：</span>
+                            <span style={{ fontSize: "0.8125rem" }}>{char.appearanceCount}次</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {char.tags && (() => {
+                      try {
+                        const parsedTags = JSON.parse(char.tags);
+                        if (Array.isArray(parsedTags) && parsedTags.length > 0) {
+                          return (
+                            <div style={{ margin: "0 0 0.75rem" }}>
+                              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>标签</div>
+                              <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                                {parsedTags.map((tag: string, i: number) => (
+                                  <span key={i} style={{
+                                    padding: "0.125rem 0.5rem",
+                                    fontSize: "0.75rem",
+                                    borderRadius: "9999px",
+                                    background: "var(--accent-muted)",
+                                    color: "var(--accent)",
+                                    border: "1px solid var(--border)",
+                                  }}>{tag}</span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                      } catch { /* ignore parse error */ }
+                      return null;
+                    })()}
+                  </div>
                 )}
-                {char.motivation && (
-                  <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
-                    <span style={{ color: "var(--text-muted)" }}>动机：</span>{char.motivation}
-                  </p>
-                )}
-                {char.appearance && (
-                  <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
-                    <span style={{ color: "var(--text-muted)" }}>外貌：</span>
-                    {char.appearance.length > 50 ? char.appearance.slice(0, 50) + "..." : char.appearance}
-                  </p>
-                )}
-                {char.background && (
-                  <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
-                    <span style={{ color: "var(--text-muted)" }}>背景：</span>
-                    {char.background.length > 50 ? char.background.slice(0, 50) + "..." : char.background}
-                  </p>
-                )}
-                {char.relationsText && (
-                  <p className="char-field" style={{ margin: "0 0 0.375rem", fontSize: "0.8125rem" }}>
-                    <span style={{ color: "var(--text-muted)" }}>关系：</span>
-                    {char.relationsText.length > 50 ? char.relationsText.slice(0, 50) + "..." : char.relationsText}
-                  </p>
-                )}
-              </div>
-              <div className="card-actions" style={{
-                padding: "0.5rem 1rem",
-                borderTop: "1px solid var(--border)",
-                display: "flex",
-                gap: "0.5rem",
-                justifyContent: "flex-end",
-              }}>
-                <button type="button" onClick={() => handleEdit(char)}>编辑</button>
-                <button type="button" onClick={() => setDeleteTarget(char.id)}>删除</button>
-              </div>
-            </article>
-          ))
+
+                <div className="card-actions">
+                  <button
+                    type="button"
+                    className={`btn-detail ${isExpanded ? 'active' : ''}`}
+                    onClick={() => { setExpandedId(isExpanded ? null : char.id); }}
+                  >
+                    {isExpanded ? "收起" : "详情"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(char)}
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(char.id)}
+                  >
+                    删除
+                  </button>
+                </div>
+              </article>
+            );
+          })
         )}
       </div>
       {deleteTarget && (

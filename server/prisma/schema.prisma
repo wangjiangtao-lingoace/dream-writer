@@ -74,9 +74,25 @@ model Chapter {
   reviewNotes  String? // 审核备注
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  revisions ChapterRevision[]
 
   @@unique([novelId, order])
   @@index([novelId, order])
+}
+
+// 2.0.1 章节版本历史
+model ChapterRevision {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  content   String
+  title     String
+  wordCount Int
+  revision  Int
+  createdAt DateTime @default(now())
+
+  @@unique([chapterId, revision])
+  @@index([chapterId, revision])
 }
 
 // 2.1 章级概要（用于续写时的精简上下文传递，节省 token）
@@ -123,6 +139,8 @@ model Character {
   tags          String?  // 标签 JSON
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  charARelations CharacterRelation[] @relation("CharARelations")
+  charBRelations CharacterRelation[] @relation("CharBRelations")
 
   @@unique([novelId, name]) // 同一作品下角色名唯一
   @@index([novelId])
@@ -731,8 +749,10 @@ model CharacterRelation {
   id          String   @id @default(cuid())
   novelId     String
   novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  charA       String   // 角色A名称
-  charB       String   // 角色B名称
+  charAId     String   // 角色A ID
+  charBId     String   // 角色B ID
+  charA       Character @relation("CharARelations", fields: [charAId], references: [id], onDelete: Cascade)
+  charB       Character @relation("CharBRelations", fields: [charBId], references: [id], onDelete: Cascade)
   relType     String   // 关系类型：盟友/敌人/师徒/恋人/亲属/竞争
   description String?  // 关系描述
   startChapter Int?    // 关系起始章
@@ -741,9 +761,9 @@ model CharacterRelation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([novelId, charA, charB])
-  @@index([novelId, charA])
-  @@index([novelId, charB])
+  @@unique([novelId, charAId, charBId])
+  @@index([novelId, charAId])
+  @@index([novelId, charBId])
 }
 
 // 27. 剧情状态历史快照

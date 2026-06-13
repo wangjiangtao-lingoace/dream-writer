@@ -86,7 +86,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 
 注意：输出的每个字段都应该尽量详细，保留原文的生动表达，不要压缩成干巴巴的概括。plotStructure 的 8 个阶段都必须填写。`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 4000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 6000 });
   return parseLlmJson(result) || {};
 }
 
@@ -281,7 +281,9 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
     "需要避免的写法1，例如：不要用「他心想」开头的大段内心独白",
     "需要避免的写法2，例如：不要在紧张场景中插入搞笑",
     "需要避免的写法3，例如：不要用「突然」作为转折词"
-  ]
+  ],
+
+  "masterWriterStyle": "模仿的作家风格描述。根据作品类型，指定模仿哪位白金大神的风格。例如都市类：「以起点白金大神的风格写作：开篇直接进入冲突，对话简洁有力，节奏明快，主角人设清晰（有能力但不无敌），配角有记忆点，每章末留钩子」。如果是玄幻类：「以网文大神的风格写作：爽点密集，升级节奏明确，战斗描写热血，配角有特色口头禅」。如果是言情类：「以晋江大神的风格写作：情感细腻但不拖沓，对话有张力，误会和解误会节奏好，配角有搞笑担当」。"
 }`;
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.6, maxTokens: 2000 });

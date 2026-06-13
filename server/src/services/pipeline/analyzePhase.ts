@@ -127,7 +127,7 @@ ${inspiration}
 
 注意：只有内容确实足够详细时才标记为 true。如果只是一笔带过或非常模糊，应标记为 false。`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
   const parsed = parseLlmJson(result) || {};
   return {
     hasOutline: !!parsed.hasOutline,
@@ -294,7 +294,8 @@ ${config.genre || "自动判断"}
 
 async function decomposeCharacters(ctx: PhaseContext, inspiration: string): Promise<any> {
   const system = `你是一位资深网文人物设计师。你的任务是将用户创作素材中的人物设定提取为结构化数据。
-核心原则：最大程度保留原文描述，只做结构化整理，不改写人物特色。`;
+核心原则：最大程度保留原文描述，只做结构化整理，不改写人物特色。
+重要：保留素材中的完整描述，不要压缩或精简，确保人物设定的完整性和丰满度。`;
 
   const prompt = `请从以下创作素材中提取所有人物设定。
 
@@ -303,7 +304,7 @@ ${inspiration}
 
 要求：
 1. 提取素材中提到的所有人物
-2. 保留原文的人物描述，不要改写
+2. 完整保留原文描述，不要压缩或精简
 3. 如果某个字段在素材中没有提到，用空字符串""
 
 请输出JSON：
@@ -323,7 +324,7 @@ ${inspiration}
   ]
 }`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 8000 });
   return parseLlmJson(result) || {};
 }
 
@@ -353,7 +354,7 @@ ${inspiration}
   "specialElements": "特殊元素"
 }`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1500 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 3000 });
   return parseLlmJson(result) || {};
 }
 

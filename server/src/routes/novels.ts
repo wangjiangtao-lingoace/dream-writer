@@ -6,6 +6,7 @@ import { initSSE, writeSSEFrame } from "../llm/streaming";
 import { prisma } from "../db/prisma";
 import { imitationPlanService } from "../services/ImitationPlanService";
 import * as AIService from "../services/AIService";
+import { chapterRevisionService } from "../services/ChapterRevisionService";
 
 /** 返回本地时区日期字符串 YYYY-MM-DD，避免 UTC 时区偏移问题 */
 function localDate(): string {
@@ -359,7 +360,12 @@ router.put("/:id/chapters/:chapterId", async (req, res, next) => {
   try {
     const { id, chapterId } = chapterIdSchema.parse(req.params);
     const input = chapterUpdateSchema.parse(req.body);
-    const existingChapter = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { wordCount: true } });
+    const existingChapter = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { wordCount: true, content: true, title: true } });
+
+    if (input.content && existingChapter?.content && input.content !== existingChapter.content) {
+      chapterRevisionService.createRevision(chapterId, existingChapter.content, existingChapter.title).catch(() => {});
+    }
+
     const result = await novelService.updateChapter(id, chapterId, input);
     res.json({ success: true, data: result });
 
@@ -385,6 +391,29 @@ router.delete("/:id/chapters/:chapterId", async (req, res, next) => {
     const { id, chapterId } = chapterIdSchema.parse(req.params);
     await novelService.deleteChapter(id, chapterId);
     res.json({ success: true, data: null });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 获取章节版本历史
+router.get("/:id/chapters/:chapterId/revisions", async (req, res, next) => {
+  try {
+    const { chapterId } = chapterIdSchema.parse(req.params);
+    const revisions = await chapterRevisionService.getRevisions(chapterId);
+    res.json({ success: true, data: revisions });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 回滚到指定版本
+router.post("/:id/chapters/:chapterId/revisions/:revision/rollback", async (req, res, next) => {
+  try {
+    const { chapterId } = chapterIdSchema.parse(req.params);
+    const { revision } = z.object({ revision: z.string() }).parse(req.params);
+    const chapter = await chapterRevisionService.rollbackToRevision(chapterId, parseInt(revision));
+    res.json({ success: true, data: chapter });
   } catch (error) {
     next(error);
   }

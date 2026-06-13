@@ -105,7 +105,7 @@ router.get("/:id/workspace-data", async (req, res, next) => {
         signals,
         writingStats: {
           todayWordCount: todaySession?.wordCount || 0,
-          targetWordCount: 4000,
+          targetWordCount: novel?.targetWordCount || 100000,
           totalWordCount,
           streakDays: streak,
           estimatedTime,
