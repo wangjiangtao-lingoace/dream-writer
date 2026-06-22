@@ -26,7 +26,11 @@ export async function scheduleNextBatch(
   }
 
   const remaining = totalChapters - writtenCount;
-  const batchSize = Math.min(config.autoDraftChapters || 3, remaining);
+  let batchSize = Math.min(config.autoDraftChapters || 3, remaining);
+  // P0 #2: maxChaptersPerBatch 限制
+  if (config.maxChaptersPerBatch && config.maxChaptersPerBatch > 0) {
+    batchSize = Math.min(batchSize, config.maxChaptersPerBatch);
+  }
   const startOrder = writtenCount + 1;
 
   console.log(`[autoScheduler] 调度下一批：从第${startOrder}章开始，写${batchSize}章（剩余${remaining}章）`);

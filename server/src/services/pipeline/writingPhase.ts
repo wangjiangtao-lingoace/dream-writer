@@ -17,15 +17,21 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
   if (!job) return;
 
   const config = JSON.parse(job.config) as PipelineConfig;
-  const draftCount = Math.max(1, config.autoDraftChapters || 3);
+  let draftCount = Math.max(1, config.autoDraftChapters || 3);
+
+  // P0 #2: maxChaptersPerBatch 限制
+  if (config.maxChaptersPerBatch && config.maxChaptersPerBatch > 0) {
+    draftCount = Math.min(draftCount, config.maxChaptersPerBatch);
+  }
 
   try {
     await ctx.updateJobProgress(jobId, "writing", "chapter_drafts");
-    const chapters = await generateInitialChapterDrafts(ctx, jobId, job.novelId, config, draftCount, startOrder);
+    const { chapters, budgetReached } = await generateInitialChapterDrafts(ctx, jobId, job.novelId, config, draftCount, startOrder, job.createdAt);
     await ctx.savePhaseResult(jobId, "writing", "chapter_drafts", {
       imitationPlanId: config.imitationPlanId,
       bookAnalysisId: config.bookAnalysisId,
       draftCount,
+      budgetReached,
     }, { chapters });
     await ctx.saveToKnowledgeBase(job.novelId, "chapter_draft", "自动仿写样章", { chapters });
 
@@ -69,7 +75,7 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
     const writtenCount = chapters.filter((c: any) => !c.skipped).length;
     const skippedCount = chapters.filter((c: any) => c.skipped).length;
 
-    if (writtenCount === 0 && skippedCount === 0) {
+    if (writtenCount === 0 && skippedCount === 0 && !budgetReached) {
       await prisma.pipelineJob.update({
         where: { id: jobId },
         data: {
@@ -79,16 +85,45 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
           lastError: "所有章节生成失败。",
         },
       });
-    } else {
+    } else if (budgetReached) {
+      // P0 #1: Token 预算耗尽，暂停等待用户决策
       await prisma.pipelineJob.update({
         where: { id: jobId },
         data: {
-          status: "completed",
+          status: "paused",
           currentPhase: "writing",
-          currentStep: "completed",
-          progress: 100,
+          currentStep: "token_budget_reached",
+          lastError: "Token 预算已达上限，请确认后继续或调整预算。",
         },
       });
+    } else {
+      // P0 #2: 检查是否还有更多章节需要写（批次限制）
+      const totalChapters = (config.volumeCount || 5) * (config.chaptersPerVolume || 30);
+      const totalWritten = await prisma.chapter.count({
+        where: { novelId: job.novelId, content: { not: "" } },
+      });
+      if (config.maxChaptersPerBatch && config.maxChaptersPerBatch > 0 && totalWritten < totalChapters) {
+        // 还有更多章节，暂停等待确认
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: {
+            status: "paused",
+            currentPhase: "writing",
+            currentStep: "batch_completed",
+            lastError: `已完成本批次 ${writtenCount} 章（共已写 ${totalWritten}/${totalChapters} 章），请确认后继续。`,
+          },
+        });
+      } else {
+        await prisma.pipelineJob.update({
+          where: { id: jobId },
+          data: {
+            status: "completed",
+            currentPhase: "writing",
+            currentStep: "completed",
+            progress: 100,
+          },
+        });
+      }
     }
   } catch (error: any) {
     await prisma.pipelineJob.update({
@@ -103,7 +138,7 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
   }
 }
 
-async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, novelId: string, config: PipelineConfig, count: number, startOrder?: number) {
+async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, novelId: string, config: PipelineConfig, count: number, startOrder?: number, pipelineStartedAt?: Date) {
   const novel = await prisma.novel.findUnique({
     where: { id: novelId },
     include: { chapters: { orderBy: { order: "asc" } } },
@@ -111,6 +146,11 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   if (!novel) throw new Error("作品不存在");
 
   const pipelineVersion = config.pipelineVersion || 1;
+
+  // P0 #1: Token 预算追踪
+  const tokenBudget = config.tokenBudget ? config.tokenBudget * 1000 : 0; // 前端传的是 1K 单位，转为实际 tokens
+  let cumulativeTokens = 0;
+  let budgetReached = false;
 
   const assembler = new ContextAssembler(novelId);
 
@@ -162,11 +202,26 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   const offset = (startOrder || 1) - 1;
 
   for (let index = 0; index < count; index += 1) {
+    // 检查暂停状态，实现即时暂停
+    const currentJob = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+    if (currentJob?.status === "paused" || currentJob?.status === "error") {
+      console.log(`[writingPhase] 流程已${currentJob.status === "paused" ? "暂停" : "异常"}，停止写作`);
+      break;
+    }
+
+    // P0 #1: Token 预算检查
+    if (tokenBudget > 0 && cumulativeTokens >= tokenBudget) {
+      console.log(`[writingPhase] Token 预算已达上限（已用 ${cumulativeTokens} / 预算 ${tokenBudget}），停止写作`);
+      budgetReached = true;
+      break;
+    }
+
     const order = offset + index + 1;
     const card = enrichedChaptersMap.get(order) || (chapterCards[index] ?? {});
 
     try {
       const baseTitle = card.title || card.chapterTitle || `第${order}章`;
+      const existingTitles = generated.map((c: any) => c.title).filter(Boolean);
       const title = await resolveGeneratedChapterTitle(ctx, {
         novel,
         outline,
@@ -174,6 +229,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
         card,
         order,
         baseTitle,
+        existingTitles,
       });
       const summary = [
         card.goal ? `目标：${card.goal}` : "",
@@ -196,6 +252,23 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
           ...existing,
           skipped: true,
           skipReason: "existing_content",
+        });
+        continue;
+      }
+
+      // P0 #2: 并发覆盖保护 — 用户在 Pipeline 启动后手动编辑过的章节，跳过写入
+      if (existing?.content?.trim() && pipelineStartedAt && existing.updatedAt > pipelineStartedAt) {
+        console.log(`[writingPhase] 第${order}章已被用户手动编辑（updatedAt=${existing.updatedAt.toISOString()}），跳过 Pipeline 写入`);
+        previousChapters.push({
+          order,
+          title: existing.title,
+          summary: existing.summary || existing.content.slice(0, 100),
+          ending: existing.content.slice(-300),
+        });
+        generated.push({
+          ...existing,
+          skipped: true,
+          skipReason: "user_edited_after_pipeline_start",
         });
         continue;
       }
@@ -318,9 +391,32 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       }
 
       generated.push(updated);
+
+      // P0 #1: 累计 token 估算（中文字符 * 1.5 ≈ tokens，加上 prompt 开销）
+      const chapterTokens = Math.round(draft.length * 1.5 + 1500);
+      cumulativeTokens += chapterTokens;
+      if (tokenBudget > 0) {
+        console.log(`[writingPhase] 第${order}章 token 估算: ${chapterTokens}，累计: ${cumulativeTokens}/${tokenBudget}`);
+      }
     } catch (e: any) {
       console.warn(`[writingPhase] 第${order}章生成失败，继续下一章:`, e.message);
       failedChapters.push({ order, error: e.message || "unknown" });
+
+      // 保存失败信息到章节记录，避免数据丢失
+      try {
+        const existingChapter = await prisma.chapter.findUnique({
+          where: { novelId_order: { novelId, order } },
+        });
+        if (existingChapter && !existingChapter.content?.trim()) {
+          await prisma.chapter.update({
+            where: { id: existingChapter.id },
+            data: {
+              summary: `[生成失败] ${e.message || "未知错误"}`,
+              status: "failed",
+            },
+          });
+        }
+      } catch { /* ignore cleanup errors */ }
     }
 
     // 章节级进度更新 + checkpoint
@@ -339,15 +435,23 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
     console.warn(`[writingPhase] 批次完成，${failedChapters.length}章失败：`, failedChapters.map(f => `第${f.order}章`).join("、"));
   }
 
-  // 自动续写调度（如果启用了 autoContinue）
-  if (config.autoContinue) {
-    const { scheduleNextBatch } = await import("./autoScheduler");
-    scheduleNextBatch(novelId, jobId, config).catch((e) => {
-      console.warn("[writingPhase] 自动续写调度失败:", e);
+  // 自动续写调度（如果启用了 autoContinue，且未触发预算/批次暂停）
+  if (config.autoContinue && !budgetReached) {
+    const totalChapters = (config.volumeCount || 5) * (config.chaptersPerVolume || 30);
+    const totalWritten = await prisma.chapter.count({
+      where: { novelId, content: { not: "" } },
     });
+    // 如果设置了批次限制且还有更多章节，不触发自动续写（由 executeWritingPhase 设置暂停状态）
+    const batchLimited = config.maxChaptersPerBatch && config.maxChaptersPerBatch > 0 && totalWritten < totalChapters;
+    if (!batchLimited) {
+      const { scheduleNextBatch } = await import("./autoScheduler");
+      scheduleNextBatch(novelId, jobId, config).catch((e) => {
+        console.warn("[writingPhase] 自动续写调度失败:", e);
+      });
+    }
   }
 
-  return generated;
+  return { chapters: generated, budgetReached };
 }
 
 async function generateChapterDraft(ctx: PhaseContext, input: {
@@ -477,23 +581,43 @@ async function resolveGeneratedChapterTitle(ctx: PhaseContext, input: {
   card: any;
   order: number;
   baseTitle: string;
+  existingTitles?: string[];
 }) {
   const genericTitlePattern = /^第[一二三四五六七八九十百千万\d]+章$/;
   if (input.baseTitle && !genericTitlePattern.test(input.baseTitle.trim())) {
     return input.baseTitle.trim();
   }
 
+  const card = input.card || {};
+  const coreInfo: string[] = [];
+  if (card.goal) coreInfo.push(`本章目标：${card.goal}`);
+  if (card.conflict) coreInfo.push(`核心冲突：${card.conflict}`);
+  if (card.hook) coreInfo.push(`章末钩子：${card.hook}`);
+  if (card.characters?.length) {
+    const names = card.characters.map((c: any) => c.name).filter(Boolean).join("、");
+    if (names) coreInfo.push(`出场角色：${names}`);
+  }
+
+  const dedupSection = input.existingTitles?.length
+    ? `\n【已有标题（禁止重复或相似）】\n${input.existingTitles.slice(-20).join("、")}`
+    : "";
+
   const prompt = [
     "请为当前小说章节生成一个有吸引力的中文章节标题。",
-    '要求：5-15个字，不要包含”第X章”，不要使用书名号，不要解释。',
+    "",
+    "要求：",
+    "- 5-15个字，不要包含「第X章」，不要使用书名号，不要解释",
+    "- 标题必须与本章的核心冲突或钩子强相关，让读者产生好奇心",
+    "- 避免平淡概括（如「XX的抉择」），优先使用悬念式、冲突式、反转式标题",
+    "- 不要与已有标题重复或使用相似结构",
     "",
     `作品：${input.novel.title}`,
     `类型：${input.novel.genre || input.outline.genre || input.blueprint.genre || "未指定"}`,
     `章节序号：第${input.order}章`,
-    "【本章功能卡】",
-    JSON.stringify(input.card || {}, null, 2),
-    "【创作蓝图】",
-    JSON.stringify(input.blueprint || input.outline || {}, null, 2).slice(0, 1600),
+    "",
+    "【本章核心信息】",
+    coreInfo.join("\n") || JSON.stringify(card, null, 2).slice(0, 800),
+    dedupSection,
   ].join("\n");
 
   try {
@@ -650,6 +774,25 @@ ${actualSummaries.slice(-3).map(ch => ch.summary).join("\n")}
         }),
       },
     });
+
+    // P1 #4: 保存章纲修正通知，让用户感知偏差调整
+    await ctx.savePhaseResult(jobId, "writing", `volume_outline_correction_vol_${completedVolumes + 1}`,
+      {
+        originalChapterCount: nextVolOutlines.chapters.length,
+        deviationScores: {
+          plot: deviation.plotDeviation,
+          character: deviation.characterDeviation,
+          worldview: deviation.worldviewDeviation,
+          overall: deviation.overallDeviation || deviation.deviationScore,
+        },
+      },
+      {
+        message: `卷 ${completedVolumes + 1} 大纲已根据写作偏差自动调整`,
+        correctedChapterCount: corrected.chapters.length,
+        keyDeviations: deviation.keyDeviations || [],
+        basedOnVolume: completedVolumes,
+      },
+    );
 
     console.log(`[writingPhase] 第${completedVolumes + 1}卷章纲已修正（偏离度：${deviation.deviationScore}）`);
   } catch (e) {

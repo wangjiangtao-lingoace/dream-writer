@@ -250,7 +250,10 @@ const BookShelf: React.FC = () => {
               <div
                 key={novel.id}
                 className="bookshelf-item"
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/novel/${novel.id}`)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/novel/${novel.id}`); } }}
               >
                 <div className="bookshelf-item-cover">
                   {novel.coverImage ? (
@@ -284,26 +287,10 @@ const BookShelf: React.FC = () => {
                     />
                   </div>
                   <button
+                    className="bookshelf-item-delete"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteConfirm({ id: novel.id, title: novel.title });
-                    }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      padding: "0.25rem",
-                      borderRadius: "var(--radius-sm)",
-                      transition: "all var(--transition-fast)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "var(--error)";
-                      e.currentTarget.style.background = "var(--error-muted)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "var(--text-muted)";
-                      e.currentTarget.style.background = "transparent";
                     }}
                     title="删除作品"
                   >

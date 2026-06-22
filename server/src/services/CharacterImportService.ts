@@ -161,13 +161,14 @@ export class CharacterImportService {
 ${textContent}`;
 
     try {
-      const response = await this.llmService.completeTextOrThrow({
+      const result = await this.llmService.completeTextOrThrow({
         system: systemPrompt,
         prompt: userPrompt,
         temperature: 0.2,
         maxTokens: 12000, // 文本较长，需要更多 tokens
         provider: "mimo", // 使用 mimo
       });
+      const response = result.content;
 
       console.log("[CharacterImport] LLM 返回原始内容:", response.substring(0, 500));
 

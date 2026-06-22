@@ -10,7 +10,6 @@ interface WorkspaceStandardLayoutProps {
   // 数据
   novel: { id: string; title: string } | null;
   aiProgress: { message: string; progress?: number } | null;
-  notice: string | null;
   activeTab: WorkspaceTab;
   activeGroupId: WorkspaceGroupId;
   groupDefs: WorkspaceGroupDef[];
@@ -31,7 +30,6 @@ interface WorkspaceStandardLayoutProps {
 export const WorkspaceStandardLayout: React.FC<WorkspaceStandardLayoutProps> = ({
   novel,
   aiProgress,
-  notice,
   activeTab,
   activeGroupId,
   groupDefs,
@@ -62,26 +60,6 @@ export const WorkspaceStandardLayout: React.FC<WorkspaceStandardLayoutProps> = (
             onSave={onSave}
             onPipeline={() => onNavigate(`/novel/${novel?.id}/pipeline`)}
           />
-
-          {notice && (
-            <div className="notice-bar" style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.75rem 1.5rem",
-              background: notice.includes("失败") || notice.includes("错误") ? "var(--error-muted)" : "var(--accent-muted)",
-              color: notice.includes("失败") || notice.includes("错误") ? "var(--error)" : "var(--accent)",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              borderBottom: "1px solid var(--border-default)",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "1rem", height: "1rem" }}>
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-              {notice}
-            </div>
-          )}
 
           <div className="workspace-layout" style={{
             display: "flex",

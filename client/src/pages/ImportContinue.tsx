@@ -257,7 +257,7 @@ const ImportContinue: React.FC = () => {
           <div style={{
             padding: "0.75rem 1rem",
             background: loading ? "var(--accent-muted)" : "var(--success-muted)",
-            border: `1px solid ${loading ? "rgba(79,124,255,0.25)" : "rgba(34,197,94,0.25)"}`,
+            border: `1px solid ${loading ? "var(--accent-border-strong)" : "var(--success-border)"}`,
             borderRadius: "var(--radius-md)",
             fontSize: "0.8125rem",
             color: loading ? "var(--accent)" : "var(--success)",
@@ -307,7 +307,7 @@ const ImportContinue: React.FC = () => {
         marginTop: "var(--space-4)",
         padding: "var(--space-4)",
         background: "var(--accent-muted)",
-        border: "1px solid rgba(79,124,255,0.25)",
+        border: "1px solid var(--accent-border-strong)",
         borderRadius: "var(--radius-md)",
       }}>
         <strong style={{ display: "block", fontSize: "0.8125rem", color: "var(--accent)", marginBottom: "var(--space-2)" }}>

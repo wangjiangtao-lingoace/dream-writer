@@ -36,8 +36,7 @@ export function ConfirmDialog({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
-        backdropFilter: "blur(4px)",
+        background: "rgba(15,15,15,0.6)",
       }}
       onClick={onCancel}
     >

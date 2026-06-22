@@ -50,12 +50,24 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
       // 构建前序卷摘要
       const previousSummary = buildPreviousVolumeSummary(allChapterOutlines, volIdx);
 
-      const enrichedChapters = await generateEnrichedChapterOutlines(
-        ctx, novelId, volumeResult, volIdx, outlineResult, worldviewResult,
-        charactersResult, styleResult, previousSummary, config,
-      );
+      // 分批生成章纲，每批 10 章，避免单次 maxTokens 不足导致质量衰减
+      const BATCH_SIZE = 10;
+      const allChapters: any[] = [];
+      for (let batchStart = 0; batchStart < chaptersPerVolume; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, chaptersPerVolume);
+        const batchHint = batchStart > 0
+          ? `前一批章纲摘要：${JSON.stringify(allChapters.slice(-3).map((c: any) => ({ title: c.title, goal: c.goal, hook: c.hook })))}`
+          : previousSummary;
 
-      const chapters = enrichedChapters?.chapters || [];
+        const batchResult = await generateEnrichedChapterOutlines(
+          ctx, novelId, volumeResult, volIdx, outlineResult, worldviewResult,
+          charactersResult, styleResult, batchHint, config, undefined,
+          batchStart, batchEnd,
+        );
+        allChapters.push(...(batchResult?.chapters || []));
+      }
+
+      const chapters = allChapters;
       await persistVolumeChapterData(novelId, volIdx, chapters, volumeResult);
 
       allChapterOutlines.chapterOutlines.push({
@@ -65,7 +77,7 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
 
       await ctx.savePhaseResult(jobId, "planning", stepName,
         { volume: volumeResult.volumes?.[volIdx], previousSummary, chaptersPerVolume },
-        enrichedChapters);
+        { chapters });
     }
 
     // 生成跨卷故事弧线（缓存检查）
@@ -76,8 +88,9 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
       console.log("[chapterOutlines] 故事弧线已存在，跳过重新生成");
     } else {
     await ctx.updateJobProgress(jobId, "planning", "story_arcs");
+    const enrichedSummary = buildChapterSummaryForArcs(allChapterOutlines);
     const storyArcs = await generateStoryArcs(
-      ctx, novelId, outlineResult, allChapterOutlines, volumeResult,
+      ctx, novelId, outlineResult, { chapterOutlines: allChapterOutlines.chapterOutlines, enrichedSummary }, volumeResult,
       worldviewResult, charactersResult, styleResult, config,
     );
     await persistStoryArcs(novelId, storyArcs);
@@ -100,6 +113,29 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
       data: { status: "error", lastError: error.message },
     });
   }
+}
+
+/**
+ * 构建面向故事弧线生成的章纲摘要，在 title/goal/hook 基础上
+ * 增加 conflict、emotion、characters、hooksPlanted/Resolved、foreshadowPlanted/Payoff
+ */
+export function buildChapterSummaryForArcs(allChapterOutlines: any): any[] {
+  return (allChapterOutlines?.chapterOutlines || []).flatMap((group: any, volIdx: number) =>
+    (group.chapters || []).map((ch: any, chIdx: number) => ({
+      volume: volIdx + 1,
+      chapter: chIdx + 1,
+      title: ch.title,
+      goal: ch.goal,
+      hook: ch.hook,
+      conflict: ch.conflict || "",
+      emotion: ch.emotion || "",
+      characters: Array.isArray(ch.characters) ? ch.characters.map((c: any) => c.name || c) : [],
+      hooksPlanted: Array.isArray(ch.hooksPlanted) ? ch.hooksPlanted.map((h: any) => h.title || h) : [],
+      hooksResolved: Array.isArray(ch.hooksResolved) ? ch.hooksResolved.map((h: any) => h.title || h) : [],
+      foreshadowPlanted: Array.isArray(ch.foreshadowPlanted) ? ch.foreshadowPlanted.map((f: any) => f.title || f) : [],
+      foreshadowPayoff: Array.isArray(ch.foreshadowPayoff) ? ch.foreshadowPayoff.map((f: any) => f.title || f) : [],
+    }))
+  );
 }
 
 export function buildPreviousVolumeSummary(allChapterOutlines: any, currentVolIdx: number): string {
@@ -170,6 +206,9 @@ export async function persistVolumeChapterData(novelId: string, volumeIndex: num
         conflict: chapter.conflict || "",
         emotion: chapter.emotion || "",
         hook: chapter.hook || "",
+        scene: chapter.scene || "",
+        pov: chapter.pov || "",
+        targetWordCount: chapter.targetWordCount || 0,
         foreshadowing: JSON.stringify(chapter.foreshadowPlanted || []),
         payoff: JSON.stringify(chapter.foreshadowPayoff || []),
         pleasurePoint: chapter.pleasurePoint?.description || (typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : ""),
@@ -181,6 +220,9 @@ export async function persistVolumeChapterData(novelId: string, volumeIndex: num
         conflict: chapter.conflict || "",
         emotion: chapter.emotion || "",
         hook: chapter.hook || "",
+        scene: chapter.scene || "",
+        pov: chapter.pov || "",
+        targetWordCount: chapter.targetWordCount || 0,
         foreshadowing: JSON.stringify(chapter.foreshadowPlanted || []),
         payoff: JSON.stringify(chapter.foreshadowPayoff || []),
         pleasurePoint: chapter.pleasurePoint?.description || (typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : ""),

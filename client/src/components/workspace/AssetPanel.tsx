@@ -27,7 +27,7 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foresha
   const [tab, setTab] = useState<number>(0);
 
   return (
-    <div style={{
+    <div className="asset-panel" style={{
       width: "340px", background: "var(--bg-surface)",
       borderLeft: "1px solid var(--border-default)", display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
@@ -37,8 +37,8 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foresha
           <button key={t} onClick={() => setTab(i)} style={{
             flex: 1, textAlign: "center", fontSize: "0.75rem", padding: "0.5rem 0",
             borderRadius: "10px", fontWeight: 700, cursor: "pointer", border: "none",
-            background: tab === i ? "rgba(79,124,255,0.1)" : "transparent",
-            color: tab === i ? "#3159d4" : "var(--text-muted)",
+            background: tab === i ? "var(--accent-muted)" : "transparent",
+            color: tab === i ? "var(--accent)" : "var(--text-muted)",
           }}>
             {t}
           </button>
@@ -74,7 +74,7 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ characters, worldviews, foresha
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
                   <div style={{
                     width: "28px", height: "28px", borderRadius: "50%",
-                    background: "linear-gradient(135deg, #dbeafe, #f5d0fe)",
+                    background: "var(--bg-elevated)",
                     display: "grid", placeItems: "center", fontWeight: 800, fontSize: "0.75rem", color: "#4f46e5",
                   }}>
                     {c.name[0]}

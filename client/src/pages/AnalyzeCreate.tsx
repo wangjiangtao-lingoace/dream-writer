@@ -254,7 +254,6 @@ const AnalyzeCreate: React.FC = () => {
           ← 返回书架
         </button>
         <h1 style={{
-          fontFamily: "var(--font-serif)",
           fontSize: "1.5rem",
           color: "var(--text-primary)",
         }}>仿写创作</h1>
@@ -272,7 +271,6 @@ const AnalyzeCreate: React.FC = () => {
           padding: "2rem",
         }}>
           <h2 style={{
-            fontFamily: "var(--font-serif)",
             fontSize: "1.25rem",
             color: "var(--text-primary)",
             marginBottom: "1.5rem",
@@ -450,7 +448,6 @@ const AnalyzeCreate: React.FC = () => {
             animation: "spin 1s linear infinite",
           }} />
           <h2 style={{
-            fontFamily: "var(--font-serif)",
             fontSize: "1.5rem",
             color: "var(--text-primary)",
             marginBottom: "0.5rem",
@@ -463,7 +460,6 @@ const AnalyzeCreate: React.FC = () => {
       {step === "preview" && searchResult && (
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
           <h2 style={{
-            fontFamily: "var(--font-serif)",
             fontSize: "1.5rem",
             color: "var(--text-primary)",
             marginBottom: "1.5rem",
@@ -503,7 +499,6 @@ const AnalyzeCreate: React.FC = () => {
             </div>
 
             <h3 style={{
-              fontFamily: "var(--font-serif)",
               fontSize: "1.25rem",
               color: "var(--text-primary)",
               marginBottom: "1rem",
@@ -669,7 +664,6 @@ const AnalyzeCreate: React.FC = () => {
       {step === "creating" && (
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
           <h2 style={{
-            fontFamily: "var(--font-serif)",
             fontSize: "1.5rem",
             color: "var(--text-primary)",
             marginBottom: "1.5rem",
@@ -700,7 +694,6 @@ const AnalyzeCreate: React.FC = () => {
             </div>
 
             <h3 style={{
-              fontFamily: "var(--font-serif)",
               fontSize: "1.25rem",
               color: "var(--text-primary)",
               marginBottom: "0.5rem",
@@ -710,20 +703,39 @@ const AnalyzeCreate: React.FC = () => {
               系统已分析原作品并生成新作品设定
             </p>
 
-            <button
-              onClick={handleCreateNovel}
-              disabled={loading}
-              style={{
-                padding: "0.75rem 2rem",
-                background: loading ? "var(--border)" : "var(--accent)",
-                border: "none",
-                borderRadius: "var(--radius-md)",
-                color: "white",
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? "创建中..." : "创建新作品"}
-            </button>
+            <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+              <button
+                onClick={() => {
+                  setAnalysisId(null);
+                  setStep("preview");
+                }}
+                disabled={loading}
+                style={{
+                  padding: "0.75rem 2rem",
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-secondary)",
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                重新分析
+              </button>
+              <button
+                onClick={handleCreateNovel}
+                disabled={loading}
+                style={{
+                  padding: "0.75rem 2rem",
+                  background: loading ? "var(--border)" : "var(--accent)",
+                  border: "none",
+                  borderRadius: "var(--radius-md)",
+                  color: "white",
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "创建中..." : "创建新作品"}
+              </button>
+            </div>
           </div>
         </div>
       )}

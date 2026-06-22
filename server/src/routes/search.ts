@@ -48,14 +48,10 @@ async function handleNovelSearch(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: "请输入作品标题" });
     }
 
-    console.log(`[搜索] 原始标题: "${title}", 标准化后: "${normalizedTitle}"`);
-
     const titleVariants = getTitleVariants(normalizedTitle);
-    console.log(`[搜索] 标题变体:`, titleVariants);
 
     // 新流程：使用 SearchProviderService 搜索
     const searchResult = await searchProvider.searchMultiple(titleVariants, { count: 10 });
-    console.log(`[搜索] Provider: ${searchResult.provider}, 结果数: ${searchResult.results.length}`);
 
     if (searchResult.results.length > 0) {
       // 对搜索结果提取内容
@@ -69,8 +65,6 @@ async function handleNovelSearch(req: Request, res: Response) {
         // 按置信度排序
         const sortedResults = extractedResults.sort((a, b) => b.confidence - a.confidence);
         const best = sortedResults[0];
-
-        console.log(`[搜索] 找到 ${sortedResults.length} 个有效来源，最高置信度: ${best.confidence}`);
 
         return res.json({
           success: true,
@@ -94,7 +88,6 @@ async function handleNovelSearch(req: Request, res: Response) {
     }
 
     // 搜索API无结果，尝试已知来源URL
-    console.log(`[搜索] API搜索无结果，尝试已知来源URL`);
     const knownResults = await tryKnownSources(titleVariants);
     if (knownResults) {
       return res.json({

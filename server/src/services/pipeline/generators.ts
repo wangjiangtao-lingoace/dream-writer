@@ -319,6 +319,9 @@ export async function generateVolumeOutline(
 - 要考虑整体字数分配的合理性
 - 每卷的目标、冲突、情绪必须明确且可执行
 - 卷与卷之间的衔接要自然，不能突兀跳转
+- 每卷必须规划至少 2 个伏笔，注明预计回收时机
+- 每卷必须说明主要角色的成长变化
+- 根据总字数合理分配每卷字数
 
 核心约束：
 1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
@@ -375,7 +378,14 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
       "endHook": "结尾钩子（用什么悬念吸引读者看下一卷，要具体）",
       "keyEvents": ["关键事件1", "关键事件2"],
       "turningPoint": "本卷转折点（剧情发生重大变化的事件）",
-      "climax": "本卷高潮（最精彩的部分）"
+      "climax": "本卷高潮（最精彩的部分）",
+      "foreshadowsPlanned": [
+        {"title": "伏笔名称", "plantChapter": "预计埋设章节", "plannedPayoff": "预计回收时机", "description": "伏笔内容描述"}
+      ],
+      "characterArcs": [
+        {"characterName": "角色名", "startState": "本卷开始时的状态", "endState": "本卷结束时的状态", "keyChange": "关键转变事件"}
+      ],
+      "targetWordCount": 本卷建议字数
     }
   ]
 }
@@ -385,8 +395,11 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - goal 必须是具体的目标，不能是模糊的描述
 - conflict 要说明具体的冲突双方和焦点
 - endHook 要有具体的悬念，不能只是"留个钩子"
-- keyEvents 列出本卷 2-3 个最重要的事件
-- turningPoint 和 climax 必须是具体的事件描述`;
+- keyEvents 列出本卷至少 5 个具体事件，每个事件需说明涉及谁、发生了什么、导致什么结果
+- turningPoint 和 climax 必须是具体的事件描述
+- foreshadowsPlanned 至少规划 2 个伏笔，注明预计埋设章节和回收时机
+- characterArcs 说明本卷主要角色的起止状态和关键转变
+- targetWordCount 根据总字数和卷数合理分配`;
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
   return parseLlmJson(result) || {};
@@ -555,8 +568,13 @@ export async function generateEnrichedChapterOutlines(
   previousSummary: string,
   config: PipelineConfig,
   userHint?: string,
+  batchStart?: number,
+  batchEnd?: number,
 ): Promise<any> {
-  const chaptersPerVolume = config.chaptersPerVolume || 30;
+  const totalChaptersPerVolume = config.chaptersPerVolume || 30;
+  const chaptersPerVolume = (batchStart !== undefined && batchEnd !== undefined)
+    ? batchEnd - batchStart
+    : totalChaptersPerVolume;
   const volume = volumes?.volumes?.[volumeIndex] || {};
   const volumeNumber = volumeIndex + 1;
 
@@ -572,6 +590,9 @@ export async function generateEnrichedChapterOutlines(
 - 爽点分布要有节奏，不能连续出现也不能长期缺失
 - 角色出场要有逻辑，不能凭空出现
 - 情绪曲线要有起伏，不能全是高潮或全是低谷
+- 每章必须指定具体的场景地点，不能模糊
+- 明确本章的视角角色，多视角小说每章需切换视角
+- 根据章节重要性分配字数：开篇/高潮/转折章 4000-5000 字，普通推进章 2000-3000 字
 
 核心约束：
 1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
@@ -595,7 +616,11 @@ export async function generateEnrichedChapterOutlines(
     ? characters.characters.map((c: any) => `${c.name}（${c.role || ""}）：身份=${c.identity || ""}，性格=${c.personality || ""}，能力=${c.abilities || ""}，动机=${c.motivation || ""}`).join("\n")
     : JSON.stringify(characters || {}, null, 2);
 
-  const prompt = `请为第${volumeNumber}卷设计${chaptersPerVolume}章的详细章纲。
+  const chapterRangeDesc = (batchStart !== undefined && batchEnd !== undefined)
+    ? `请为第${volumeNumber}卷的第${batchStart + 1}到第${batchEnd}章设计详细章纲。`
+    : `请为第${volumeNumber}卷设计${chaptersPerVolume}章的详细章纲。`;
+
+  const prompt = `${chapterRangeDesc}
 
 【故事大纲】
 ${typeof outline === "string" ? outline : JSON.stringify(outline, null, 2)}
@@ -619,6 +644,9 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
   "chapters": [
     {
       "title": "章节标题（要有吸引力）",
+      "scene": "本章发生的具体场景/地点",
+      "pov": "本章的视角角色名",
+      "targetWordCount": 3000,
       "goal": "本章目标（推进什么剧情）",
       "conflict": "本章核心冲突",
       "emotion": "情绪基调（紧张/温馨/热血/压抑/轻松/悲伤等）",
@@ -655,6 +683,9 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 }
 
 注意：
+- scene 必须是世界观中已设定的具体地点，不能模糊写"某处"
+- pov 必须是人物档案中的角色名
+- targetWordCount 根据章节重要性分配：开篇/高潮/转折章 4000-5000，普通推进章 2000-3000
 - 如果本章没有埋设钩子，hooksPlanted 设为空数组 []
 - 如果本章没有回收钩子，hooksResolved 设为空数组 []
 - 伏笔同理
@@ -663,7 +694,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - 开篇章节必须有强钩子
 - 所有钩子和伏笔的 plannedResolveChapter/plannedPayoffChapter 必须是有效的章节编号`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 6000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 8000 });
   return parseLlmJson(result) || {};
 }
 
@@ -678,32 +709,45 @@ export async function generateStoryArcs(
   style: any,
   config: PipelineConfig,
 ): Promise<any> {
-  const chapterSummary = (allChapterOutlines?.chapterOutlines || []).flatMap((group: any, volIdx: number) =>
-    (group.chapters || []).map((ch: any, chIdx: number) => ({
-      volume: volIdx + 1,
-      chapter: chIdx + 1,
-      title: ch.title,
-      goal: ch.goal,
-      hook: ch.hook,
-    }))
-  );
+  // 优先使用 enrichedSummary（含 conflict/emotion/characters/hooks/foreshadow），
+  // 回退到原始 chapterOutlines 构建基础摘要
+  const chapterSummary = allChapterOutlines?.enrichedSummary
+    || (allChapterOutlines?.chapterOutlines || []).flatMap((group: any, volIdx: number) =>
+      (group.chapters || []).map((ch: any, chIdx: number) => ({
+        volume: volIdx + 1,
+        chapter: chIdx + 1,
+        title: ch.title,
+        goal: ch.goal,
+        hook: ch.hook,
+      }))
+    );
   const totalChapters = chapterSummary.length;
   const volumeCount = volumes?.volumes?.length || 0;
+
+  // 收集章纲中已埋的钩子和伏笔标题列表，供交叉引用提示使用
+  const plantedHookTitles = chapterSummary
+    .flatMap((ch: any) => ch.hooksPlanted || [])
+    .filter(Boolean);
+  const plantedForeshadowTitles = chapterSummary
+    .flatMap((ch: any) => ch.foreshadowPlanted || [])
+    .filter(Boolean);
 
   const system = `你是一位资深网文故事弧线设计师，擅长规划长篇小说的主线脉络和跨卷钩子。
 
 设计原则：
 - 主线必须贯穿全文，有明确的起点和终点
-- 支线必须服务于主线，不能喧宾夺主
+- 支线必须服务于主线，不能喧宾夺主，且需要有自身的起止、冲突和解决
 - 跨卷钩子要有递进关系，强度逐步升级
 - 情绪曲线要有整体节奏感：三章一小高潮，十章大高潮
 - 伏笔的埋设和回收要形成完整闭环
 - 主线的里程碑事件必须被章节的 goal 覆盖
+- 每个里程碑必须标明类型（turning_point/climax/reveal/sacrifice/growth）和因果关系
 
 核心约束：
 1. 所有生成内容必须与提供的大纲、世界观、人物设定、风格保持严格一致
 2. 主线和钩子必须与世界观规则和人物动机一致
-3. 不得引入与已有设定矛盾的新元素`;
+3. 不得引入与已有设定矛盾的新元素
+4. 跨卷钩子应与章纲中已埋的钩子关联或补充，避免重复`;
 
   const prompt = `请根据以下完整的章纲规划，设计跨卷故事弧线。
 
@@ -725,6 +769,9 @@ ${Array.isArray(characters?.characters) ? characters.characters.map((c: any) => 
 【风格要求】
 ${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.toneAndAtmosphere || ""}\n情绪节奏：${style.emotionalRhythm || ""}` : JSON.stringify(style || {}, null, 2)}
 
+${plantedHookTitles.length > 0 ? `【章纲中已埋的钩子（供交叉引用，避免重复）】\n${plantedHookTitles.join("、")}\n` : ""}
+${plantedForeshadowTitles.length > 0 ? `【章纲中已埋的伏笔（供交叉引用）】\n${plantedForeshadowTitles.join("、")}\n` : ""}
+
 请生成JSON格式的故事弧线：
 {
   "mainlines": [
@@ -735,8 +782,13 @@ ${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.to
       "startChapter": 1,
       "endChapter": ${totalChapters},
       "milestones": [
-        {"chapter": 15, "event": "里程碑事件描述"},
-        {"chapter": 50, "event": "里程碑事件描述"}
+        {
+          "chapter": 15,
+          "event": "里程碑事件描述",
+          "type": "turning_point|climax|reveal|sacrifice|growth",
+          "characters": ["相关角色A", "相关角色B"],
+          "causeEffect": "因为X导致Y"
+        }
       ],
       "resolution": "结局方向"
     }
@@ -748,7 +800,8 @@ ${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.to
       "type": "suspense/foreshadow/cliffhanger/mystery/reversal",
       "intensity": 9,
       "plantedChapter": 5,
-      "resolvedChapter": 120
+      "resolvedChapter": 120,
+      "relatedPlantedHook": "关联的章纲钩子标题（如有，否则留空）"
     }
   ],
   "emotionCurveSummary": {
@@ -761,11 +814,15 @@ ${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.to
 
 注意：
 - 主线至少2-3条（主剧情线、感情线、成长线）
+- 每条主线的 milestones 至少3个，分布于起始、中段、高潮
+- 副线（type="sub"）必须包含 startChapter/endChapter，明确与主线的交汇点和自身冲突
 - 跨卷钩子至少5-8个，分布 across 不同卷
+- 跨卷钩子应检查是否与章纲中已埋的钩子关联，已有关联的用 relatedPlantedHook 字段标注
 - 每个里程碑事件必须对应到具体的章节编号
+- 里程碑的 type 字段必须是 turning_point/climax/reveal/sacrifice/growth 之一
 - 情绪曲线的章节编号必须在 1-${totalChapters} 范围内`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 5000 });
   return parseLlmJson(result) || {};
 }
 
@@ -777,6 +834,7 @@ export async function generateConsistencyCheck(
   worldview?: any,
   characters?: any,
   style?: any,
+  programmaticSummary?: string,
 ): Promise<any> {
   const system = `你是一位资深网文故事编辑，擅长检查长篇小说规划的一致性和逻辑性。
 
@@ -808,11 +866,16 @@ export async function generateConsistencyCheck(
     coreAssets += `\n\n【风格设定】\n${JSON.stringify(style, null, 2)}`;
   }
 
+  const programmaticSection = programmaticSummary
+    ? `\n\n【程序化预检已发现的问题（需要重点关注和确认）】\n${programmaticSummary}`
+    : "";
+
   const prompt = `请检查以下完整的故事规划，找出所有一致性问题。
 ${coreAssets}
 
 【章节规划摘要】
 ${planSummary}
+${programmaticSection}
 
 请以JSON格式返回校验结果：
 {
@@ -849,6 +912,6 @@ ${planSummary}
 
 passed = overallScore >= 6`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 4000 });
   return parseLlmJson(result) || {};
 }

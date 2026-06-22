@@ -23,7 +23,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: linear-gradient(135deg, var(--accent-muted), var(--accent-subtle));
+  background: var(--accent-muted);
   border: 1px solid var(--accent-border-strong);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-4);
@@ -33,7 +33,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,7 +76,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,11 +160,32 @@
   background: var(--bg-overlay);
 }
 
+.bookshelf-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--bg-overlay);
+}
+
+.bookshelf-item-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.bookshelf-item-delete:hover {
+  color: var(--error);
+  background: var(--error-muted);
+}
+
 .bookshelf-item-cover {
   width: 36px;
   height: 48px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--accent-muted), var(--accent-muted));
+  background: var(--bg-elevated);
   border: 1px solid var(--accent-border);
   flex-shrink: 0;
   overflow: hidden;
@@ -221,7 +242,7 @@
 
 .bookshelf-item-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   border-radius: var(--radius-full);
   transition: width var(--transition-slow);
 }

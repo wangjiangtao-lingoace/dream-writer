@@ -41,11 +41,11 @@ const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, w
     : 0;
 
   return (
-    <div style={{
+    <div className="workspace-topbar-grid" style={{
       display: "grid", gridTemplateColumns: "280px 1fr 420px", alignItems: "center",
       height: "64px", padding: "0 24px", gap: "24px",
-      background: "rgba(255,255,255,0.92)",
-      borderBottom: "1px solid var(--border-default)", backdropFilter: "blur(16px)", zIndex: 10,
+      background: "var(--bg-surface)",
+      borderBottom: "1px solid var(--border-default)", zIndex: 10,
     }}>
       {/* Left: Brand + Back */}
       <div
@@ -57,7 +57,7 @@ const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, w
       >
         <div style={{
           width: "34px", height: "34px", borderRadius: "12px",
-          background: "linear-gradient(135deg, #4f7cff, #8b5cf6)",
+          background: "var(--accent)",
           color: "#fff", display: "grid", placeItems: "center",
           fontWeight: 800, fontSize: "0.875rem",
         }}>
@@ -93,7 +93,7 @@ const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, w
         {exportButton}
         <Pill color="#c2410c" bg="rgba(234,179,8,0.1)">当前情绪：{signals.mood}</Pill>
         <Pill color="#047857" bg="rgba(34,197,94,0.1)">节奏：{signals.rhythm}</Pill>
-        <Pill color="#3159d4" bg="rgba(79,124,255,0.1)">{signals.climax ? "高潮临近" : "高潮：稳定"}</Pill>
+        <Pill color="var(--accent)" bg="var(--accent-muted)">{signals.climax ? "高潮临近" : "高潮：稳定"}</Pill>
       </div>
     </div>
   );

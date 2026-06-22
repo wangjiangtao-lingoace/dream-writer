@@ -8,6 +8,10 @@ export interface PipelineConfig {
   chaptersPerVolume: number;
   targetWordCount: number;
   overwriteExistingChapters: boolean;
+  /** Token 预算上限（单位：1K tokens），空值表示不限制 */
+  tokenBudget?: number;
+  /** 每批次最多写入章节数，0 或空值表示不限制 */
+  maxChaptersPerBatch?: number;
 }
 
 interface PipelineConfigModalProps {
@@ -83,6 +87,20 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
   const [chaptersPerVolume, setChaptersPerVolume] = useState(mergedDefaults.chaptersPerVolume);
   const [targetWordCount, setTargetWordCount] = useState(mergedDefaults.targetWordCount);
   const [overwriteExistingChapters, setOverwriteExistingChapters] = useState(mergedDefaults.overwriteExistingChapters);
+  const [tokenBudget, setTokenBudget] = useState<number | undefined>(mergedDefaults.tokenBudget);
+  const [maxChaptersPerBatch, setMaxChaptersPerBatch] = useState<number | undefined>(mergedDefaults.maxChaptersPerBatch);
+
+  // 预估 token 消耗
+  const totalChapters = volumeCount * chaptersPerVolume;
+  const estimatedTokensPerChapter = Math.round(targetWordCount * 2.5 + 1500);
+  const estimatedWritingTokens = totalChapters * estimatedTokensPerChapter;
+  const estimatedPlanningTokens = 50000;
+  const estimatedTotalTokens = estimatedWritingTokens + estimatedPlanningTokens;
+  const formatTokens = (n: number) => {
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+    if (n >= 1000) return `${(n / 1000).toFixed(0)}K`;
+    return String(n);
+  };
 
   // Reset state when modal opens with new defaults
   useEffect(() => {
@@ -96,6 +114,8 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
       setChaptersPerVolume(m.chaptersPerVolume);
       setTargetWordCount(m.targetWordCount);
       setOverwriteExistingChapters(m.overwriteExistingChapters);
+      setTokenBudget(m.tokenBudget);
+      setMaxChaptersPerBatch(m.maxChaptersPerBatch);
     }
   }, [open, defaults, findMatchingPreset]);
 
@@ -118,6 +138,8 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
       chaptersPerVolume,
       targetWordCount,
       overwriteExistingChapters,
+      tokenBudget,
+      maxChaptersPerBatch,
     });
   };
 
@@ -135,8 +157,7 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(0, 0, 0, 0.5)",
-    backdropFilter: "blur(4px)",
+    background: "rgba(15, 15, 15, 0.6)",
     animation: "pcm-fade-in 0.2s ease-out",
   };
 
@@ -440,6 +461,90 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
                 style={{ ...numberInputStyle, width: "6rem" }}
               />
               <span style={sectionDescStyle}>Pipeline 完成后自动生成的章节数</span>
+            </div>
+          </div>
+
+          {/* Token 预估 */}
+          <div style={{
+            padding: "var(--space-3, 0.75rem)",
+            background: "var(--bg-elevated, #f7f6f3)",
+            borderRadius: "var(--radius-md, 4px)",
+            border: "1px solid var(--border-subtle, var(--border-default, #e5e5e5))",
+          }}>
+            <div style={sectionLabelStyle}>预估消耗</div>
+            <div style={{ display: "flex", gap: "var(--space-4, 1rem)", marginTop: "var(--space-2, 0.5rem)" }}>
+              <div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--accent, #2383e2)" }}>
+                  {formatTokens(estimatedTotalTokens)}
+                </div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-muted, #888)" }}>总 tokens</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary, #37352f)" }}>
+                  {totalChapters}
+                </div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-muted, #888)" }}>总章数</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary, #37352f)" }}>
+                  {formatTokens(estimatedTokensPerChapter)}
+                </div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-muted, #888)" }}>tokens/章</div>
+              </div>
+            </div>
+            <div style={{ fontSize: "0.6875rem", color: "var(--text-muted, #888)", marginTop: "var(--space-2, 0.5rem)" }}>
+              * 实际消耗取决于 LLM 模型和重试次数，仅供参考
+            </div>
+          </div>
+
+          {/* Token Budget Limit */}
+          <div>
+            <div style={sectionLabelStyle}>Token 预算上限</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3, 0.75rem)", marginTop: "var(--space-2, 0.5rem)" }}>
+              <input
+                type="number"
+                value={tokenBudget ?? ""}
+                min={0}
+                step={10}
+                placeholder="不限制"
+                onChange={(e) => {
+                  const val = e.target.value ? Math.max(0, Number(e.target.value)) : undefined;
+                  setTokenBudget(val);
+                }}
+                style={{ ...numberInputStyle, width: "8rem" }}
+              />
+              <span style={sectionDescStyle}>单位：1K tokens，留空表示不限制</span>
+            </div>
+            {tokenBudget && tokenBudget > 0 && estimatedTotalTokens > tokenBudget * 1000 && (
+              <div style={{
+                marginTop: "var(--space-2, 0.5rem)",
+                padding: "0.375rem 0.625rem",
+                background: "rgba(234, 179, 8, 0.1)",
+                border: "1px solid rgba(234, 179, 8, 0.3)",
+                borderRadius: "var(--radius-sm, 4px)",
+                fontSize: "0.75rem",
+                color: "#eab308",
+              }}>
+                预估 {formatTokens(estimatedTotalTokens)} tokens 超出预算上限 {formatTokens(tokenBudget * 1000)} tokens，超出部分将自动暂停
+              </div>
+            )}
+          </div>
+
+          {/* Max Chapters Per Batch */}
+          <div>
+            <div style={sectionLabelStyle}>每批次最多写入章数</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3, 0.75rem)", marginTop: "var(--space-2, 0.5rem)" }}>
+              <input
+                type="number"
+                value={maxChaptersPerBatch ?? 0}
+                min={0}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value) || 0);
+                  setMaxChaptersPerBatch(val || undefined);
+                }}
+                style={{ ...numberInputStyle, width: "6rem" }}
+              />
+              <span style={sectionDescStyle}>0 表示不限制，每写完一批自动暂停等待确认</span>
             </div>
           </div>
 

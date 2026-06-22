@@ -9,10 +9,10 @@ interface WorkspaceBottomBarProps {
 
 const WorkspaceBottomBar: React.FC<WorkspaceBottomBarProps> = ({ analysis, radarScores, nextSuggestion }) => {
   return (
-    <div style={{
+    <div className="workspace-bottombar-grid" style={{
       display: "grid", gridTemplateColumns: "280px 1fr 340px", alignItems: "center",
       height: "76px", background: "rgba(255,255,255,0.94)",
-      borderTop: "1px solid var(--border-default)", backdropFilter: "blur(16px)",
+      borderTop: "1px solid var(--border-default)",
     }}>
       <div style={{ padding: "0 20px", fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {analysis || "AI 正在分析..."}

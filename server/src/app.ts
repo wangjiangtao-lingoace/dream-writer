@@ -38,6 +38,8 @@ import exportRouter from "./routes/export";
 import { prisma } from "./db/prisma";
 import { getRagRetrieveService } from "./services/RagRetrieveService";
 import { getVectorStore } from "./db/vectorStore";
+import { PROVIDERS, isBuiltInProvider } from "./llm/providers";
+import { rateLimiter } from "./utils/RateLimiter";
 
 dotenv.config();
 
@@ -96,12 +98,41 @@ app.use(morgan("dev"));
 
 app.get("/api/health", async (_req: Request, res: Response) => {
   await checkDatabaseSchema();
+
+  // Active pipeline count
+  let activePipelines = 0;
+  try {
+    activePipelines = await prisma.pipelineJob.count({ where: { status: "running" } });
+  } catch { /* ignore if table missing */ }
+
+  // Configured LLM providers
+  const configuredProviders: string[] = [];
+  for (const [key, cfg] of Object.entries(PROVIDERS)) {
+    const envVal = process.env[cfg.envKey];
+    if (cfg.requiresApiKey === false || (typeof envVal === "string" && envVal.trim())) {
+      configuredProviders.push(key);
+    }
+  }
+
+  const subsystems = {
+    database: databaseHealth,
+    pipelines: { active: activePipelines },
+    llm: {
+      defaultProvider: process.env.DEFAULT_LLM_PROVIDER || "mimo",
+      configuredProviders,
+      totalConfigured: configuredProviders.length,
+    },
+    rateLimiting: rateLimiter.getStats(),
+  };
+
+  const allOk = databaseHealth.ok && configuredProviders.length > 0;
+
   res.json({
     success: true,
     data: {
       service: "dream-writer-server",
-      status: databaseHealth.ok ? "ok" : "database_uninitialized",
-      database: databaseHealth,
+      status: allOk ? "ok" : databaseHealth.ok ? "degraded" : "database_uninitialized",
+      ...subsystems,
       timestamp: new Date().toISOString(),
     },
   });
@@ -163,9 +194,30 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
+async function recoverStuckPipelines() {
+  try {
+    const stuckJobs = await prisma.pipelineJob.findMany({
+      where: { status: "running" },
+    });
+    if (stuckJobs.length > 0) {
+      await prisma.pipelineJob.updateMany({
+        where: { status: "running" },
+        data: {
+          status: "error",
+          lastError: "服务器重启，流程自动中断。请点击「恢复」继续。",
+        },
+      });
+      console.log(`[Pipeline] 已恢复 ${stuckJobs.length} 个重启前卡死的流程`);
+    }
+  } catch (e) {
+    console.warn("[Pipeline] 恢复卡死流程失败:", e);
+  }
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`🪶 Dream Writer server listening on http://${HOST}:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
+  void recoverStuckPipelines();
 });
 
 function gracefulShutdown(signal: string) {

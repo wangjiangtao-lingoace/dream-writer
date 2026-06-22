@@ -138,7 +138,7 @@ export class ContinuationService {
     novelId: string;
     chapterCount?: number;
     targetWordCount?: number;
-  }): Promise<Array<{ id: string; order: number; title: string; content: string }>> {
+  }): Promise<Array<{ id: string; order: number; title: string; content: string; retryCount: number; estimatedTokens: number }>> {
     const { novelId, chapterCount = 1, targetWordCount = 2500 } = params;
 
     // 校验小说存在
@@ -190,7 +190,7 @@ export class ContinuationService {
       prisma.storyState.findUnique({ where: { novelId } }),
     ]);
 
-    const results: Array<{ id: string; order: number; title: string; content: string }> = [];
+    const results: Array<{ id: string; order: number; title: string; content: string; retryCount: number; estimatedTokens: number }> = [];
 
     for (let i = 0; i < chapterCount; i++) {
       const nextOrder = startOrder + i;
@@ -315,7 +315,13 @@ export class ContinuationService {
         }
       }).catch(() => {});
 
-      results.push({ id: chapter.id, order: nextOrder, title: card.title, content });
+      // 估算 token 消耗：每次 generateChapterContent 调用约消耗 promptTokens + 内容长度
+      // 初次生成 + retryCount 次重试 = (1 + retryCount) 次 LLM 调用
+      const totalCalls = 1 + retryCount;
+      const promptTokens = 1500; // 粗估 system prompt + context 的 token 数
+      const estimatedTokens = Math.round((promptTokens + content.length) * totalCalls);
+
+      results.push({ id: chapter.id, order: nextOrder, title: card.title, content, retryCount, estimatedTokens });
     }
 
     return results;

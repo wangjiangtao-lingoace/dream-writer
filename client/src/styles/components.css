@@ -21,15 +21,13 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   color: white;
   border-color: transparent;
-  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:hover {
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-1px);
+  background: var(--accent-hover);
 }
 
 .btn-secondary {
@@ -79,7 +77,7 @@
 
 .input:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+  box-shadow: none;
 }
 
 .input::placeholder {
@@ -253,7 +251,7 @@
 
 .primary-button {
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -265,8 +263,7 @@
 }
 
 .primary-button:hover {
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-1px);
+  background: var(--accent-hover);
 }
 
 .primary-button:disabled {
@@ -393,7 +390,7 @@
 .form-group select:focus-visible,
 .form-group textarea:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+  box-shadow: none;
 }
 
 .form-group textarea {
@@ -497,7 +494,7 @@
 .knowledge-form select:focus-visible,
 .knowledge-form textarea:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+  box-shadow: none;
 }
 
 .knowledge-form textarea {
@@ -717,7 +714,7 @@
 
 .memory-search input:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+  box-shadow: none;
 }
 
 .memory-search button {
@@ -784,7 +781,7 @@
 .memory-form select:focus-visible,
 .memory-form textarea:focus-visible {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+  box-shadow: none;
 }
 
 .memory-form textarea {
@@ -927,11 +924,11 @@
 }
 
 .stat-value.good {
-  color: var(--color-success);
+  color: var(--success);
 }
 
 .stat-value.warning {
-  color: var(--color-warning);
+  color: var(--warning);
 }
 
 .stat-detail {
@@ -961,7 +958,7 @@
 }
 
 .chart-bar.climax {
-  background: var(--color-warning);
+  background: var(--warning);
 }
 
 .chart-label {
@@ -998,9 +995,9 @@
 }
 
 .trend-bar.style { background: var(--accent); }
-.trend-bar.density { background: var(--color-success); }
-.trend-bar.character { background: var(--color-warning); }
-.trend-bar.emotion { background: var(--color-info); }
+.trend-bar.density { background: var(--success); }
+.trend-bar.character { background: var(--warning); }
+.trend-bar.emotion { background: var(--info); }
 
 .trend-legend {
   display: flex;
@@ -1026,6 +1023,25 @@
 }
 
 .legend-item.style::before { background: var(--accent); }
-.legend-item.density::before { background: var(--color-success); }
-.legend-item.character::before { background: var(--color-warning); }
-.legend-item.emotion::before { background: var(--color-info); }
+.legend-item.density::before { background: var(--success); }
+.legend-item.character::before { background: var(--warning); }
+.legend-item.emotion::before { background: var(--info); }
+
+/* NovelForm responsive */
+.novel-form-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2rem;
+  max-width: 960px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .novel-form-layout {
+    grid-template-columns: 1fr;
+  }
+  .novel-form-layout .form-cover {
+    display: flex;
+    justify-content: center;
+  }
+}

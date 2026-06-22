@@ -15,6 +15,7 @@ export interface ProviderConfig {
   envModelKey?: string;
   maxTokens?: number;
   requiresApiKey?: boolean;
+  defaultRpm?: number;
 }
 
 export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
@@ -27,6 +28,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envBaseURLKey: "DEEPSEEK_BASE_URL",
     envModelKey: "DEEPSEEK_MODEL",
     maxTokens: 8192,
+    defaultRpm: 60,
   },
   siliconflow: {
     name: "SiliconFlow",
@@ -40,6 +42,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "SILICONFLOW_API_KEY",
     envBaseURLKey: "SILICONFLOW_BASE_URL",
     envModelKey: "SILICONFLOW_MODEL",
+    defaultRpm: 60,
   },
   openai: {
     name: "OpenAI",
@@ -49,6 +52,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "OPENAI_API_KEY",
     envBaseURLKey: "OPENAI_BASE_URL",
     envModelKey: "OPENAI_MODEL",
+    defaultRpm: 30,
   },
   anthropic: {
     name: "Anthropic",
@@ -61,6 +65,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "ANTHROPIC_API_KEY",
     envBaseURLKey: "ANTHROPIC_BASE_URL",
     envModelKey: "ANTHROPIC_MODEL",
+    defaultRpm: 50,
   },
   grok: {
     name: "Grok",
@@ -76,6 +81,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "XAI_API_KEY",
     envBaseURLKey: "XAI_BASE_URL",
     envModelKey: "XAI_MODEL",
+    defaultRpm: 60,
   },
   kimi: {
     name: "Kimi",
@@ -85,6 +91,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "KIMI_API_KEY",
     envBaseURLKey: "KIMI_BASE_URL",
     envModelKey: "KIMI_MODEL",
+    defaultRpm: 60,
   },
   minimax: {
     name: "MiniMax",
@@ -102,6 +109,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "MINIMAX_API_KEY",
     envBaseURLKey: "MINIMAX_BASE_URL",
     envModelKey: "MINIMAX_MODEL",
+    defaultRpm: 60,
   },
   glm: {
     name: "GLM",
@@ -111,6 +119,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "GLM_API_KEY",
     envBaseURLKey: "GLM_BASE_URL",
     envModelKey: "GLM_MODEL",
+    defaultRpm: 60,
   },
   qwen: {
     name: "Qwen",
@@ -120,6 +129,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "QWEN_API_KEY",
     envBaseURLKey: "QWEN_BASE_URL",
     envModelKey: "QWEN_MODEL",
+    defaultRpm: 60,
   },
   gemini: {
     name: "Gemini",
@@ -129,6 +139,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envKey: "GEMINI_API_KEY",
     envBaseURLKey: "GEMINI_BASE_URL",
     envModelKey: "GEMINI_MODEL",
+    defaultRpm: 15,
   },
   ollama: {
     name: "Ollama",
@@ -139,6 +150,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envBaseURLKey: "OLLAMA_BASE_URL",
     envModelKey: "OLLAMA_MODEL",
     requiresApiKey: false,
+    defaultRpm: 0,
   },
   mimo: {
     name: "MiMo",
@@ -149,6 +161,7 @@ export const PROVIDERS: Record<BuiltinLLMProvider, ProviderConfig> = {
     envBaseURLKey: "MIMO_BASE_URL",
     envModelKey: "MIMO_MODEL",
     maxTokens: 8192,
+    defaultRpm: 60,
   },
 };
 
@@ -227,4 +240,9 @@ export function providerRequiresApiKey(provider: LLMProvider): boolean {
     return false;
   }
   return PROVIDERS[provider].requiresApiKey !== false;
+}
+
+export function getProviderDefaultRpm(provider: LLMProvider): number {
+  if (!isBuiltInProvider(provider)) return 60;
+  return PROVIDERS[provider].defaultRpm ?? 60;
 }

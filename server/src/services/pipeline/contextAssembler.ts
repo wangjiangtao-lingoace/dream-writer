@@ -207,6 +207,7 @@ export class ContextAssembler {
 
   /**
    * 通过 RAG 检索与本章相关的历史上下文（设定、角色、情节等）
+   * 返回带相关度标注的上下文文本
    */
   private async loadRagContext(chapterOutline: any): Promise<string> {
     const ragService = getRagRetrieveService();
@@ -223,7 +224,13 @@ export class ContextAssembler {
     if (!query.trim()) return "";
 
     try {
-      return await ragService.retrieve(query, { novelId: this.novelId, topK: 5 });
+      const scored = await ragService.retrieveScored(query, { novelId: this.novelId, topK: 5 });
+      if (scored.length === 0) return "";
+
+      return scored.map((c, i) => {
+        const relevance = c.score >= 80 ? "高相关" : c.score >= 50 ? "中相关" : "低相关";
+        return `[${i + 1}] (${c.ownerType}, ${relevance}) ${c.text}`;
+      }).join("\n\n");
     } catch {
       return "";
     }

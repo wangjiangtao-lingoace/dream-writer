@@ -43,16 +43,22 @@ const WritePanel: React.FC<{ novelId: string; activeChapterId?: string | null }>
   const handleContinue = async () => {
     setContinuing(true);
     try {
-      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string }> }>(
+      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string; retryCount: number; estimatedTokens: number }> }>(
         `/api/novels/${novelId}/continue`,
         { chapterCount: 1, targetWordCount: 1800 }
       );
       if (result.chapters.length > 0) {
-        toast.success(`第${result.chapters[0].order}章「${result.chapters[0].title}」续写完成`);
+        const ch = result.chapters[0];
+        const baseMsg = `第${ch.order}章「${ch.title}」续写完成`;
+        if (ch.retryCount > 0) {
+          toast.success(`${baseMsg}，质量优化了 ${ch.retryCount} 轮，消耗约 ${ch.estimatedTokens} tokens`);
+        } else {
+          toast.success(baseMsg);
+        }
         await loadChapters();
         // 自动选中新章节
         const updated = await api.get<{ chapters: any[] }>(`/api/novels/${novelId}`);
-        const newCh = updated?.chapters?.find((c: any) => c.id === result.chapters[0].id);
+        const newCh = updated?.chapters?.find((c: any) => c.id === ch.id);
         if (newCh) setActiveChapter(newCh);
       }
     } catch (error) {

@@ -142,9 +142,10 @@ export class NovelService {
       throw new Error("章节不存在。");
     }
     
-    // 删除章节
+    // 删除章节及其关联的 ChapterSummary
     await prisma.chapter.delete({ where: { id: chapterId } });
-    
+    await prisma.chapterSummary.deleteMany({ where: { novelId, chapterOrder: chapter.order } });
+
     // 重新排列后续章节的序号
     const subsequentChapters = await prisma.chapter.findMany({
       where: {
@@ -161,6 +162,15 @@ export class NovelService {
         data: { order: ch.order - 1 },
       });
     }
+
+    // 同步调整后续 ChapterSummary 的 chapterOrder
+    await prisma.chapterSummary.updateMany({
+      where: {
+        novelId,
+        chapterOrder: { gt: chapter.order },
+      },
+      data: { chapterOrder: { decrement: 1 } },
+    });
     
     return { success: true };
   }

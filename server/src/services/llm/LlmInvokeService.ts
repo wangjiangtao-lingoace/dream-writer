@@ -1,6 +1,7 @@
 import type { LLMProvider } from "@dream-writer/shared/types/llm";
 import {
   getProviderDefaultBaseUrl,
+  getProviderDefaultRpm,
   getProviderEnvApiKey,
   getProviderEnvBaseUrl,
   getProviderEnvModel,
@@ -9,6 +10,7 @@ import {
 import { prisma } from "../../db/prisma";
 import { decryptApiKey } from "../../utils/crypto";
 import { withRetry } from "../../utils/retry";
+import { rateLimiter } from "../../utils/RateLimiter";
 
 export interface ChapterDraftInput {
   novelTitle: string;
@@ -112,6 +114,19 @@ function extractOpenAIStreamDelta(line: string): string {
   }
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface CompletionResult {
+  content: string;
+  usage: TokenUsage;
+  provider: string;
+  model: string;
+}
+
 export class LlmError extends Error {
   constructor(
     message: string,
@@ -133,7 +148,7 @@ export class LlmInvokeService {
     temperature?: number;
     maxTokens?: number;
     provider?: LLMProvider;
-  }): Promise<string> {
+  }): Promise<CompletionResult> {
     return withRetry(() => this.doCompleteText(input));
   }
 
@@ -143,7 +158,7 @@ export class LlmInvokeService {
     temperature?: number;
     maxTokens?: number;
     provider?: LLMProvider;
-  }): Promise<string> {
+  }): Promise<CompletionResult> {
     const config = await resolveModelConfig();
     const provider = input.provider || config?.provider || "unknown";
     const model = config?.model ?? "unknown";
@@ -175,6 +190,8 @@ export class LlmInvokeService {
     console.log(`[LLM Request] Base URL: ${finalConfig.baseURL}`);
     console.log(`[LLM Request] API Key: ${finalConfig.apiKey ? finalConfig.apiKey.substring(0, 10) + '...' : 'NONE'}`);
 
+    await rateLimiter.acquire(finalConfig.provider, getProviderDefaultRpm(finalConfig.provider));
+
     const response = await fetch(`${finalConfig.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -194,17 +211,30 @@ export class LlmInvokeService {
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : undefined;
+        rateLimiter.report429(finalConfig.provider, Number.isFinite(seconds) ? seconds : undefined);
+      }
       throw new LlmError(`LLM 请求失败: ${response.status}`, finalConfig.provider, finalConfig.model, response.status);
     }
 
     const json = await response.json() as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
     const content = json.choices?.[0]?.message?.content?.trim();
     if (!content) {
       throw new LlmError("LLM 返回空内容", finalConfig.provider, finalConfig.model);
     }
-    return content;
+
+    const usage: TokenUsage = {
+      promptTokens: json.usage?.prompt_tokens ?? 0,
+      completionTokens: json.usage?.completion_tokens ?? 0,
+      totalTokens: json.usage?.total_tokens ?? 0,
+    };
+
+    return { content, usage, provider: finalConfig.provider, model: finalConfig.model };
   }
 
   async completeText(input: {
@@ -215,10 +245,55 @@ export class LlmInvokeService {
     provider?: LLMProvider;
   }): Promise<string | null> {
     try {
+      const result = await this.completeTextOrThrow(input);
+      return result.content;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 返回内容和 token 用量的完整结果 */
+  async completeTextWithUsage(input: {
+    system?: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+    provider?: LLMProvider;
+  }): Promise<CompletionResult | null> {
+    try {
       return await this.completeTextOrThrow(input);
     } catch {
       return null;
     }
+  }
+
+  /** 持久化 token 使用记录（fire-and-forget，不阻塞主流程） */
+  async persistGenerationLog(params: {
+    novelId: string;
+    chapterId?: string;
+    taskType: string;
+    status: string;
+    durationMs?: number;
+    usage?: TokenUsage;
+    provider?: string;
+    model?: string;
+    errorMsg?: string;
+  }): Promise<void> {
+    prisma.generationLog.create({
+      data: {
+        novelId: params.novelId,
+        chapterId: params.chapterId,
+        taskType: params.taskType,
+        status: params.status,
+        durationMs: params.durationMs,
+        promptTokens: params.usage?.promptTokens,
+        completionTokens: params.usage?.completionTokens,
+        totalTokens: params.usage?.totalTokens,
+        provider: params.provider,
+        model: params.model,
+        errorMsg: params.errorMsg,
+      },
+    }).catch(() => {});
   }
 
   async *streamText(input: { system?: string; prompt: string; temperature?: number; maxTokens?: number }): AsyncGenerator<string> {
@@ -226,6 +301,8 @@ export class LlmInvokeService {
     if (!config) {
       throw new LlmError("未配置 LLM API Key。请在设置页面或 server/.env 中配置。", "unknown", "unknown");
     }
+
+    await rateLimiter.acquire(config.provider, getProviderDefaultRpm(config.provider));
 
     const response = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -246,6 +323,11 @@ export class LlmInvokeService {
     });
 
     if (!response.ok || !response.body) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : undefined;
+        rateLimiter.report429(config.provider, Number.isFinite(seconds) ? seconds : undefined);
+      }
       throw new LlmError(`LLM 流式请求失败: ${response.status}`, config.provider, config.model, response.status);
     }
 
@@ -280,6 +362,8 @@ export class LlmInvokeService {
       throw new LlmError("未配置 LLM API Key。请在设置页面或 server/.env 中配置。", "unknown", "unknown");
     }
 
+    await rateLimiter.acquire(config.provider, getProviderDefaultRpm(config.provider));
+
     const response = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
@@ -298,6 +382,11 @@ export class LlmInvokeService {
     });
 
     if (!response.ok || !response.body) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : undefined;
+        rateLimiter.report429(config.provider, Number.isFinite(seconds) ? seconds : undefined);
+      }
       throw new LlmError(`LLM 流式请求失败: ${response.status}`, config.provider, config.model, response.status);
     }
 

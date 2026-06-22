@@ -93,7 +93,7 @@ const Settings: React.FC = () => {
               <div className="config-card-header">
                 <span className="config-card-provider">{config.provider.toUpperCase()}</span>
                 {config.isDefault && (
-                  <span className="config-card-badge" style={{ background: "rgba(34,197,94,0.15)", color: "var(--success)" }}>
+                  <span className="config-card-badge" style={{ background: "var(--success-muted)", color: "var(--success)" }}>
                     默认
                   </span>
                 )}
@@ -134,7 +134,7 @@ const Settings: React.FC = () => {
           <div style={{
             padding: "var(--space-3)",
             borderRadius: "var(--radius-md)",
-            background: testResult.success ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+            background: testResult.success ? "var(--success-bg)" : "var(--error-bg)",
             color: testResult.success ? "var(--success)" : "var(--error)",
             fontSize: "var(--text-sm)",
             marginTop: "var(--space-2)",
@@ -202,7 +202,7 @@ const Settings: React.FC = () => {
           />
 
           {createError && (
-            <div style={{ padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "rgba(239,68,68,0.1)", color: "var(--error)", fontSize: "var(--text-sm)" }}>
+            <div style={{ padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", fontSize: "var(--text-sm)" }}>
               {createError}
             </div>
           )}

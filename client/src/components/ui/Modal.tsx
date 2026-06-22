@@ -47,8 +47,7 @@ export const Modal: React.FC<ModalProps> = ({
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(0, 0, 0, 0.6)",
-          backdropFilter: "blur(4px)",
+          background: "rgba(15,15,15,0.6)",
         }}
       />
       <div
@@ -57,7 +56,7 @@ export const Modal: React.FC<ModalProps> = ({
           width,
           maxHeight: "85vh",
           overflow: "auto",
-          background: "var(--bg-elevated)",
+          background: "var(--bg-surface)",
           border: "1px solid var(--border-default)",
           borderRadius: "var(--radius-xl)",
           padding: "var(--space-6)",

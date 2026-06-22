@@ -120,7 +120,6 @@ const NovelForm: React.FC = () => {
     <div className="novel-form-page" style={{
       minHeight: "100vh",
       background: "var(--bg-primary)",
-      backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4a574' fill-opacity='0.05'%3E%3Cpath d='M50 0L51 100H49L50 0z' /%3E%3Cpath d='M0 50H100V52H0z' /%3E%3C/g%3E%3C/svg%3E\")",
     }}>
       <header className="form-header" style={{
         display: "flex",
@@ -148,7 +147,6 @@ const NovelForm: React.FC = () => {
           返回
         </button>
         <h1 style={{
-          fontFamily: "var(--font-serif)",
           fontSize: "1.5rem",
           color: "var(--text-primary)",
           letterSpacing: "0.05em",
@@ -160,13 +158,7 @@ const NovelForm: React.FC = () => {
         justifyContent: "center",
         padding: "3rem 2rem",
       }}>
-        <form onSubmit={handleSubmit} style={{
-          display: "grid",
-          gridTemplateColumns: "280px 1fr",
-          gap: "2rem",
-          maxWidth: "960px",
-          width: "100%",
-        }}>
+        <form onSubmit={handleSubmit} className="novel-form-layout">
           <div className="form-cover">
             <div
               className="cover-upload"

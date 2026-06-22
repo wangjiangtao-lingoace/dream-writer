@@ -10,7 +10,9 @@ set -euo pipefail
 
 REPO_URL="https://github.com/wangjiangtao-lingoace/dream-writer.git"
 BRANCH="feat/lightweight-rebuild"
-INSTALL_DIR="$HOME/dream-writer"
+# 自动检测项目目录：优先使用脚本所在目录的上级
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 NODE_MIN_VERSION="20.19.0"
 PNPM_MIN_VERSION="10.6.0"
 PORT_CLIENT=5173

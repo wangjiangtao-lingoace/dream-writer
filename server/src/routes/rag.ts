@@ -87,40 +87,19 @@ router.post("/reindex/:novelId", async (req: Request, res: Response) => {
       await vectorStore.deleteByNovel(novelId);
     }
 
-    // 2. 收集该作品的所有数据源
-    const [knowledgeAssets, memories] = await Promise.all([
-      prisma.knowledgeAsset.findMany({
-        where: { novelId },
-        select: { id: true, title: true, content: true },
-      }),
-      prisma.memory.findMany({
-        where: { novelId },
-        select: { id: true, title: true, content: true },
-      }),
-    ]);
+    // 2. 重建完整索引：世界观 + 角色 + 资料库 + 章节
+    const stats = await ingestService.reindexAll(novelId);
 
-    let ingested = 0;
+    // 3. 额外索引 Memory 记录（不属于 reindexAll 的标准范围）
+    const memories = await prisma.memory.findMany({
+      where: { novelId },
+      select: { id: true, title: true, content: true },
+    });
+
+    let memoryIngested = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    // 3. 逐条嵌入 KnowledgeAsset
-    for (const asset of knowledgeAssets) {
-      const text = `${asset.title}\n\n${asset.content}`;
-      try {
-        await ingestService.ingestText({
-          ownerType: "knowledge_asset",
-          ownerId: asset.id,
-          novelId,
-          text,
-        });
-        ingested++;
-      } catch (err: any) {
-        failed++;
-        errors.push(`KnowledgeAsset ${asset.id}: ${err.message}`);
-      }
-    }
-
-    // 4. 逐条嵌入 Memory
     for (const memory of memories) {
       const text = `${memory.title}\n\n${memory.content}`;
       try {
@@ -130,7 +109,7 @@ router.post("/reindex/:novelId", async (req: Request, res: Response) => {
           novelId,
           text,
         });
-        ingested++;
+        memoryIngested++;
       } catch (err: any) {
         failed++;
         errors.push(`Memory ${memory.id}: ${err.message}`);
@@ -141,8 +120,12 @@ router.post("/reindex/:novelId", async (req: Request, res: Response) => {
       success: true,
       data: {
         novelId,
-        total: knowledgeAssets.length + memories.length,
-        ingested,
+        total: stats.total + memories.length,
+        worldviews: stats.worldviews,
+        characters: stats.characters,
+        knowledgeAssets: stats.knowledgeAssets,
+        chapters: stats.chapters,
+        memories: memoryIngested,
         failed,
         errors: errors.length > 0 ? errors : undefined,
       },

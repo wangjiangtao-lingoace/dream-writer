@@ -21,7 +21,6 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
       padding: "0.75rem 1.5rem",
       borderBottom: "1px solid var(--border-default)",
       background: "var(--bg-surface)",
-      boxShadow: "var(--shadow-sm)",
     }}>
       <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
         <button className="btn-back" onClick={onBack} style={{
@@ -44,7 +43,6 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
         </button>
         <div style={{ width: "1px", height: "24px", background: "var(--border-default)" }} />
         <h1 style={{
-          fontFamily: "var(--font-serif)",
           fontSize: "1.25rem",
           color: "var(--text-primary)",
           letterSpacing: "0.05em",

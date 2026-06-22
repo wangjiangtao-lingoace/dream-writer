@@ -6,13 +6,23 @@
 export function parseLlmJson<T = any>(text: string | null): T | null {
   if (!text) return null;
 
+  // 0. Pre-strip markdown fences (handles mimo and similar providers)
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    // Remove opening fence: ```json\n or ```\n
+    cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/, "");
+    // Remove closing fence
+    cleaned = cleaned.replace(/\n?```\s*$/, "");
+    cleaned = cleaned.trim();
+  }
+
   // 1. Try direct parse
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(cleaned) as T;
   } catch {}
 
-  // 2. Try extracting from ```json ... ``` fences
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // 2. Try extracting from ```json ... ``` fences (in case stripping left nested fences)
+  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) {
     try {
       return JSON.parse(fenced[1].trim()) as T;
@@ -20,22 +30,22 @@ export function parseLlmJson<T = any>(text: string | null): T | null {
   }
 
   // 3. Try finding first { or [ and matching closing bracket
-  const objStart = text.indexOf("{");
-  const arrStart = text.indexOf("[");
+  const objStart = cleaned.indexOf("{");
+  const arrStart = cleaned.indexOf("[");
   let start = -1;
   let end = -1;
 
   if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) {
     start = objStart;
-    end = text.lastIndexOf("}");
+    end = cleaned.lastIndexOf("}");
   } else if (arrStart !== -1) {
     start = arrStart;
-    end = text.lastIndexOf("]");
+    end = cleaned.lastIndexOf("]");
   }
 
   if (start !== -1 && end > start) {
     try {
-      return JSON.parse(text.slice(start, end + 1)) as T;
+      return JSON.parse(cleaned.slice(start, end + 1)) as T;
     } catch {}
   }
 

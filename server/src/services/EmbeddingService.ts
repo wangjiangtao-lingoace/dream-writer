@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { decryptApiKey } from "../utils/crypto";
+import { rateLimiter } from "../utils/RateLimiter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -351,6 +352,8 @@ class EmbeddingService {
       throw new Error(`不允许的协议: ${parsedUrl.protocol}，仅支持 http/https`);
     }
 
+    await rateLimiter.acquire("embedding");
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -365,6 +368,11 @@ class EmbeddingService {
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        const seconds = retryAfter ? parseInt(retryAfter, 10) : undefined;
+        rateLimiter.report429("embedding", Number.isFinite(seconds) ? seconds : undefined);
+      }
       const errorText = await response.text().catch(() => "");
       throw new Error(
         `嵌入 API 调用失败 (${response.status}): ${errorText.slice(0, 200)}`

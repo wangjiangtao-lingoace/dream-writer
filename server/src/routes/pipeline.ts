@@ -54,6 +54,7 @@ router.get("/:jobId/stream", async (req: Request, res: Response) => {
 
   const disposeHeartbeat = initSSE(res);
   const reportedChapters = new Map<number, string>();
+  let reportedPhase: string | null = job.currentPhase;
   let lastCheckTime = new Date(Date.now() - 5000);
   let closed = false;
 
@@ -79,6 +80,43 @@ router.get("/:jobId/stream", async (req: Request, res: Response) => {
       }
 
       const isTerminal = currentJob.status === "completed" || currentJob.status === "error";
+
+      // 阶段级进度推送（非 writing 阶段）
+      if (currentJob.currentPhase !== "writing") {
+        const phaseResults = await prisma.phaseResult.findMany({
+          where: {
+            jobId,
+            updatedAt: { gt: lastCheckTime },
+          },
+          select: { phase: true, step: true, status: true, selfScore: true },
+        });
+
+        for (const pr of phaseResults) {
+          writeSSEFrame(res, {
+            type: "chunk",
+            content: JSON.stringify({
+              phase: pr.phase,
+              step: pr.step,
+              status: pr.status === "completed" || pr.status === "confirmed" ? "completed" : "generating",
+              selfScore: pr.selfScore,
+            }),
+          });
+        }
+
+        // 推送阶段切换
+        if (currentJob.currentPhase !== reportedPhase) {
+          reportedPhase = currentJob.currentPhase;
+          writeSSEFrame(res, {
+            type: "chunk",
+            content: JSON.stringify({
+              phase: currentJob.currentPhase,
+              step: currentJob.currentStep,
+              status: "phase_change",
+              progress: currentJob.progress,
+            }),
+          });
+        }
+      }
 
       const chapters = await prisma.chapter.findMany({
         where: {

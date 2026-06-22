@@ -26,7 +26,7 @@ const emotionColor = (e?: string) => {
     "压抑": { bg: "rgba(234,179,8,0.1)", color: "#c2410c" },
     "紧张": { bg: "rgba(239,68,68,0.1)", color: "#dc2626" },
     "温馨": { bg: "rgba(34,197,94,0.1)", color: "#047857" },
-    "神秘": { bg: "rgba(79,124,255,0.1)", color: "#3159d4" },
+    "神秘": { bg: "var(--accent-muted)", color: "var(--accent)" },
     "悲壮": { bg: "rgba(107,114,128,0.1)", color: "#374151" },
   };
   return map[e] || { bg: "var(--bg-elevated)", color: "var(--text-secondary)" };
@@ -45,7 +45,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({ chapters, activeChapter
   const toggle = (vol: string) => setCollapsed(prev => ({ ...prev, [vol]: !prev[vol] }));
 
   return (
-    <div style={{
+    <div className="chapter-sidebar" style={{
       width: "280px", background: "var(--bg-surface)",
       borderRight: "1px solid var(--border-default)", overflow: "auto",
       display: "flex", flexDirection: "column",
@@ -92,8 +92,8 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({ chapters, activeChapter
               return (
                 <div key={ch.id} onClick={() => onSelectChapter(ch.id)} style={{
                   padding: "0.625rem 0.75rem", borderRadius: "12px", cursor: "pointer",
-                  border: `1px solid ${isActive ? "rgba(79,124,255,0.3)" : "transparent"}`,
-                  background: isActive ? "rgba(79,124,255,0.06)" : "transparent",
+                  border: `1px solid ${isActive ? "var(--accent-border)" : "transparent"}`,
+                  background: isActive ? "var(--accent-subtle)" : "transparent",
                   marginBottom: "0.25rem",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.375rem" }}>

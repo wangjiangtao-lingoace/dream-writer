@@ -174,6 +174,8 @@ function extractArcConstraint(arcDetail: string): string | null {
 
 /**
  * 获取角色在当前章节不知道的信息
+ * knowledgeScope 格式：[{"chapter": 50, "knowledge": ["知道了XX秘密"]}]
+ * 逻辑：chapter > chapterOrder 的知识条目是"未来知识"，角色在当前章节不应知道
  */
 async function getCurrentUnknownFacts(
   char: { id: string; knowledgeScope?: string | null },
@@ -185,19 +187,19 @@ async function getCurrentUnknownFacts(
     const knowledgeScope = JSON.parse(char.knowledgeScope);
     if (!Array.isArray(knowledgeScope)) return [];
 
-    // knowledgeScope 格式：[{"chapterRange": "1-10", "unknownFacts": ["信息1", "信息2"]}]
     const unknownFacts: string[] = [];
 
     for (const entry of knowledgeScope) {
-      if (!entry.chapterRange || !entry.unknownFacts) continue;
-
-      // 解析章节范围
-      const range = parseChapterRange(entry.chapterRange);
-      if (!range) continue;
-
-      // 检查当前章节是否在不知道的范围内
-      if (chapterOrder >= range.start && chapterOrder <= range.end) {
-        unknownFacts.push(...entry.unknownFacts);
+      // 格式1：{chapter, knowledge} — updateCharacterKnowledge 写入的格式
+      if (entry.chapter && Array.isArray(entry.knowledge) && entry.chapter > chapterOrder) {
+        unknownFacts.push(...entry.knowledge);
+      }
+      // 格式2：{chapterRange, unknownFacts} — 兼容旧格式
+      else if (entry.chapterRange && Array.isArray(entry.unknownFacts)) {
+        const range = parseChapterRange(entry.chapterRange);
+        if (range && chapterOrder >= range.start && chapterOrder <= range.end) {
+          unknownFacts.push(...entry.unknownFacts);
+        }
       }
     }
 

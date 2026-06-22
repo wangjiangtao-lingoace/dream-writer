@@ -15,6 +15,13 @@ export interface RetrieveOptions {
   bm25Weight?: number;
 }
 
+export interface ScoredChunk {
+  chunkId: string;
+  text: string;
+  ownerType: string;
+  score: number;
+}
+
 interface FtsChunkRow {
   chunk_id: string;
   rank: number;
@@ -156,6 +163,16 @@ class RagRetrieveService {
    * - 索引为空 → 返回空字符串
    */
   async retrieve(query: string, options: RetrieveOptions): Promise<string> {
+    const scored = await this.retrieveScored(query, options);
+    if (scored.length === 0) return "";
+    return scored.map((c, i) => `[${i + 1}] (${c.ownerType}) ${c.text}`).join("\n\n");
+  }
+
+  /**
+   * 带评分的混合检索：返回 ScoredChunk[]，包含相关度分数
+   * 分数为 RRF 融合分数，越高越相关
+   */
+  async retrieveScored(query: string, options: RetrieveOptions): Promise<ScoredChunk[]> {
     const {
       novelId,
       topK = DEFAULT_TOP_K,
@@ -164,7 +181,7 @@ class RagRetrieveService {
     } = options;
 
     if (!novelId || novelId.trim().length === 0) {
-      return "";
+      return [];
     }
 
     const [vectorResults, bm25Results] = await Promise.all([
@@ -172,27 +189,39 @@ class RagRetrieveService {
       this.bm25Search(query, novelId),
     ]);
 
-    // 两个通道都无结果
     if (vectorResults.length === 0 && bm25Results.length === 0) {
-      return "";
+      return [];
     }
 
     // 单通道降级
+    let fused: RrfEntry[];
     if (vectorResults.length === 0) {
-      return await this.formatContext(bm25Results.slice(0, topK));
-    }
-    if (bm25Results.length === 0) {
-      return await this.formatContext(vectorResults.slice(0, topK));
+      fused = bm25Results.slice(0, topK).map((id, i) => ({ chunkId: id, score: 1 / (RRF_K + i + 1) }));
+    } else if (bm25Results.length === 0) {
+      fused = vectorResults.slice(0, topK).map((id, i) => ({ chunkId: id, score: 1 / (RRF_K + i + 1) }));
+    } else {
+      fused = this.rrfFusion(vectorResults, bm25Results, { vectorWeight, bm25Weight });
     }
 
-    // RRF 融合
-    const fused = this.rrfFusion(vectorResults, bm25Results, {
-      vectorWeight,
-      bm25Weight,
+    const topEntries = fused.slice(0, topK);
+    const chunkIds = topEntries.map((e) => e.chunkId);
+    const scoreMap = new Map(topEntries.map((e) => [e.chunkId, e.score]));
+
+    const chunks = await prisma.ragChunk.findMany({
+      where: { id: { in: chunkIds } },
+      select: { id: true, text: true, ownerType: true },
     });
 
-    const topChunkIds = fused.slice(0, topK).map((e) => e.chunkId);
-    return await this.formatContext(topChunkIds);
+    const orderMap = new Map(chunkIds.map((id, i) => [id, i]));
+    chunks.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+    const maxScore = topEntries[0]?.score || 1;
+    return chunks.map((c) => ({
+      chunkId: c.id,
+      text: c.text,
+      ownerType: c.ownerType,
+      score: Math.round(((scoreMap.get(c.id) || 0) / maxScore) * 100),
+    }));
   }
 
   // -- Private: Vector Search ----------------------------------------------

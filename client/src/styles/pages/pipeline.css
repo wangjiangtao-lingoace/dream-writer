@@ -27,7 +27,7 @@
 
 .pipeline-stage.active {
   background: var(--accent-muted);
-  border-color: rgba(79, 124, 255, 0.3);
+  border-color: var(--accent-border);
 }
 
 .pipeline-stage-header {

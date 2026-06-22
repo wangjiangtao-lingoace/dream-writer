@@ -322,14 +322,20 @@ model AIConfig {
 
 // 8. 生成日志
 model GenerationLog {
-  id         String   @id @default(cuid())
-  novelId    String
-  chapterId  String?
-  taskType   String
-  status     String
-  errorMsg   String?
-  durationMs Int?
-  createdAt  DateTime @default(now())
+  id               String   @id @default(cuid())
+  novelId          String
+  chapterId        String?
+  taskType         String
+  status           String
+  errorMsg         String?
+  durationMs       Int?
+  promptTokens     Int?     // 输入 token 数
+  completionTokens Int?     // 输出 token 数
+  totalTokens      Int?     // 总 token 数
+  cost             Float?   // 费用（元）
+  provider         String?  // 使用的 provider
+  model            String?  // 使用的模型
+  createdAt        DateTime @default(now())
 
   @@index([novelId, createdAt])
 }
@@ -352,6 +358,9 @@ model Volume {
   keyEvents       String   @default("[]") // 关键事件 JSON
   turningPoint    String   @default("")   // 转折点
   climax          String   @default("")   // 高潮描述
+  foreshadowsPlanned String @default("[]") // 本卷计划埋设的伏笔 JSON
+  characterArcs   String   @default("[]") // 本卷角色成长弧线 JSON
+  targetWordCount Int      @default(0)    // 本卷目标字数
   status          String   @default("planned")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -378,6 +387,9 @@ model ChapterOutline {
   foreshadowing String   @default("[]") // 埋设伏笔 JSON
   payoff        String   @default("[]") // 回收伏笔 JSON
   pleasurePoint String   @default("")   // 爽点设计
+  scene         String   @default("")   // 场景/地点
+  pov           String   @default("")   // 视角角色
+  targetWordCount Int    @default(0)    // 目标字数
   status        String   @default("planned")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -31,6 +31,7 @@ interface PipelineData {
   stages: PipelineStage[];
   status: "running" | "paused" | "completed" | "failed";
   config?: string;
+  lastError?: string | null;
   results: Array<{
     phase: string;
     step: string;
@@ -49,6 +50,7 @@ interface PipelineJobResponse {
   currentStep: string;
   progress: number;
   config: string;
+  lastError?: string | null;
   phaseResults?: Array<{
     id: string;
     phase: string;
@@ -206,6 +208,19 @@ const PipelinePage: React.FC = () => {
     });
   };
 
+  const translatePipelineError = (error: string | null): string => {
+    if (!error) return "未知错误";
+    if (error.includes("服务器重启")) return "服务器重启导致流程中断，点击「恢复」可继续";
+    if (error.includes("该作品已有流程在运行中")) return "该作品已有流程在运行中，请等待完成或暂停后再操作";
+    if (error.includes("所有章节生成失败")) return "所有章节生成失败，请检查 LLM 配置后重试";
+    if (error.includes("Cannot read properties")) return "数据处理异常，请尝试重新生成当前步骤";
+    if (error.includes("timeout") || error.includes("ETIMEDOUT")) return "请求超时，请检查网络连接后重试";
+    if (error.includes("429") || error.includes("rate limit")) return "API 调用频率超限，请稍后重试";
+    if (error.includes("insufficient_quota")) return "API 额度不足，请检查账户余额";
+    if (error.includes("invalid_api_key")) return "API Key 无效，请在设置中重新配置";
+    return error.length > 100 ? error.slice(0, 100) + "..." : error;
+  };
+
   const mapPipelineJob = (job: PipelineJobResponse): PipelineData => {
     // 动态步骤名解析（支持 chapter_outline_vol_N）
     const getStepName = (stepId: string) => {
@@ -267,6 +282,7 @@ const PipelinePage: React.FC = () => {
       status: job.status === "error" ? "failed" : job.status === "pending" ? "paused" : job.status,
       stages,
       config: job.config,
+      lastError: job.lastError,
       results,
     };
   };
@@ -458,8 +474,8 @@ const PipelinePage: React.FC = () => {
 
   const btnDangerStyle: React.CSSProperties = {
     ...btnSmallStyle,
-    color: "#ef4444",
-    borderColor: "rgba(239,68,68,0.3)",
+    color: "var(--error)",
+    borderColor: "var(--error-border)",
   };
 
   // 解析卷纲数据
@@ -539,7 +555,7 @@ const PipelinePage: React.FC = () => {
             </button>
             <span style={{ color: "var(--text-muted)" }}>/</span>
             <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>第{selectedVolume + 1}卷 {vol.title}</span>
-            {isChapConfirmed && <span style={{ fontSize: "0.75rem", color: "#22c55e", fontWeight: 500 }}>已确认</span>}
+            {isChapConfirmed && <span style={{ fontSize: "0.75rem", color: "var(--success)", fontWeight: 500 }}>已确认</span>}
           </div>
 
           {/* 卷纲详情 */}
@@ -614,8 +630,8 @@ const PipelinePage: React.FC = () => {
                         <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, minWidth: "3rem" }}>第{i + 1}章</span>
                         <span style={{ fontSize: "var(--text-sm)", flex: 1 }}>{ch.title}</span>
                         {chars && <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{chars}</span>}
-                        {ch.emotionData?.isClimax && <span style={{ fontSize: "var(--text-xs)", color: "#f59e0b" }}>高潮</span>}
-                        {ch.emotionData?.isTurningPoint && <span style={{ fontSize: "var(--text-xs)", color: "#8b5cf6" }}>转折</span>}
+                        {ch.emotionData?.isClimax && <span style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>高潮</span>}
+                        {ch.emotionData?.isTurningPoint && <span style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>转折</span>}
                       </button>
 
                       {isChapterExpanded && (
@@ -692,7 +708,7 @@ const PipelinePage: React.FC = () => {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                   {chapCount > 0 ? (
-                    <span style={{ fontSize: "var(--text-xs)", color: isChapConfirmed ? "#22c55e" : "var(--text-muted)" }}>
+                    <span style={{ fontSize: "var(--text-xs)", color: isChapConfirmed ? "var(--success)" : "var(--text-muted)" }}>
                       {chapCount} 章 {isChapConfirmed ? "已确认" : ""}
                     </span>
                   ) : (
@@ -805,13 +821,26 @@ const PipelinePage: React.FC = () => {
           }}>
             <div style={{
               width: `${getOverallProgress()}%`, height: "100%",
-              background: "linear-gradient(90deg, var(--accent), var(--accent-hover))",
+              background: "var(--accent)",
               borderRadius: "var(--radius-full)", transition: "width var(--transition-slow)",
             }} />
           </div>
           <div style={{ marginTop: "var(--space-3)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
             状态: {pipeline.status === "running" ? "运行中" : pipeline.status === "paused" ? "已暂停" : pipeline.status === "completed" ? "已完成" : "失败"}
           </div>
+          {pipeline.status === "failed" && pipeline.lastError && (
+            <div style={{
+              marginTop: "var(--space-2)",
+              padding: "var(--space-3)",
+              background: "var(--error-subtle)",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--error-muted)",
+              fontSize: "var(--text-sm)",
+              color: "var(--error)",
+            }}>
+              {translatePipelineError(pipeline.lastError)}
+            </div>
+          )}
         </div>
 
         <div className="pipeline-stages">
@@ -897,7 +926,7 @@ const PipelinePage: React.FC = () => {
                     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                       <strong style={{ color: "var(--text-primary)", fontSize: "0.875rem" }}>完整规划</strong>
                       {getVolumeOutlineStatus() === "confirmed" && (
-                        <span style={{ fontSize: "0.75rem", color: "#22c55e", fontWeight: 500 }}>卷纲已确认</span>
+                        <span style={{ fontSize: "0.75rem", color: "var(--success)", fontWeight: 500 }}>卷纲已确认</span>
                       )}
                     </div>
                     {selectedVolume !== null && (
@@ -946,7 +975,7 @@ const PipelinePage: React.FC = () => {
                       <div style={{ marginTop: "var(--space-4)", padding: "var(--space-3)", borderTop: "1px solid var(--border-subtle)" }}>
                         <textarea placeholder="反馈意见（可选），如：整体不错，但第一卷节奏需要加快" value={confirmFeedback} onChange={(e) => setConfirmFeedback(e.target.value)} style={{ width: "100%", minHeight: "60px", padding: "var(--space-2)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", fontSize: "0.8125rem", background: "var(--bg-surface)", color: "var(--text-primary)", resize: "vertical" }} />
                         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                          <button onClick={() => handleConfirm("planning", confirmKey.split("/")[1])} disabled={actionLoading === confirmKey} style={{ ...btnPrimaryStyle, background: "#22c55e", borderColor: "#22c55e" }}>{actionLoading === confirmKey ? "确认中..." : "确认通过"}</button>
+                          <button onClick={() => handleConfirm("planning", confirmKey.split("/")[1])} disabled={actionLoading === confirmKey} style={{ ...btnPrimaryStyle, background: "var(--success)", borderColor: "var(--success)" }}>{actionLoading === confirmKey ? "确认中..." : "确认通过"}</button>
                           <button onClick={() => { setConfirmKey(null); setConfirmFeedback(""); }} style={btnSmallStyle}>取消</button>
                         </div>
                       </div>
@@ -969,13 +998,13 @@ const PipelinePage: React.FC = () => {
 
                 return (
                   <article key={resultKey} style={{
-                    border: `1px solid ${isConfirmed ? "rgba(34,197,94,0.3)" : "var(--border-subtle)"}`,
-                    borderRadius: "var(--radius-sm)", background: isConfirmed ? "rgba(34,197,94,0.04)" : "var(--bg-base)",
+                    border: `1px solid ${isConfirmed ? "var(--success-border)" : "var(--border-subtle)"}`,
+                    borderRadius: "var(--radius-sm)", background: isConfirmed ? "var(--success-subtle)" : "var(--bg-base)",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-3)", gap: "var(--space-2)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                         <strong style={{ color: "var(--text-primary)", fontSize: "0.875rem" }}>{translatePipelinePhaseLabel(result.phase)} / {translatePipelineStepLabel(result.step)}</strong>
-                        {isConfirmed && <span style={{ fontSize: "0.75rem", color: "#22c55e", fontWeight: 500 }}>已确认</span>}
+                        {isConfirmed && <span style={{ fontSize: "0.75rem", color: "var(--success)", fontWeight: 500 }}>已确认</span>}
                         {result.selfScore != null && <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>AI: {result.selfScore}/10</span>}
                       </div>
                       <div style={{ display: "flex", gap: "0.375rem" }}>
@@ -1034,7 +1063,7 @@ const PipelinePage: React.FC = () => {
                       <div style={{ padding: "var(--space-3)", borderTop: "1px solid var(--border-subtle)" }}>
                         <textarea placeholder="反馈意见（可选），如：整体不错，但反派动机需要加强" value={confirmFeedback} onChange={(e) => setConfirmFeedback(e.target.value)} style={{ width: "100%", minHeight: "60px", padding: "var(--space-2)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", fontSize: "0.8125rem", background: "var(--bg-surface)", color: "var(--text-primary)", resize: "vertical" }} />
                         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                          <button onClick={() => handleConfirm(result.phase, result.step)} disabled={isLoading} style={{ ...btnSmallStyle, background: "#22c55e", color: "#fff" }}>{isLoading ? "确认中..." : "确认通过"}</button>
+                          <button onClick={() => handleConfirm(result.phase, result.step)} disabled={isLoading} style={{ ...btnSmallStyle, background: "var(--success)", color: "#fff" }}>{isLoading ? "确认中..." : "确认通过"}</button>
                           <button onClick={() => { setConfirmKey(null); setConfirmFeedback(""); }} style={btnSmallStyle}>取消</button>
                         </div>
                       </div>

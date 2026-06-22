@@ -27,20 +27,26 @@ import "../styles/pages/workspace.css";
 const NovelWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const { id, tab } = useParams<{ id: string; tab?: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [novel, setNovel] = useState<NovelDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(
     (tab as WorkspaceTab) || "write"
   );
-  const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
   const [editingInspiration, setEditingInspiration] = useState(false);
   const [inspirationDraft, setInspirationDraft] = useState("");
-  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [activeChapterId, setActiveChapterIdState] = useState<string | null>(searchParams.get("chapter"));
+  const setActiveChapterId = useCallback((id: string | null) => {
+    setActiveChapterIdState(id);
+    setSearchParams(prev => {
+      if (id) prev.set("chapter", id);
+      else prev.delete("chapter");
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [worldviews, setWorldviews] = useState<any[]>([]);
   const [editingWorldviewId, setEditingWorldviewId] = useState<string | null>(null);
 
@@ -70,16 +76,6 @@ const NovelWorkspace: React.FC = () => {
       setActiveTab(tab as WorkspaceTab);
     }
   }, [tab]);
-
-  useEffect(() => {
-    if (notice) {
-      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-      noticeTimerRef.current = setTimeout(() => setNotice(null), 3000);
-    }
-    return () => {
-      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-    };
-  }, [notice]);
 
   // Poll pipeline status for global AI progress banner
   useEffect(() => {
@@ -167,7 +163,7 @@ const NovelWorkspace: React.FC = () => {
   };
 
   const handleNotice = (msg: string) => {
-    setNotice(msg);
+    toast.success(msg);
   };
 
   const handleSave = async () => {
@@ -179,7 +175,7 @@ const NovelWorkspace: React.FC = () => {
         inspiration: novel.inspiration,
         outline: novel.outline,
       });
-      setNotice("保存成功");
+      toast.success("保存成功");
     } catch (error) {
       console.error("保存失败:", error);
       toast.error("保存失败，请重试");
@@ -212,9 +208,40 @@ const NovelWorkspace: React.FC = () => {
     }, 2000);
   }, [id]);
 
-  const handleToolbarAction = useCallback((action: string) => {
-    toast.info(`工具栏操作: ${action}`);
-  }, []);
+  const [aiProcessing, setAiProcessing] = useState<string | null>(null);
+
+  const handleToolbarAction = useCallback(async (action: string) => {
+    if (!id || !activeChapterId || !activeChapterData) return;
+
+    setAiProcessing(action);
+    try {
+      if (action === "deai" || action === "enhance") {
+        const result = await api.post<{ content: string }>("/api/ai/polish", {
+          content: activeChapterData.content,
+          mode: action,
+        });
+        if (result?.content) {
+          setActiveChapterData((prev: any) => prev ? { ...prev, content: result.content } : prev);
+          toast.success(action === "deai" ? "去AI味完成" : "增强压迫完成");
+        }
+      } else if (action === "continue") {
+        const result = await api.post<{ content: string }>("/api/ai/continue-chapter", {
+          novelId: id,
+          chapterId: activeChapterId,
+          content: activeChapterData.content,
+        });
+        if (result?.content) {
+          const newContent = activeChapterData.content + "\n\n" + result.content;
+          setActiveChapterData((prev: any) => prev ? { ...prev, content: newContent } : prev);
+          toast.success("续写完成");
+        }
+      }
+    } catch (err) {
+      toast.error(`AI 处理失败：${err instanceof Error ? err.message : "未知错误"}`);
+    } finally {
+      setAiProcessing(null);
+    }
+  }, [id, activeChapterId, activeChapterData]);
 
   const handleExport = useCallback((type: string) => {
     if (!id) return;
@@ -243,15 +270,21 @@ const NovelWorkspace: React.FC = () => {
     if (!id) return;
     setContinuing(true);
     try {
-      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string }> }>(
+      const result = await api.post<{ chapters: Array<{ id: string; order: number; title: string; retryCount: number; estimatedTokens: number }> }>(
         `/api/novels/${id}/continue`,
         { chapterCount: 1, targetWordCount: 1800 }
       );
       if (result.chapters.length > 0) {
-        toast.success(`第${result.chapters[0].order}章「${result.chapters[0].title}」续写完成`);
+        const ch = result.chapters[0];
+        const baseMsg = `第${ch.order}章「${ch.title}」续写完成`;
+        if (ch.retryCount > 0) {
+          toast.success(`${baseMsg}，质量优化了 ${ch.retryCount} 轮，消耗约 ${ch.estimatedTokens} tokens`);
+        } else {
+          toast.success(baseMsg);
+        }
         const wd = await api.get<any>(`/api/novels/${id}/workspace-data`).catch(() => null);
         if (wd) setWorkspaceData(wd);
-        setActiveChapterId(result.chapters[0].id);
+        setActiveChapterId(ch.id);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "续写失败");
@@ -532,7 +565,7 @@ const NovelWorkspace: React.FC = () => {
                     .then(() => {
                       setNovel(prev => prev ? { ...prev, outline: outlineDraft } : null);
                       setEditingOutline(false);
-                      setNotice("大纲已保存");
+                      toast.success("大纲已保存");
                     })
                     .catch(() => toast.error("保存失败"));
                 } else {
@@ -582,7 +615,7 @@ const NovelWorkspace: React.FC = () => {
                           .then(() => {
                             setNovel(prev => prev ? { ...prev, inspiration: inspirationDraft } : null);
                             setEditingInspiration(false);
-                            setNotice("灵感已保存");
+                            toast.success("灵感已保存");
                           })
                           .catch(() => toast.error("保存失败"));
                       } else {
@@ -782,6 +815,7 @@ const NovelWorkspace: React.FC = () => {
         worldviews={worldviews}
         aiProgress={aiProgress}
         activeChapterId={activeChapterId}
+        aiProcessing={aiProcessing}
         continuing={continuing}
         showExportMenu={showExportMenu}
         onNavigate={navigate}
@@ -802,7 +836,6 @@ const NovelWorkspace: React.FC = () => {
     <WorkspaceStandardLayout
       novel={novel}
       aiProgress={aiProgress}
-      notice={notice}
       activeTab={activeTab}
       activeGroupId={activeGroupId}
       groupDefs={groupDefs}

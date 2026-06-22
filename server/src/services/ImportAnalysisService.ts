@@ -72,16 +72,67 @@ export interface ImportResult {
 // ─── 章节拆分 ───
 
 const CHAPTER_PATTERNS = [
-  /^第[一二三四五六七八九十百千零\d]+章\s*.*/m,
-  /^第[一二三四五六七八九十百千零\d]+节\s*.*/m,
-  /^Chapter\s+\d+.*$/im,
-  /^章节\s*\d+.*$/m,
-  /^【第[一二三四五六七八九十百千零\d]+章】.*/m,
-  /^\d+\.\s+.*/m,
+  /^第[一二三四五六七八九十百千零\d]+章[：:\s　].*/m,
+  /^第[一二三四五六七八九十百千零\d]+章$/m,
+  /^第[一二三四五六七八九十百千零\d]+回[：:\s　].*/m,
+  /^第[一二三四五六七八九十百千零\d]+回$/m,
+  /^第[一二三四五六七八九十百千零\d]+节[：:\s　].*/m,
+  /^第[一二三四五六七八九十百千零\d]+节$/m,
+  /^Chapter\s+\d+[：:.]?\s*.*$/im,
+  /^CHAPTER\s+\d+[：:.]?\s*.*$/m,
+  /^章节\s*\d+[：:.]?\s*.*$/m,
+  /^【第[一二三四五六七八九十百千零\d]+[章回节]】.*/m,
+  /^[一二三四五六七八九十]+[、.．]\s*\S.*/m,
+  /^\d+[、.．]\s+\S.*/m,
 ];
+
+// 验证正则检测到的章节分隔是否合理（排除误判）
+function validateChapterBoundaries(lines: string[], headers: Array<{ index: number; title: string }>): boolean {
+  if (headers.length < 2) return false;
+  // 每个章节标题行应该较短（不超过 50 字）
+  if (headers.some((h) => h.title.length > 50)) return false;
+  // 相邻章节之间至少间隔 3 行（避免把连续短行误判为章节）
+  for (let i = 1; i < headers.length; i++) {
+    if (headers[i].index - headers[i - 1].index < 3) return false;
+  }
+  return true;
+}
 
 function splitChapters(text: string): ChapterInfo[] {
   const lines = text.split("\n");
+
+  // 预扫描：收集所有匹配章节正则的行
+  const detectedHeaders: Array<{ index: number; title: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed && CHAPTER_PATTERNS.some((p) => p.test(trimmed))) {
+      detectedHeaders.push({ index: i, title: trimmed });
+    }
+  }
+
+  // 验证：如果正则检测结果不可信（少于 2 个或验证失败），回退到逐行扫描
+  const useRegexSplit = detectedHeaders.length >= 2 && validateChapterBoundaries(lines, detectedHeaders);
+
+  if (useRegexSplit) {
+    // 使用正则检测到的章节边界进行拆分
+    const chapters: ChapterInfo[] = [];
+    for (let i = 0; i < detectedHeaders.length; i++) {
+      const start = detectedHeaders[i].index + 1;
+      const end = i + 1 < detectedHeaders.length ? detectedHeaders[i + 1].index : lines.length;
+      const content = lines.slice(start, end).join("\n").trim();
+      if (content.length > 0) {
+        chapters.push({
+          order: i + 1,
+          title: detectedHeaders[i].title,
+          content,
+          wordCount: content.length,
+        });
+      }
+    }
+    if (chapters.length > 0) return chapters;
+  }
+
+  // 回退：逐行扫描（原有逻辑）
   const chapters: ChapterInfo[] = [];
   let currentTitle = "";
   let currentLines: string[] = [];
@@ -92,7 +143,6 @@ function splitChapters(text: string): ChapterInfo[] {
     const isChapterHeader = CHAPTER_PATTERNS.some((p) => p.test(trimmed));
 
     if (isChapterHeader && currentLines.length > 0) {
-      // 保存上一章
       order++;
       const content = currentLines.join("\n").trim();
       chapters.push({

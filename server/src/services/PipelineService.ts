@@ -29,6 +29,10 @@ export interface PipelineConfig {
   mode?: "create" | "imitation" | "standalone" | "continue";
   sourceType?: "idea" | "content";
   pipelineVersion?: number;
+  /** Token 预算上限（单位：1K tokens），空值表示不限制 */
+  tokenBudget?: number;
+  /** 每批次最多写入章节数，0 或空值表示不限制 */
+  maxChaptersPerBatch?: number;
 }
 
 export interface PhaseResultData {
@@ -283,6 +287,56 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     const pipelineVersion = config.pipelineVersion || 1;
     const ctx = this.ctx;
 
+    if (job.status === "error") {
+      await prisma.pipelineJob.update({
+        where: { id: jobId },
+        data: { status: "running", lastError: null, retryCount: { increment: 1 } },
+      });
+
+      const phase = job.currentPhase;
+      if (pipelineVersion >= 2) {
+        switch (phase) {
+          case "outline":
+            executeAnalyzePhase(ctx, jobId, job.novelId, config);
+            break;
+          case "assets":
+            executeAssetsPhase(ctx, jobId);
+            break;
+          case "planning": {
+            const planResults = await prisma.phaseResult.findMany({ where: { jobId, phase: "planning" } });
+            const hasVolume = planResults.some(r => r.step === "volume_outline" && r.status === "confirmed");
+            const hasChapters = planResults.some(r => r.step.startsWith("chapter_outline_vol_"));
+            const hasArcs = planResults.some(r => r.step === "story_arcs");
+            if (!hasVolume) {
+              executePlanningPhase_unified(ctx, jobId);
+            } else if (!hasChapters) {
+              executeChapterOutlinesPhase(ctx, jobId);
+            } else if (!hasArcs) {
+              executePlanningPhase_unified(ctx, jobId);
+            } else {
+              executeConsistencyCheckPhase(ctx, jobId);
+            }
+            break;
+          }
+          case "consistency_check":
+            executeConsistencyCheckPhase(ctx, jobId);
+            break;
+          case "writing": {
+            const writtenCount = await prisma.chapter.count({
+              where: { novelId: job.novelId, source: { in: ["imitation_pipeline", "pipeline"] }, content: { not: "" } },
+            });
+            executeWritingPhase(ctx, jobId, writtenCount + 1);
+            break;
+          }
+          default:
+            this.executePipeline(jobId);
+        }
+      } else {
+        this.executePipeline(jobId);
+      }
+      return job;
+    }
+
     await prisma.pipelineJob.update({
       where: { id: jobId },
       data: { status: "running" },
@@ -343,7 +397,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     const outlineResult = await prisma.phaseResult.findUnique({
       where: { jobId_phase_step: { jobId, phase: outlinePhase, step: "outline" } },
     });
-    const outline = outlineResult ? JSON.parse(outlineResult.output) : {};
+    const outline = outlineResult ? parseLlmJson(outlineResult.output) || {} : {};
 
     let output: any;
     const input = { outline, userHint };
@@ -358,7 +412,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           where: { jobId_phase_step: { jobId, phase: "outline", step: "analyze" } },
         });
         if (!analyzeResult) throw new Error("请先完成分析步骤");
-        const analysis = JSON.parse(analyzeResult.output);
+        const analysis = parseLlmJson(analyzeResult.output) || {};
         const decomposed = await decomposeIntoAssets(ctx, job.novelId, job.novel.inspiration || "", analysis, config);
         output = decomposed;
         break;
@@ -381,7 +435,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const worldviewResult = await prisma.phaseResult.findUnique({
           where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } },
         });
-        const worldview = worldviewResult ? JSON.parse(worldviewResult.output) : {};
+        const worldview = worldviewResult ? parseLlmJson(worldviewResult.output) || {} : {};
         const charKnowledge = await getRagRetrieveService()?.retrieve(
           job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
         ) ?? "";
@@ -393,8 +447,8 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "characters" } } }),
         ]);
-        const styleWv = styleWvRes ? JSON.parse(styleWvRes.output) : {};
-        const styleChar = styleCharRes ? JSON.parse(styleCharRes.output) : {};
+        const styleWv = styleWvRes ? parseLlmJson(styleWvRes.output) || {} : {};
+        const styleChar = styleCharRes ? parseLlmJson(styleCharRes.output) || {} : {};
         output = await generateStyle(ctx, job.novelId, outline, styleWv, styleChar, config, userHint);
         break;
       }
@@ -404,9 +458,9 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "style" } } }),
         ]);
-        const volWv = volWvRes ? JSON.parse(volWvRes.output) : {};
-        const volChar = volCharRes ? JSON.parse(volCharRes.output) : {};
-        const volStyle = volStyleRes ? JSON.parse(volStyleRes.output) : {};
+        const volWv = volWvRes ? parseLlmJson(volWvRes.output) || {} : {};
+        const volChar = volCharRes ? parseLlmJson(volCharRes.output) || {} : {};
+        const volStyle = volStyleRes ? parseLlmJson(volStyleRes.output) || {} : {};
         output = await generateVolumeOutline(ctx, job.novelId, outline, volWv, volChar, volStyle, config);
         break;
       }
@@ -414,15 +468,15 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const volResult = await prisma.phaseResult.findUnique({
           where: { jobId_phase_step: { jobId, phase: volPhase, step: "volume" } },
         });
-        const volumes = volResult ? JSON.parse(volResult.output) : {};
+        const volumes = volResult ? parseLlmJson(volResult.output) || {} : {};
         const [chWvRes, chCharRes, chStyleRes] = await Promise.all([
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "style" } } }),
         ]);
-        const chWv = chWvRes ? JSON.parse(chWvRes.output) : {};
-        const chChar = chCharRes ? JSON.parse(chCharRes.output) : {};
-        const chStyle = chStyleRes ? JSON.parse(chStyleRes.output) : {};
+        const chWv = chWvRes ? parseLlmJson(chWvRes.output) || {} : {};
+        const chChar = chCharRes ? parseLlmJson(chCharRes.output) || {} : {};
+        const chStyle = chStyleRes ? parseLlmJson(chStyleRes.output) || {} : {};
         output = await generateChapterOutlines(ctx, job.novelId, volumes, outline, chWv, chChar, chStyle, config);
         break;
       }
@@ -430,15 +484,15 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const mhVolResult = await prisma.phaseResult.findUnique({
           where: { jobId_phase_step: { jobId, phase: volPhase, step: "volume" } },
         });
-        const mhVolumes = mhVolResult ? JSON.parse(mhVolResult.output) : {};
+        const mhVolumes = mhVolResult ? parseLlmJson(mhVolResult.output) || {} : {};
         const [mhWvRes, mhCharRes, mhStyleRes] = await Promise.all([
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "worldview" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: assetPhase, step: "style" } } }),
         ]);
-        const mhWv = mhWvRes ? JSON.parse(mhWvRes.output) : {};
-        const mhChar = mhCharRes ? JSON.parse(mhCharRes.output) : {};
-        const mhStyle = mhStyleRes ? JSON.parse(mhStyleRes.output) : {};
+        const mhWv = mhWvRes ? parseLlmJson(mhWvRes.output) || {} : {};
+        const mhChar = mhCharRes ? parseLlmJson(mhCharRes.output) || {} : {};
+        const mhStyle = mhStyleRes ? parseLlmJson(mhStyleRes.output) || {} : {};
         const mhKnowledge = await getRagRetrieveService()?.retrieve(
           job.novel.inspiration || "", { novelId: job.novelId, topK: 10 }
         ) ?? "";
@@ -452,9 +506,9 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "style" } } }),
         ]);
-        const v2Wv = v2WvRes ? JSON.parse(v2WvRes.output) : {};
-        const v2Char = v2CharRes ? JSON.parse(v2CharRes.output) : {};
-        const v2Style = v2StyleRes ? JSON.parse(v2StyleRes.output) : {};
+        const v2Wv = v2WvRes ? parseLlmJson(v2WvRes.output) || {} : {};
+        const v2Char = v2CharRes ? parseLlmJson(v2CharRes.output) || {} : {};
+        const v2Style = v2StyleRes ? parseLlmJson(v2StyleRes.output) || {} : {};
         output = await generateVolumeOutline(ctx, job.novelId, outline, v2Wv, v2Char, v2Style, config);
         await _persistGeneratedAssets(job.novelId, "volume", output);
         break;
@@ -469,7 +523,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
             where: { jobId_phase_step: { jobId, phase: "planning", step: volStep } },
           });
           if (volRes) {
-            const parsed = JSON.parse(volRes.output);
+            const parsed = parseLlmJson(volRes.output) || {};
             allChapterOutlines.chapterOutlines.push({
               volumeIndex: v - 1,
               chapters: parsed?.chapters || [],
@@ -479,15 +533,15 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const saVolResult = await prisma.phaseResult.findUnique({
           where: { jobId_phase_step: { jobId, phase: "planning", step: "volume_outline" } },
         });
-        const saVolumes = saVolResult ? JSON.parse(saVolResult.output) : {};
+        const saVolumes = saVolResult ? parseLlmJson(saVolResult.output) || {} : {};
         const [saWvRes, saCharRes, saStyleRes] = await Promise.all([
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "worldview" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "style" } } }),
         ]);
-        const saWv = saWvRes ? JSON.parse(saWvRes.output) : {};
-        const saChar = saCharRes ? JSON.parse(saCharRes.output) : {};
-        const saStyle = saStyleRes ? JSON.parse(saStyleRes.output) : {};
+        const saWv = saWvRes ? parseLlmJson(saWvRes.output) || {} : {};
+        const saChar = saCharRes ? parseLlmJson(saCharRes.output) || {} : {};
+        const saStyle = saStyleRes ? parseLlmJson(saStyleRes.output) || {} : {};
         output = await generateStoryArcs(ctx, job.novelId, outline, allChapterOutlines, saVolumes, saWv, saChar, saStyle, config);
         await persistStoryArcs(job.novelId, output);
         break;
@@ -512,10 +566,10 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "characters" } } }),
           prisma.phaseResult.findUnique({ where: { jobId_phase_step: { jobId, phase: "assets", step: "style" } } }),
         ]);
-        const cchOutline = cchOutlineRes ? JSON.parse(cchOutlineRes.output) : undefined;
-        const cchWv = cchWvRes ? JSON.parse(cchWvRes.output) : undefined;
-        const cchChar = cchCharRes ? JSON.parse(cchCharRes.output) : undefined;
-        const cchStyle = cchStyleRes ? JSON.parse(cchStyleRes.output) : undefined;
+        const cchOutline = cchOutlineRes ? parseLlmJson(cchOutlineRes.output) || undefined : undefined;
+        const cchWv = cchWvRes ? parseLlmJson(cchWvRes.output) || undefined : undefined;
+        const cchChar = cchCharRes ? parseLlmJson(cchCharRes.output) || undefined : undefined;
+        const cchStyle = cchStyleRes ? parseLlmJson(cchStyleRes.output) || undefined : undefined;
         output = await generateConsistencyCheck(ctx, job.novelId, cchPlanSummary, cchOutline, cchWv, cchChar, cchStyle);
         break;
       }

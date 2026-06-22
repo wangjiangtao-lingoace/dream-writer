@@ -1,32 +1,31 @@
 /* client/src/styles/tokens.css */
 :root {
-  /* 背景 */
-  --bg-base: #f5f7fa;
+  /* 背景 — Notion 暖色调 */
+  --bg-base: #ffffff;
   --bg-surface: #ffffff;
-  --bg-elevated: #f0f2f5;
-  --bg-overlay: #e8eaed;
+  --bg-elevated: #f7f6f3;
+  --bg-overlay: #edece9;
 
-  /* 边框 */
-  --border-subtle: #eef0f3;
-  --border-default: #e5e7eb;
-  --border-strong: #d1d5db;
-  --border-light: #f3f4f6;
+  /* 边框 — 极淡暖灰 */
+  --border-subtle: #f0efeb;
+  --border-default: #e3e2de;
+  --border-strong: #d3d1cb;
+  --border-light: #f7f6f3;
 
-  /* 文字 */
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-muted: #6b7280;
-  --text-disabled: #9ca3af;
+  /* 文字 — Notion 暖色文字 */
+  --text-primary: #37352f;
+  --text-secondary: #787774;
+  --text-muted: #9b9a97;
+  --text-disabled: #b4b4b0;
   --text-inverse: #ffffff;
 
-  /* 主色：蓝色 */
-  --accent: #4f7cff;
-  --accent-hover: #3b6bef;
-  --accent-muted: rgba(79, 124, 255, 0.1);
-  --accent-subtle: rgba(79, 124, 255, 0.05);
-  --accent-border: rgba(79, 124, 255, 0.2);
-  --accent-border-strong: rgba(79, 124, 255, 0.25);
-  --accent-glow: rgba(79, 124, 255, 0.3);
+  /* 主色：Notion 蓝 */
+  --accent: #2383e2;
+  --accent-hover: #0969da;
+  --accent-muted: rgba(35, 131, 226, 0.08);
+  --accent-subtle: rgba(35, 131, 226, 0.04);
+  --accent-border: rgba(35, 131, 226, 0.15);
+  --accent-border-strong: rgba(35, 131, 226, 0.2);
 
   /* 语义色 */
   --success: #22c55e;
@@ -37,6 +36,14 @@
   --error-muted: rgba(239, 68, 68, 0.15);
   --info: #3b82f6;
   --info-muted: rgba(59, 130, 246, 0.15);
+
+  /* 语义色 — 衍生变体 */
+  --success-subtle: rgba(34, 197, 94, 0.04);
+  --success-bg: rgba(34, 197, 94, 0.1);
+  --success-border: rgba(34, 197, 94, 0.25);
+  --error-subtle: rgba(239, 68, 68, 0.06);
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-border: rgba(239, 68, 68, 0.3);
 
   /* 间距（4px 网格） */
   --space-1: 4px;
@@ -49,18 +56,17 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  /* 圆角 */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  /* 圆角 — Notion 小圆角 */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
   --radius-full: 9999px;
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
-  --shadow-glow: 0 0 16px var(--accent-glow);
+  /* 阴影 — 扁平化 */
+  --shadow-sm: none;
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.06);
 
   /* 字体 */
   --font-sans: "Inter", "Noto Sans SC", "PingFang SC", -apple-system, sans-serif;
@@ -95,7 +101,9 @@
   --bg-card: var(--bg-surface);
   --border: var(--border-default);
   --border-dark: var(--border-strong);
-  --font-serif: "LXGW WenKai", "Songti SC", "Noto Serif CJK SC", serif;
+  --font-serif: var(--font-sans);
+  --accent-glow: none;
+  --shadow-glow: none;
 }
 
 /* Respect user motion preferences */

@@ -414,7 +414,7 @@ export default function ConsistencyPanel({ novelId, chapters, onNotice }: Consis
                 width: "100%",
                 borderCollapse: "collapse",
                 fontSize: "0.8125rem",
-                fontFamily: "'Songti SC', 'SimSun', serif",
+                fontFamily: "var(--font-sans)",
               }}>
                 <thead>
                   <tr>

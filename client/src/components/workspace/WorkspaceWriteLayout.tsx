@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import AIProgressBanner from './AIProgressBanner';
 import WorkspaceTopBar from './WorkspaceTopBar';
@@ -23,6 +23,9 @@ interface WorkspaceWriteLayoutProps {
   continuing: boolean;
   showExportMenu: boolean;
 
+  // 状态
+  aiProcessing?: string | null;
+
   // 回调函数
   onNavigate: (path: string) => void;
   onSelectChapter: (chapterId: string) => void;
@@ -42,6 +45,7 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
   aiReview,
   worldviews,
   aiProgress,
+  aiProcessing,
   activeChapterId,
   continuing,
   showExportMenu,
@@ -65,6 +69,18 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
 
   const defaultSignals = { mood: "neutral", rhythm: "development", climax: false };
 
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        onShowExportMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showExportMenu, onShowExportMenu]);
+
   return (
     <ErrorBoundary>
       <div className="workspace-write-layout">
@@ -81,7 +97,7 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
           writingStats={workspaceData?.writingStats || defaultWritingStats}
           signals={workspaceData?.signals || defaultSignals}
           exportButton={
-            <div style={{ position: "relative" }}>
+            <div ref={exportMenuRef} style={{ position: "relative" }}>
               <button
                 onClick={() => onShowExportMenu(!showExportMenu)}
                 style={{
@@ -156,6 +172,7 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
                     onChange={onEditorChange}
                     placeholder="开始写作..."
                     onToolbarAction={onToolbarAction}
+                    aiProcessing={aiProcessing}
                   />
                 </>
               ) : (

@@ -197,28 +197,28 @@ ${sections.market_highlights || "无"}
       maxTokens: 3000,
     });
 
-    console.log("LLM返回结果长度:", result?.length || 0);
+    console.debug("LLM返回结果长度:", result?.length || 0);
 
     if (!result) {
-      console.log("LLM返回null，使用默认数据");
+      console.debug("LLM返回null，使用默认数据");
       return this.getDefaultData();
     }
 
     try {
       const parsed = JSON.parse(result);
-      console.log("JSON解析成功，标题:", parsed.title);
+      console.debug("JSON解析成功，标题:", parsed.title);
       return parsed;
     } catch (e) {
-      console.log("JSON解析失败，尝试提取JSON块");
+      console.debug("JSON解析失败，尝试提取JSON块");
       // 尝试提取JSON块
       const jsonMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[1].trim());
-          console.log("从代码块提取JSON成功，标题:", parsed.title);
+          console.debug("从代码块提取JSON成功，标题:", parsed.title);
           return parsed;
         } catch (e2) {
-          console.log("代码块JSON解析也失败");
+          console.debug("代码块JSON解析也失败");
         }
       }
       
@@ -228,14 +228,14 @@ ${sections.market_highlights || "无"}
       if (start !== -1 && end !== -1) {
         try {
           const parsed = JSON.parse(result.substring(start, end + 1));
-          console.log("从花括号提取JSON成功，标题:", parsed.title);
+          console.debug("从花括号提取JSON成功，标题:", parsed.title);
           return parsed;
         } catch (e3) {
-          console.log("花括号JSON解析也失败");
+          console.debug("花括号JSON解析也失败");
         }
       }
 
-      console.log("所有解析方式都失败，使用默认数据");
+      console.debug("所有解析方式都失败，使用默认数据");
       return this.getDefaultData();
     }
   }

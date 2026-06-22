@@ -141,7 +141,7 @@ const GuidePage: React.FC = () => {
         <div style={{
           padding: "var(--space-4)",
           background: "var(--accent-muted)",
-          border: "1px solid rgba(79,124,255,0.25)",
+          border: "1px solid var(--accent-border-strong)",
           borderRadius: "var(--radius-md)",
         }}>
           <strong style={{ display: "block", fontSize: "0.875rem", color: "var(--accent)", marginBottom: "var(--space-2)" }}>
