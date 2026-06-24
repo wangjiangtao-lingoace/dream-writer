@@ -1,8 +1,7 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "prisma/config";
 
-const configDir = path.dirname(fileURLToPath(import.meta.url));
+const configDir = __dirname;
 
 function resolveDatabaseUrl(databaseUrl?: string) {
   const fallbackUrl = databaseUrl ?? "file:./dev.db";

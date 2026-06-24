@@ -196,7 +196,7 @@ ${foreshadowsToPayoff.join("、") || "无"}
       for (const fsTitle of parsed.paidOffForeshadows) {
         if (!fsTitle) continue;
         await prisma.foreshadow.updateMany({
-          where: { novelId, title: fsTitle, status: "planted" },
+          where: { novelId, title: fsTitle, status: { in: ["planted", "active", "payoff_pending"] } },
           data: { status: "paid_off", payoffChapter: chapterOrder },
         }).catch(() => {});
       }

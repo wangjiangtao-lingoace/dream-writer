@@ -24,6 +24,11 @@ model Novel {
   volumeCount     Int   @default(1)     // 卷数
   chaptersPerVol  Int   @default(20)    // 每卷章节数
   status      String   @default("drafting")
+  // 7 层 Prompt 架构新增字段
+  coreSellingPoint  String?   // 核心卖点
+  corePayoffs       String?   // JSON array - 核心爽点列表
+  coreConflict      String?   // 核心矛盾
+  readerExpectations String?  // JSON array - 读者期待列表
   chapters    Chapter[]
   characters  Character[]
   characterRelations CharacterRelation[]
@@ -50,6 +55,8 @@ model Novel {
   writingSessions WritingSession[]
   chapterSummaries ChapterSummary[]
   chapterQualityLogs ChapterQualityLog[]
+  chapterBeats     ChapterBeat[]
+  payoffChains     PayoffChain[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -390,6 +397,16 @@ model ChapterOutline {
   scene         String   @default("")   // 场景/地点
   pov           String   @default("")   // 视角角色
   targetWordCount Int    @default(0)    // 目标字数
+  mustDo        String?   // JSON array - 必须完成的事项
+  mustNotDo     String?   // JSON array - 禁止完成的事项
+  // v2.5 新增字段
+  chapterType   String   @default("mission") // 章节类型：task_trigger/mission/payoff/comedy_daily/relationship/danger_escalation/info_reveal/transition
+  readerPromise String   @default("")   // 读者承诺：本章让读者看到什么
+  chapterFunction String @default("")   // 章节功能：兑现什么+开启什么
+  requiredReaderEmotion String @default("[]") // JSON array - 读者应感受到的情绪
+  payoffChainRefs String @default("[]") // JSON array - 关联的爽点链阶段
+  comedyMechanism String  @default("")   // 喜剧机制（如适用）
+  endingQuestion  String  @default("")   // 章末悬念问题
   status        String   @default("planned")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -503,6 +520,9 @@ model StyleProfile {
   
   // 自定义规则
   customRules     String   @default("[]") // JSON 数组
+
+  // 风格 DNA：可执行的节奏/语言/禁区约束
+  styleDna        String?  // JSON: {readerEmotion, payoffMechanisms, rhythmRules, languageRules, forbiddenPatterns, requiredPatterns}
   
   isDefault       Boolean  @default(false)
   createdAt       DateTime @default(now())
@@ -806,4 +826,39 @@ model ChapterQualityLog {
 
   @@unique([novelId, chapterOrder, checkType])
   @@index([novelId, checkType])
+}
+
+// 29. 爽点链
+model PayoffChain {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  name        String                    // 链名称，如"老祖打工链"
+  description String   @default("")     // 链描述
+  stages      String   // JSON: [{chapter, event, status}]
+  status      String   @default("active") // active/completed/paused
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, name])
+  @@index([novelId])
+}
+
+// 30. 章节 Beat 蓝图
+model ChapterBeat {
+  id           String   @id @default(cuid())
+  novelId      String
+  novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder Int
+  beatOrder    Int
+  type         String   // hook/dialogue/payoff/twist/transition/conflict/reveal/emotional/hook_end
+  goal         String   // 本 Beat 的目标
+  content      String?  // Beat 内容摘要
+  wordTarget   Int      @default(300) // 目标字数
+  mustInclude  String   @default("[]") // JSON: 必须包含的元素
+  mustAvoid    String   @default("[]") // JSON: 必须避免的元素
+  createdAt    DateTime @default(now())
+
+  @@unique([novelId, chapterOrder, beatOrder])
+  @@index([novelId, chapterOrder])
 }

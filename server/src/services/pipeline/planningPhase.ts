@@ -3,6 +3,7 @@ import { PipelineConfig } from "../PipelineService";
 import { PhaseContext, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateVolumeOutline } from "./generators";
 import { executeChapterOutlinesPhase } from "./chapterOutlinesPhase";
+import { executePayoffChainPhase } from "./payoffChainPhase";
 
 /**
  * 统一的规划阶段（卷纲生成）
@@ -68,6 +69,9 @@ export async function executePlanningPhase_unified(ctx: PhaseContext, jobId: str
     }
     await ctx.savePhaseResult(jobId, "planning", "volume_outline",
       { outline: outlineResult, inspiration: job.novel?.inspiration }, volumeResult);
+
+    // 3.5 生成爽点链（卷纲之后、章纲之前）
+    await executePayoffChainPhase(ctx, jobId, novelId, config);
 
     // 4. 暂停等用户确认卷纲
     await autoAdvanceOrPause(jobId, "planning", async () => {

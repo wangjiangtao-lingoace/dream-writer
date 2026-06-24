@@ -524,7 +524,7 @@ ${issueList}
  */
 async function detectForeshadowResolutions(novelId: string) {
   const plantedForeshadows = await prisma.foreshadow.findMany({
-    where: { novelId, status: "planted" },
+    where: { novelId, status: { in: ["planted", "active", "payoff_pending"] } },
   });
   if (plantedForeshadows.length === 0) return;
 

@@ -10,6 +10,7 @@ import { executeAssetsPhase } from "./pipeline/assetsPhase";
 import { executeChapterOutlinesPhase, buildPreviousVolumeSummary, persistVolumeChapterData, persistStoryArcs } from "./pipeline/chapterOutlinesPhase";
 import { executeConsistencyCheckPhase, buildPlanSummaryForConsistency } from "./pipeline/consistencyPhase";
 import { executeWritingPhase } from "./pipeline/writingPhase";
+import { executeStyleAnalysisPhase } from "./pipeline/styleAnalysisPhase";
 import { executeVolumesPhase, executeChapterOutlinePhase } from "./pipeline/legacyPhase";
 import { generateOutline, generateWorldview, generateCharacters, generateStyle, generateVolumeOutline, generateChapterOutlines, generateMainlinesAndHooks, generateEnrichedChapterOutlines, generateStoryArcs, generateConsistencyCheck } from "./pipeline/generators";
 
@@ -33,6 +34,10 @@ export interface PipelineConfig {
   tokenBudget?: number;
   /** 每批次最多写入章节数，0 或空值表示不限制 */
   maxChaptersPerBatch?: number;
+  /** 输入模式："structured"（结构化人物卡+世界观） vs "inspiration"（传统自由文本，默认） */
+  inputMode?: "structured" | "inspiration";
+  /** 已有章节处理方式："continue"（保留原稿续写） vs "rewrite"（分析风格后重写） */
+  continuationMode?: "continue" | "rewrite";
 }
 
 export interface PhaseResultData {
@@ -79,8 +84,16 @@ export class PipelineService {
       config.mode = "create";
     }
 
-    // outline(3) + assets(3) + planning(1+volumeCount+1) + consistency(1) + writing(1)
-    const totalSteps = 3 + 3 + (1 + volumeCount + 1) + 1 + 1;
+    // continuationMode → overwriteExistingChapters 映射
+    if (config.continuationMode === "continue") {
+      config.overwriteExistingChapters = false;
+    } else if (config.continuationMode === "rewrite") {
+      config.overwriteExistingChapters = true;
+    }
+
+    // outline(3) + assets(3) + [style_analysis(1)] + planning(1+volumeCount+1) + consistency(1) + writing(1)
+    const hasStyleAnalysis = config.inputMode === "structured";
+    const totalSteps = 3 + 3 + (hasStyleAnalysis ? 1 : 0) + (1 + volumeCount + 1) + 1 + 1;
 
     const configWithVersion = { ...config, pipelineVersion: 2 };
 
@@ -183,6 +196,24 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         executeAssetsPhase(ctx, jobId);
       }
       if (allConfirmed && phase === "assets") {
+        // 结构化输入 + 有已有章节 → 先运行风格分析
+        if (config.inputMode === "structured" && job) {
+          const hasChapters = await prisma.chapter.count({ where: { novelId: job.novelId, content: { not: "" } } });
+          if (hasChapters > 0) {
+            await prisma.pipelineJob.update({
+              where: { id: jobId },
+              data: { status: "running", currentPhase: "style_analysis", currentStep: "analyze" },
+            });
+            executeStyleAnalysisPhase(ctx, jobId, job.novelId, config).then(async () => {
+              await prisma.pipelineJob.update({
+                where: { id: jobId },
+                data: { status: "running", currentPhase: "planning", currentStep: "volume_outline" },
+              });
+              executePlanningPhase_unified(ctx, jobId);
+            });
+            return result;
+          }
+        }
         await prisma.pipelineJob.update({
           where: { id: jobId },
           data: { status: "running", currentPhase: "planning", currentStep: "volume_outline" },
@@ -218,7 +249,17 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           where: { id: jobId },
           data: { status: "running", currentPhase: "writing", currentStep: "chapter_drafts" },
         });
-        executeWritingPhase(ctx, jobId);
+        const novelId = job?.novelId || (await prisma.pipelineJob.findUnique({ where: { id: jobId }, select: { novelId: true } }))?.novelId;
+        if (novelId) {
+          const maxOrder = await prisma.chapter.findFirst({
+            where: { novelId },
+            orderBy: { order: "desc" },
+            select: { order: true },
+          });
+          executeWritingPhase(ctx, jobId, (maxOrder?.order || 0) + 1);
+        } else {
+          executeWritingPhase(ctx, jobId);
+        }
       }
     } else {
       if (allConfirmed && phase === "outline") {
@@ -247,7 +288,17 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           where: { id: jobId },
           data: { status: "running", currentPhase: "writing", currentStep: "chapter_drafts" },
         });
-        executeWritingPhase(ctx, jobId);
+        const novelId = job?.novelId || (await prisma.pipelineJob.findUnique({ where: { id: jobId }, select: { novelId: true } }))?.novelId;
+        if (novelId) {
+          const maxOrder = await prisma.chapter.findFirst({
+            where: { novelId },
+            orderBy: { order: "desc" },
+            select: { order: true },
+          });
+          executeWritingPhase(ctx, jobId, (maxOrder?.order || 0) + 1);
+        } else {
+          executeWritingPhase(ctx, jobId);
+        }
       }
     }
 
@@ -322,10 +373,12 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
             executeConsistencyCheckPhase(ctx, jobId);
             break;
           case "writing": {
-            const writtenCount = await prisma.chapter.count({
-              where: { novelId: job.novelId, source: { in: ["imitation_pipeline", "pipeline"] }, content: { not: "" } },
+            const maxOrder = await prisma.chapter.findFirst({
+              where: { novelId: job.novelId },
+              orderBy: { order: "desc" },
+              select: { order: true },
             });
-            executeWritingPhase(ctx, jobId, writtenCount + 1);
+            executeWritingPhase(ctx, jobId, (maxOrder?.order || 0) + 1);
             break;
           }
           default:
@@ -361,7 +414,12 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           executePlanningPhase_unified(ctx, jobId);
         }
       } else if (job.currentPhase === "consistency_check" && job.currentStep === "waiting_confirm") {
-        executeWritingPhase(ctx, jobId);
+        const maxOrder = await prisma.chapter.findFirst({
+          where: { novelId: job.novelId },
+          orderBy: { order: "desc" },
+          select: { order: true },
+        });
+        executeWritingPhase(ctx, jobId, (maxOrder?.order || 0) + 1);
       } else {
         this.executePipeline(jobId);
       }
@@ -373,7 +431,12 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
       } else if (job.currentPhase === "volumes" && job.currentStep === "waiting_confirm") {
         executeChapterOutlinePhase(ctx, jobId);
       } else if (job.currentPhase === "chapter_outline" && job.currentStep === "waiting_confirm") {
-        executeWritingPhase(ctx, jobId);
+        const maxOrder = await prisma.chapter.findFirst({
+          where: { novelId: job.novelId },
+          orderBy: { order: "desc" },
+          select: { order: true },
+        });
+        executeWritingPhase(ctx, jobId, (maxOrder?.order || 0) + 1);
       }
       else {
         this.executePipeline(jobId);

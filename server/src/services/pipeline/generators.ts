@@ -90,6 +90,114 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
   return parseLlmJson(result) || {};
 }
 
+export async function generateOutlineFromStructured(
+  ctx: PhaseContext,
+  novelId: string,
+  structuredData: {
+    title: string;
+    genre?: string;
+    synopsis?: string;
+    characters: Array<{ name: string; role?: string; identity?: string; motivation?: string; background?: string; personality?: string }>;
+    worldview: { name?: string; summary?: string; rules?: string; powerSystem?: string; geography?: string; factions?: string };
+  },
+  knowledge: string,
+  config: PipelineConfig,
+): Promise<any> {
+  const system = `你是一位资深网文策划师。用户已提供结构化的人物卡片和世界观设定，你的任务是在此基础上构建完整的故事大纲。
+
+工作原则：
+- 用户提供的角色和世界观是核心素材，必须严格基于这些设定来构建大纲
+- 不要重新发明角色或世界观，只在已有基础上扩展
+- 重点补充：情节结构、冲突设计、角色关系网、剧情走向
+- 大纲必须足够详细支撑百万字长篇
+
+语言要求：
+- 使用通俗白话，禁止 AI 味词汇：不禁、不由得、宛如、仿佛、缓缓、淡淡地
+- 每个字段必须包含具体信息（人名、地名、事件、因果），不能用抽象概括代替`;
+
+  const charactersText = structuredData.characters.map((c, i) =>
+    `${i + 1}. ${c.name}${c.role ? `（${c.role}）` : ""}${c.identity ? ` — ${c.identity}` : ""}${c.motivation ? `，动机：${c.motivation}` : ""}${c.personality ? `，性格：${c.personality}` : ""}${c.background ? `，背景：${c.background}` : ""}`
+  ).join("\n");
+
+  const worldviewText = [
+    structuredData.worldview.name && `名称：${structuredData.worldview.name}`,
+    structuredData.worldview.summary && `概述：${structuredData.worldview.summary}`,
+    structuredData.worldview.rules && `规则：${structuredData.worldview.rules}`,
+    structuredData.worldview.powerSystem && `力量体系：${structuredData.worldview.powerSystem}`,
+    structuredData.worldview.geography && `地理：${structuredData.worldview.geography}`,
+    structuredData.worldview.factions && `势力：${structuredData.worldview.factions}`,
+  ].filter(Boolean).join("\n");
+
+  const prompt = `请基于以下已有的人物卡片和世界观设定，构建完整的故事大纲。
+
+【作品信息】
+标题：${structuredData.title}
+类型：${config.genre || structuredData.genre || "自动判断"}
+${structuredData.synopsis ? `简介：${structuredData.synopsis}` : ""}
+
+【人物卡片】
+${charactersText}
+
+【世界观设定】
+${worldviewText}
+
+${knowledge ? `【参考知识】\n${knowledge}\n` : ""}
+
+你的任务：
+1. 以这些人物和世界观为基础，构建完整的情节结构
+2. 设计角色之间的关系网络和冲突线
+3. 规划从开篇到结局的剧情走向
+4. 确保大纲中的所有角色和设定都来自用户提供的素材
+
+请生成JSON格式的大纲：
+{
+  "title": "${structuredData.title}",
+  "genre": "${config.genre || structuredData.genre || ""}",
+  "theme": "核心主题（基于已有设定推导）",
+  "hook": "开篇钩子（具体场景描述）",
+  "coreSetting": "核心设定（整合世界观）",
+  "mainConflict": "主要冲突（基于角色动机和世界观推导）",
+  "protagonist": {
+    "name": "主角名（从人物卡中选）",
+    "identity": "身份",
+    "goal": "短期和长期目标",
+    "growth": "成长线"
+  },
+  "antagonist": {
+    "name": "反派名（从人物卡中选或创建）",
+    "identity": "身份",
+    "motivation": "动机"
+  },
+  "characterRelations": "角色关系网概述",
+  "plotStructure": {
+    "setup": "开篇建立（前5%）：世界观呈现、主角出场、核心冲突引入，必须有具体事件",
+    "rising_action": "上升发展（5%-20%）：至少3个具体事件",
+    "first_climax": "第一高潮（20%-35%）：阶段性胜利或重大挫败",
+    "deepening": "深度发展（35%-55%）：至少3个具体事件",
+    "major_turning": "重大转折（55%-70%）：核心真相揭露",
+    "escalation": "冲突升级（70%-85%）：多方势力碰撞",
+    "final_climax": "最终高潮（85%-95%）：决定性对决",
+    "resolution": "收束结局（95%-100%）：冲突收束"
+  },
+  "highlights": "3个核心卖点",
+  "targetAudience": "目标读者"
+}
+
+注意：plotStructure 的 8 个阶段都必须填写，每个阶段至少包含 2-3 个具体情节事件（人名+事件）。`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 6000 });
+  if (!result) {
+    console.error("[generateOutlineFromStructured] LLM returned null - call failed");
+  } else {
+    const parsed = parseLlmJson(result);
+    if (!parsed) {
+      console.error("[generateOutlineFromStructured] JSON parse failed, raw output (first 500 chars):", result.substring(0, 500));
+    }
+    return parsed || {};
+  }
+  return {};
+}
+
 export async function generateWorldview(
   ctx: PhaseContext,
   novelId: string,
@@ -283,7 +391,24 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
     "需要避免的写法3，例如：不要用「突然」作为转折词"
   ],
 
-  "masterWriterStyle": "模仿的作家风格描述。根据作品类型，指定模仿哪位白金大神的风格。例如都市类：「以起点白金大神的风格写作：开篇直接进入冲突，对话简洁有力，节奏明快，主角人设清晰（有能力但不无敌），配角有记忆点，每章末留钩子」。如果是玄幻类：「以网文大神的风格写作：爽点密集，升级节奏明确，战斗描写热血，配角有特色口头禅」。如果是言情类：「以晋江大神的风格写作：情感细腻但不拖沓，对话有张力，误会和解误会节奏好，配角有搞笑担当」。"
+  "masterWriterStyle": "模仿的作家风格描述。根据作品类型，指定模仿哪位白金大神的风格。例如都市类：「以起点白金大神的风格写作：开篇直接进入冲突，对话简洁有力，节奏明快，主角人设清晰（有能力但不无敌），配角有记忆点，每章末留钩子」。如果是玄幻类：「以网文大神的风格写作：爽点密集，升级节奏明确，战斗描写热血，配角有特色口头禅」。如果是言情类：「以晋江大神的风格写作：情感细腻但不拖沓，对话有张力，误会和解误会节奏好，配角有搞笑担当」。",
+
+  "styleDna": {
+    "readerEmotion": ["读者在每个阶段应感受到的情绪，如：开局就笑、三章一个反转、十章一个大高潮"],
+    "payoffMechanisms": ["本书的核心爽点机制，如：身份反差、扮猪吃虎、打脸装逼"],
+    "rhythmRules": {
+      "hookEvery": 500,
+      "jokeEvery": 700,
+      "payoffEvery": 1500
+    },
+    "languageRules": {
+      "sentence": "短句为主/长短句结合/长句为主",
+      "dialogueRatio": 0.4,
+      "narrationRatio": 0.6
+    },
+    "forbiddenPatterns": ["绝对禁止的写法模式，如：文青式环境渲染、哲学感悟、大段设定解释"],
+    "requiredPatterns": ["每章必须遵守的写法，如：每段必须有信息增量、对话必须推进剧情"]
+  }
 }`;
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.6, maxTokens: 2000 });
@@ -401,8 +526,17 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - characterArcs 说明本卷主要角色的起止状态和关键转变
 - targetWordCount 根据总字数和卷数合理分配`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
-  return parseLlmJson(result) || {};
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 16000 });
+  if (!result) {
+    console.error("[generateVolumeOutline] LLM returned null - call failed");
+  } else {
+    const parsed = parseLlmJson(result);
+    if (!parsed) {
+      console.error("[generateVolumeOutline] JSON parse failed, raw output (first 500 chars):", result.substring(0, 500));
+    }
+    return parsed || {};
+  }
+  return {};
 }
 
 export async function generateChapterOutlines(
@@ -644,6 +778,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
   "chapters": [
     {
       "title": "章节标题（要有吸引力）",
+      "chapterType": "章节类型（见下方说明）",
       "scene": "本章发生的具体场景/地点",
       "pov": "本章的视角角色名",
       "targetWordCount": 3000,
@@ -651,6 +786,14 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
       "conflict": "本章核心冲突",
       "emotion": "情绪基调（紧张/温馨/热血/压抑/轻松/悲伤等）",
       "hook": "章末钩子（如何吸引读者看下一章）",
+      "readerPromise": "本章让读者看到什么（具体承诺）",
+      "chapterFunction": "兑现什么+开启什么（一句话）",
+      "requiredReaderEmotion": ["读者应感受到的情绪1", "情绪2"],
+      "payoffChainRefs": ["爽点链名称.阶段描述"],
+      "comedyMechanism": "喜剧机制（如适用，否则留空）",
+      "endingQuestion": "章末悬念问题（读者会问什么）",
+      "mustDo": ["必须完成的事项1（具体可执行）", "必须完成的事项2"],
+      "mustNotDo": ["禁止完成的事项1（防止剧透或偏离）", "禁止完成的事项2"],
       "characters": [
         {"name": "角色名", "goal": "本章该角色的目标", "action": "关键行动"}
       ],
@@ -681,6 +824,16 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
     }
   ]
 }
+
+章节类型 chapterType 说明：
+- task_trigger：任务触发章（开启新任务/新目标）
+- mission：任务执行章（完成具体任务）
+- payoff：爽点兑现章（释放爽点，读者情绪高涨）
+- comedy_daily：喜剧日常章（轻松搞笑，缓冲节奏）
+- relationship：人物关系章（升温/冲突/和解）
+- danger_escalation：危机升级章（危险逼近，紧张感累积）
+- info_reveal：信息揭露章（揭示秘密/真相）
+- transition：过渡章（承上启下，铺垫下一阶段）
 
 注意：
 - scene 必须是世界观中已设定的具体地点，不能模糊写"某处"
@@ -913,5 +1066,155 @@ ${programmaticSection}
 passed = overallScore >= 6`;
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 4000 });
+  return parseLlmJson(result) || {};
+}
+
+// ===== Beat 级写作蓝图 =====
+
+export async function generateChapterBeats(
+  ctx: PhaseContext,
+  chapterOutline: any,
+  styleDna: any,
+  chapterOrder: number,
+  targetWordCount: number,
+): Promise<any> {
+  const system = `你是一位资深网文节奏设计师，擅长将章节规划拆解为精确的节奏单元（Beat）。
+
+每个 Beat 是一个功能明确的节奏单元，章节正文将按 Beat 顺序生成。
+
+Beat 类型定义：
+- hook：开篇钩子，制造好奇（200-400字）
+- conflict：冲突推进（400-800字）
+- dialogue：对话场景，揭示人物/推进剧情（300-600字）
+- payoff：爽点释放（300-500字）
+- twist：反转（200-400字）
+- transition：过渡/铺垫（200-300字）
+- reveal：信息揭露（300-500字）
+- emotional：情感场景（300-500字）
+- hook_end：章末钩子（200-300字）
+
+设计原则：
+- 第一个 Beat 必须是 hook 类型（开篇必须吸引读者）
+- 最后一个 Beat 必须是 hook_end 类型（章末必须留悬念）
+- 每 2-3 个 Beat 必须有一个高能量类型（payoff/twist/reveal）
+- 对话类 Beat 不超过总字数的 40%
+- 过渡类 Beat 不超过 1 个
+- 每个 Beat 必须有明确的目标，不能写"继续推进剧情"`;
+
+  const dnaHint = styleDna?.rhythmRules
+    ? `\n【风格 DNA 节奏规则】\n钩子间隔：每 ${styleDna.rhythmRules.hookEvery || 500} 字\n笑点间隔：每 ${styleDna.rhythmRules.jokeEvery || 700} 字\n爽点间隔：每 ${styleDna.rhythmRules.payoffEvery || 1500} 字`
+    : '';
+
+  const prompt = `请为以下章节设计 Beat 列表。
+
+【章节信息】
+第${chapterOrder}章 ${chapterOutline.title || "未命名"}
+目标字数：${targetWordCount}字
+章节目标：${chapterOutline.goal || "无"}
+核心冲突：${chapterOutline.conflict || "无"}
+情绪基调：${chapterOutline.emotion || "无"}
+章末钩子：${chapterOutline.hook || "无"}
+${chapterOutline.mustDo ? `必须完成：${chapterOutline.mustDo}` : ""}
+${chapterOutline.mustNotDo ? `禁止完成：${chapterOutline.mustNotDo}` : ""}
+${dnaHint}
+
+请生成JSON格式的Beat列表：
+{
+  "beats": [
+    {
+      "type": "hook/conflict/dialogue/payoff/twist/transition/reveal/emotional/hook_end",
+      "goal": "本Beat的具体目标（必须可执行，写手据此能写出完整段落）",
+      "wordTarget": 300,
+      "mustInclude": ["必须包含的元素1", "必须包含的元素2"],
+      "mustAvoid": ["必须避免的元素1", "必须避免的元素2"]
+    }
+  ]
+}
+
+要求：
+- 总字数目标 = ${targetWordCount}字（各 Beat wordTarget 之和应接近此值）
+- 第一个 Beat 必须是 hook 类型
+- 最后一个 Beat 必须是 hook_end 类型
+- 每 2-3 个 Beat 必须有一个高能量类型（payoff/twist/reveal）
+- dialogue 类型 Beat 的总字数不超过 ${Math.round(targetWordCount * 0.4)}字
+- transition 类型最多 1 个
+- 每个 goal 必须具体（谁+做什么+达到什么效果）
+- mustInclude：列出该 Beat 必须包含的具体元素（人物、场景、动作、情绪等）
+- mustAvoid：列出该 Beat 必须避免的问题（跳章、水字数、AI味等）`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 2000 });
+  return parseLlmJson(result) || {};
+}
+
+// ===== 爽点链生成 =====
+
+export async function generatePayoffChains(
+  ctx: PhaseContext,
+  novelId: string,
+  outline: any,
+  volumes: any,
+  config: PipelineConfig,
+): Promise<any> {
+  const totalChapters = (config.volumeCount || 5) * (config.chaptersPerVolume || 30);
+
+  const system = `你是一位资深网文爽点设计师，擅长规划跨章节的爽点节奏链。
+
+核心理念：网文读者追的不是剧情，是爽点节奏。
+爽点链是一个递进式的情绪释放序列，读者追的就是这个链条的逐步升级。
+
+设计原则：
+- 每条爽点链必须有明确的递进关系：轻度爽 → 中度爽 → 高度爽 → 终极释放
+- 链与链之间要有交叉和联动，不能完全独立
+- 阶段之间必须有因果关系，不能跳跃
+- 每个事件必须具体（谁+做了什么+导致什么结果）
+- 爽点类型要多样：实力展示、身份反差、打脸、逆袭、关系升级、意外收获
+
+语言要求：
+- 使用通俗白话，禁止 AI 味词汇
+- 每个事件描述必须包含具体信息`;
+
+  const outlineBrief = typeof outline === "string"
+    ? outline
+    : `标题：${outline?.title || "未命名"}\n类型：${config.genre || outline?.genre || "自动判断"}\n主题：${outline?.theme || "无"}\n主角：${outline?.protagonist?.name || "无"}\n冲突：${outline?.mainConflict || "无"}`;
+
+  const volumeBrief = volumes?.volumes
+    ? volumes.volumes.map((v: any, i: number) => `第${i + 1}卷：${v.title || "未命名"} — ${v.goal || "无目标"}`).join("\n")
+    : "无卷纲";
+
+  const prompt = `请根据以下信息，规划核心爽点链。
+
+【故事大纲】
+${outlineBrief}
+
+【卷纲】
+${volumeBrief}
+
+【总章数】${totalChapters}章
+
+请生成JSON格式的爽点链：
+{
+  "payoffChains": [
+    {
+      "name": "链名称（如：老祖打工链、身份反差链、实力升级链）",
+      "description": "链描述（一句话说明这条链的核心爽点）",
+      "stages": [
+        {"chapter": 3, "event": "第一阶段事件（轻度爽，具体描述谁做了什么）"},
+        {"chapter": 15, "event": "第二阶段事件（中度爽）"},
+        {"chapter": 40, "event": "第三阶段事件（高度爽）"},
+        {"chapter": 80, "event": "第四阶段事件（超级爽）"},
+        {"chapter": 120, "event": "终极释放（最爽的时刻）"}
+      ]
+    }
+  ]
+}
+
+要求：
+- 至少 2-3 条爽点链，覆盖不同类型（升级/反转/关系变化/实力展示）
+- 每条链 4-6 个阶段，分布在整个作品中（不能全集中在前半段）
+- 阶段之间必须有递进关系，后面的事件要比前面的更爽
+- 每个事件必须具体（人名+具体行为+结果）
+- 链与链之间可以有交叉点（某个事件同时推进两条链）`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
   return parseLlmJson(result) || {};
 }

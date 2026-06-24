@@ -25,6 +25,11 @@ export interface UpdateNovelInput {
   volumeCount?: number;
   chaptersPerVol?: number;
   status?: string;
+  // 7 层 Prompt 架构新增字段
+  coreSellingPoint?: string | null;
+  corePayoffs?: string | null;
+  coreConflict?: string | null;
+  readerExpectations?: string | null;
 }
 
 function countWords(content: string): number {

@@ -111,6 +111,20 @@ router.get("/relations/:novelId", async (req, res, next) => {
   }
 });
 
+// 批量创建人物
+router.post("/bulk/:novelId", async (req, res, next) => {
+  try {
+    const { novelId } = novelIdSchema.parse(req.params);
+    const inputs = z.array(characterCreateSchema).min(1, "至少需要一个人物。").parse(req.body);
+    const characters = await prisma.character.createManyAndReturn({
+      data: inputs.map((input) => ({ ...input, novelId })),
+    });
+    res.status(201).json({ success: true, data: characters });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // 从文本导入人物卡
 router.post("/import/:novelId", async (req, res, next) => {
   try {

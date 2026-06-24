@@ -65,6 +65,9 @@ const NovelWorkspace: React.FC = () => {
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // AI review generation state
+  const [isGeneratingReview, setIsGeneratingReview] = useState(false);
+
   useEffect(() => {
     if (id) {
       loadNovel(id);
@@ -187,6 +190,30 @@ const NovelWorkspace: React.FC = () => {
     setActiveChapterId(chapterId);
     setActiveChapterData(null);
   }, []);
+
+  const handleGenerateReview = useCallback(async () => {
+    if (!id || !activeChapterId) return;
+    setIsGeneratingReview(true);
+    try {
+      const review = await api.post<AIReview>(`/api/novels/${id}/chapters/${activeChapterId}/ai-review`);
+      setAiReview(review);
+      toast.success("AI 评审生成成功");
+    } catch (error) {
+      console.error("评审生成失败:", error);
+      toast.error("评审生成失败，请重试");
+    } finally {
+      setIsGeneratingReview(false);
+    }
+  }, [id, activeChapterId]);
+
+  const handlePolish = useCallback(async (mode: "review" | "custom", userHint?: string): Promise<string> => {
+    if (!id || !activeChapterId) throw new Error("No chapter selected");
+    const result = await api.post<{ original: string; polished: string; wordCount: number }>(
+      `/api/novels/${id}/chapters/${activeChapterId}/polish`,
+      { mode, userHint }
+    );
+    return result.polished;
+  }, [id, activeChapterId]);
 
   const activeChapterRef = useRef(activeChapterData);
   activeChapterRef.current = activeChapterData;
@@ -808,6 +835,7 @@ const NovelWorkspace: React.FC = () => {
   if (activeGroupId === "writing") {
     return (
       <WorkspaceWriteLayout
+        novelId={id!}
         workspaceData={workspaceData}
         radarScores={radarScores}
         activeChapterData={activeChapterData}
@@ -818,6 +846,7 @@ const NovelWorkspace: React.FC = () => {
         aiProcessing={aiProcessing}
         continuing={continuing}
         showExportMenu={showExportMenu}
+        isGeneratingReview={isGeneratingReview}
         onNavigate={navigate}
         onSelectChapter={handleSelectChapter}
         onCreateChapter={handleCreateChapter}
@@ -827,6 +856,8 @@ const NovelWorkspace: React.FC = () => {
         onExport={handleExport}
         onShowExportMenu={setShowExportMenu}
         getBreadcrumb={getBreadcrumb}
+        onGenerateReview={handleGenerateReview}
+        onPolish={handlePolish}
       />
     );
   }

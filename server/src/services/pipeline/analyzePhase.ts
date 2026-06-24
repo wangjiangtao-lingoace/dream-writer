@@ -3,7 +3,7 @@ import { parseLlmJson } from "../../utils/parseJson";
 import { getRagRetrieveService } from "../RagRetrieveService";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext } from "./pipelineUtils";
-import { generateOutline } from "./generators";
+import { generateOutline, generateOutlineFromStructured } from "./generators";
 
 export async function executeAnalyzePhase(
   ctx: PhaseContext,
@@ -13,6 +13,12 @@ export async function executeAnalyzePhase(
 ) {
   const novel = await prisma.novel.findUnique({ where: { id: novelId } });
   if (!novel) throw new Error("作品不存在");
+
+  // 结构化输入模式：跳过分析和拆解，直接从 DB 加载数据生成大纲
+  if (config.inputMode === "structured") {
+    await executeStructuredAnalyzePhase(ctx, jobId, novelId, novel, config);
+    return;
+  }
 
   const sourceType = config.sourceType || "idea";
   let analysisInput: string;
@@ -82,6 +88,65 @@ export async function executeAnalyzePhase(
 
   await ctx.savePhaseResult(jobId, "outline", "outline", { source: outlineSourceTag }, outlineResult);
   await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
+  await ctx.persistGeneratedAssets(novelId, "outline", outlineResult);
+}
+
+async function executeStructuredAnalyzePhase(
+  ctx: PhaseContext,
+  jobId: string,
+  novelId: string,
+  novel: { title: string; genre: string | null; synopsis: string | null },
+  config: PipelineConfig,
+) {
+  // 1. 跳过 analyze 和 decompose（用户已通过表单提供结构化数据）
+
+  // 2. 从 DB 加载用户提供的角色和世界观
+  await ctx.updateJobProgress(jobId, "outline", "outline");
+  const [characters, worldviews] = await Promise.all([
+    prisma.character.findMany({ where: { novelId } }),
+    prisma.worldview.findMany({ where: { novelId } }),
+  ]);
+
+  if (characters.length === 0) {
+    throw new Error("结构化输入模式需要至少一个人物卡片");
+  }
+
+  const worldview = worldviews[0] || {};
+  const knowledgeQuery = `${novel.title} ${novel.genre || ""} 人物世界观`;
+  const knowledgeContext = await getRagRetrieveService()?.retrieve(
+    knowledgeQuery,
+    { novelId, topK: 10 }
+  ) ?? "";
+
+  const outlineResult = await generateOutlineFromStructured(
+    ctx, novelId,
+    {
+      title: novel.title,
+      genre: novel.genre || undefined,
+      synopsis: novel.synopsis || undefined,
+      characters: characters.map(c => ({
+        name: c.name,
+        role: c.role || undefined,
+        identity: c.identity || undefined,
+        motivation: c.motivation || undefined,
+        background: c.background || undefined,
+      })),
+      worldview: {
+        name: worldview.name || undefined,
+        summary: worldview.summary || undefined,
+        rules: worldview.rules || undefined,
+        powerSystem: worldview.powerSystem || undefined,
+        geography: worldview.geography || undefined,
+        factions: worldview.factions || undefined,
+      },
+    },
+    knowledgeContext,
+    config,
+  );
+
+  await ctx.savePhaseResult(jobId, "outline", "outline", { source: "structured" }, outlineResult);
+  await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
+  await ctx.persistGeneratedAssets(novelId, "outline", outlineResult);
 }
 
 async function analyzeInput(ctx: PhaseContext, inspiration: string): Promise<{

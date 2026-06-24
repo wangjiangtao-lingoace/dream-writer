@@ -1,52 +1,46 @@
 import { prisma } from "../../db/prisma";
 import { getRagRetrieveService } from "../RagRetrieveService";
+import { buildFullSystemPrompt } from "./prompts";
 
 /**
  * 按需组装章级创作上下文
  *
  * 核心原则：章纲是创作蓝图（完整传递），其余上下文只传精简摘要。
  * 每章上下文约 1,200-1,500 tokens，相比全量 JSON（~15,000 tokens）节省 90%。
+ *
+ * 7 层 Prompt 架构升级：
+ * - 第一层：基础写作引擎（固定）
+ * - 第二层：作品风格模板（动态）
+ * - 第三层：本书核心约束（动态）
+ * - 第四层：角色约束（动态）
+ * - 第五层：世界观约束（动态）
+ * - 第六层：章节任务（动态）
+ * - 第七层：读者期待约束（动态）
  */
 export class ContextAssembler {
   constructor(private novelId: string) {}
 
   /**
-   * 组装某章的精简创作上下文
+   * 组装某章的精简创作上下文（使用 7 层 Prompt 架构）
    */
   async assembleForChapter(chapterOrder: number, chapterOutline: any): Promise<string> {
-    const [characters, worldview, style, summaryData, novel, ragContext, memories, storyState, activeHooks, plantedForeshadows, mainlines, characterRelations, emotionCurve] = await Promise.all([
+    // 加载各层数据
+    const [characters, worldview, style, novel, previousChapterEnding] = await Promise.all([
       this.loadInvolvedCharacters(chapterOutline),
       this.loadWorldviewSummary(),
       this.loadStyleCompact(),
-      this.loadRecentSummaries(chapterOrder, 5),
       this.loadNovelMeta(),
-      this.loadRagContext(chapterOutline),
-      this.loadRelevantMemories(chapterOrder),
-      this.loadStoryState(chapterOrder),
-      this.loadActiveHooks(),
-      this.loadPlantedForeshadows(),
-      this.loadMainlines(chapterOrder),
-      this.loadCharacterRelations(chapterOutline),
-      this.loadEmotionCurve(chapterOrder),
+      this.loadPreviousChapterEnding(chapterOrder),
     ]);
 
-    return buildCompactContext({
-      novelMeta: novel,
-      outline: null,
-      enrichedChapter: chapterOutline,
+    // 使用 7 层 Prompt 架构组装
+    return buildFullSystemPrompt({
+      novel,
       style,
-      previousChapters: summaryData.recent,
-      milestoneSummaries: summaryData.milestones,
       characters,
       worldview,
-      ragContext,
-      memories,
-      storyState,
-      activeHooks,
-      plantedForeshadows,
-      mainlines,
-      characterRelations,
-      emotionCurve,
+      chapterOutline,
+      previousChapterEnding,
     });
   }
 
@@ -93,7 +87,7 @@ export class ContextAssembler {
     const sp = await prisma.styleProfile.findFirst({
       where: { novelId: this.novelId, isDefault: true },
       select: {
-        name: true, description: true, pacing: true, customRules: true,
+        name: true, description: true, pacing: true, customRules: true, styleDna: true,
         narrativePov: true, tense: true, sentenceLength: true, vocabulary: true,
         dialogueRatio: true, emotionIntensity: true, humorLevel: true,
         avoidAIWords: true, useShortSentences: true, useDialogue: true, useSensoryDetail: true,
@@ -107,11 +101,11 @@ export class ContextAssembler {
     return {
       name: sp.name,
       description: sp.description,
-      toneAndAtmosphere: rules.toneAndAtmosphere?.slice(0, 100) || "",
+      toneAndAtmosphere: typeof rules.toneAndAtmosphere === 'object' ? JSON.stringify(rules.toneAndAtmosphere).slice(0, 100) : (rules.toneAndAtmosphere?.slice(0, 100) || ""),
       pacing: sp.pacing,
-      chapterOpeningStyle: rules.chapterOpeningStyle?.slice(0, 50) || "",
-      chapterEndingStyle: rules.chapterEndingStyle?.slice(0, 50) || "",
-      dialogueStyle: rules.dialogueStyle?.slice(0, 50) || "",
+      chapterOpeningStyle: typeof rules.chapterOpeningStyle === 'object' ? JSON.stringify(rules.chapterOpeningStyle).slice(0, 50) : (rules.chapterOpeningStyle?.slice(0, 50) || ""),
+      chapterEndingStyle: typeof rules.chapterEndingStyle === 'object' ? JSON.stringify(rules.chapterEndingStyle).slice(0, 50) : (rules.chapterEndingStyle?.slice(0, 50) || ""),
+      dialogueStyle: typeof rules.dialogueStyle === 'object' ? JSON.stringify(rules.dialogueStyle).slice(0, 50) : (rules.dialogueStyle?.slice(0, 50) || ""),
       writingRules: Array.isArray(rules.writingRules) ? rules.writingRules.slice(0, 3) : [],
       avoidList: Array.isArray(rules.avoidList) ? rules.avoidList.slice(0, 3) : [],
       // 完整风格维度
@@ -123,6 +117,10 @@ export class ContextAssembler {
       emotionIntensity: sp.emotionIntensity,
       humorLevel: sp.humorLevel,
       masterWriterStyle: rules.masterWriterStyle || "",
+      // 用户原文风格示例（来自风格分析阶段）
+      userStyleExamples: Array.isArray(rules.userStyleExamples) ? rules.userStyleExamples.slice(0, 3) : [],
+      // 风格 DNA（可执行约束）
+      styleDna: sp.styleDna || undefined,
     };
   }
 
@@ -191,17 +189,53 @@ export class ContextAssembler {
   }
 
   /**
+   * 加载上一章结尾内容（用于防止跳章）
+   */
+  private async loadPreviousChapterEnding(chapterOrder: number): Promise<string> {
+    if (chapterOrder <= 1) return "";
+
+    const prevChapter = await prisma.chapter.findFirst({
+      where: {
+        novelId: this.novelId,
+        order: chapterOrder - 1,
+        content: { not: "" },
+      },
+      select: { content: true },
+      orderBy: { order: "desc" },
+    });
+
+    if (!prevChapter) return "";
+
+    // 取上一章最后 500 字
+    return prevChapter.content.slice(-500);
+  }
+
+  /**
    * 加载作品元信息
    */
   private async loadNovelMeta() {
     const novel = await prisma.novel.findUnique({
       where: { id: this.novelId },
-      select: { title: true, genre: true, synopsis: true },
+      select: {
+        title: true,
+        genre: true,
+        synopsis: true,
+        // 7 层 Prompt 架构新增字段
+        coreSellingPoint: true,
+        corePayoffs: true,
+        coreConflict: true,
+        readerExpectations: true,
+      },
     });
     return {
       title: novel?.title || "",
       genre: novel?.genre || "",
       theme: novel?.synopsis?.slice(0, 100) || "",
+      // 7 层 Prompt 架构新增字段
+      coreSellingPoint: novel?.coreSellingPoint || "",
+      corePayoffs: novel?.corePayoffs || "",
+      coreConflict: novel?.coreConflict || "",
+      readerExpectations: novel?.readerExpectations || "",
     };
   }
 
@@ -533,6 +567,11 @@ export function buildCompactContext(input: {
       styleLines.push(`避免：${input.style.avoidList.join("；")}`);
     }
     if (styleLines.length > 0) parts.push(`【风格约束】\n${styleLines.join("\n")}`);
+    // 用户原文风格示例（来自风格分析阶段）
+    if (Array.isArray(input.style.userStyleExamples) && input.style.userStyleExamples.length > 0) {
+      const examples = input.style.userStyleExamples.map((ex: string, i: number) => `示例${i + 1}：${ex}`).join("\n\n");
+      parts.push(`【用户原文风格参考 — 你的写作必须匹配这个风格】\n${examples}`);
+    }
   }
 
   // 8. 情绪曲线指导（~80 tokens）

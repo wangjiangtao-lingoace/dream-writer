@@ -8,6 +8,99 @@ import { ContextAssembler } from "./contextAssembler";
 import { validateChapterQuality } from "./qualityCheck";
 import { QUALITY_THRESHOLDS } from "./writingRules";
 import { runPeriodicConsistencyCheck, persistPeriodicCheckResults } from "./periodicCheck";
+import { manageForeshadowLifecycle } from "../ForeshadowService";
+import { generateChapterBeats } from "./generators";
+
+/**
+ * Beat 模板：根据 chapterType 生成标准化的节奏单元
+ * 普通章节使用模板，关键章节（高潮/转折/爽点）使用 LLM 生成
+ */
+function generateBeatTemplate(chapterType: string, targetWordCount: number, outline: any): any[] {
+  const hook = outline.hook || "制造悬念";
+  const goal = outline.goal || "推进剧情";
+  const conflict = outline.conflict || "核心冲突";
+
+  // 模板库：每种 chapterType 对应的 Beat 序列
+  const templates: Record<string, any[]> = {
+    // 任务触发章：开启新任务/新目标
+    task_trigger: [
+      { type: "hook", wordTarget: 300, goal: "用意外事件或新信息制造好奇", mustInclude: [], mustAvoid: ["不要直接说出任务内容"] },
+      { type: "reveal", wordTarget: 400, goal: `揭示任务内容：${goal}`, mustInclude: ["任务的具体要求"], mustAvoid: ["不要用系统提示代替场景"] },
+      { type: "dialogue", wordTarget: 400, goal: "通过对话讨论任务的难度和意义", mustInclude: ["角色对任务的反应"], mustAvoid: ["不要变成旁白解说"] },
+      { type: "conflict", wordTarget: 400, goal: "展示任务的阻碍或代价", mustInclude: ["具体的困难"], mustAvoid: ["不要一笔带过"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["悬念问题"], mustAvoid: ["不要提前解答"] },
+    ],
+    // 任务执行章：完成具体任务
+    mission: [
+      { type: "hook", wordTarget: 250, goal: "回顾目标，制造紧迫感", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要重复上一章内容"] },
+      { type: "conflict", wordTarget: 500, goal: `执行过程中的冲突：${conflict}`, mustInclude: ["具体的冲突场景"], mustAvoid: ["不要跳过冲突直接成功"] },
+      { type: "dialogue", wordTarget: 400, goal: "角色之间的配合或分歧", mustInclude: ["角色互动"], mustAvoid: ["不要变成独白"] },
+      { type: "twist", wordTarget: 350, goal: "意外变数，打破计划", mustInclude: ["意外的具体表现"], mustAvoid: ["不要用巧合解释"] },
+      { type: "payoff", wordTarget: 400, goal: "克服困难，完成任务", mustInclude: ["成功的具体过程"], mustAvoid: ["不要一笔带过成功"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["新悬念"], mustAvoid: ["不要仓促结尾"] },
+    ],
+    // 爽点兑现章：释放爽点
+    payoff: [
+      { type: "pressure", wordTarget: 400, goal: "施加压力，累积读者期待", mustInclude: ["压力的具体来源"], mustAvoid: ["不要过于轻松"] },
+      { type: "reversal", wordTarget: 400, goal: "反转局势，出乎意料", mustInclude: ["反转的具体表现"], mustAvoid: ["不要用巧合解释"] },
+      { type: "payoff", wordTarget: 500, goal: "爽点释放，读者情绪高涨", mustInclude: ["爽点的具体释放场景", "旁观者的反应"], mustAvoid: ["不要只用系统提示代替场景"] },
+      { type: "emotional", wordTarget: 300, goal: "角色和旁观者的反应", mustInclude: ["角色的情绪变化"], mustAvoid: ["不要忽略配角反应"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["新的期待"], mustAvoid: ["不要破坏爽感"] },
+    ],
+    // 喜剧日常章：轻松搞笑
+    comedy_daily: [
+      { type: "hook", wordTarget: 250, goal: "用荒诞场景开篇", mustInclude: ["搞笑的具体场景"], mustAvoid: ["不要冷场"] },
+      { type: "dialogue", wordTarget: 500, goal: "角色之间的搞笑互动", mustInclude: ["搞笑的对话"], mustAvoid: ["不要变成流水账"] },
+      { type: "reveal", wordTarget: 350, goal: "揭示日常背后的秘密或反转", mustInclude: ["反转的具体内容"], mustAvoid: ["不要过于牵强"] },
+      { type: "emotional", wordTarget: 300, goal: "温情时刻，角色关系升温", mustInclude: ["温情的具体表现"], mustAvoid: ["不要过于煽情"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["小悬念"], mustAvoid: ["不要破坏轻松氛围"] },
+    ],
+    // 人物关系章：升温/冲突/和解
+    relationship: [
+      { type: "hook", wordTarget: 250, goal: "关系中的微妙变化", mustInclude: ["关系变化的信号"], mustAvoid: ["不要过于直白"] },
+      { type: "dialogue", wordTarget: 600, goal: "深入对话，揭示内心", mustInclude: ["内心的真实想法"], mustAvoid: ["不要变成说教"] },
+      { type: "conflict", wordTarget: 400, goal: "关系冲突或误解", mustInclude: ["冲突的具体原因"], mustAvoid: ["不要无理取闹"] },
+      { type: "emotional", wordTarget: 400, goal: "情感爆发或和解", mustInclude: ["情感的具体表现"], mustAvoid: ["不要强行和解"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["关系的新状态"], mustAvoid: ["不要留下隐患"] },
+    ],
+    // 危机升级章：危险逼近
+    danger_escalation: [
+      { type: "hook", wordTarget: 300, goal: "危险信号出现", mustInclude: ["危险的具体表现"], mustAvoid: ["不要轻描淡写"] },
+      { type: "conflict", wordTarget: 500, goal: "危机逐步升级", mustInclude: ["升级的具体过程"], mustAvoid: ["不要跳过升级"] },
+      { type: "reveal", wordTarget: 400, goal: "揭示危机的真正规模", mustInclude: ["规模的具体描述"], mustAvoid: ["不要过于夸张"] },
+      { type: "dialogue", wordTarget: 300, goal: "角色讨论对策", mustInclude: ["具体的对策"], mustAvoid: ["不要纸上谈兵"] },
+      { type: "hook_end", wordTarget: 300, goal: "危机达到顶点，悬念拉满", mustInclude: ["危机的顶点"], mustAvoid: ["不要轻易化解"] },
+    ],
+    // 信息揭露章：揭示秘密/真相
+    info_reveal: [
+      { type: "hook", wordTarget: 300, goal: "铺垫即将揭露的信息", mustInclude: ["铺垫的具体内容"], mustAvoid: ["不要过于明显"] },
+      { type: "reveal", wordTarget: 500, goal: "第一个信息点揭露", mustInclude: ["信息的具体内容"], mustAvoid: ["不要一笔带过"] },
+      { type: "dialogue", wordTarget: 400, goal: "角色对信息的反应和讨论", mustInclude: ["角色的反应"], mustAvoid: ["不要过于冷静"] },
+      { type: "reveal", wordTarget: 400, goal: "更深层的真相揭露", mustInclude: ["真相的具体内容"], mustAvoid: ["不要过于复杂"] },
+      { type: "hook_end", wordTarget: 250, goal: "揭露引发新悬念", mustInclude: ["新悬念"], mustAvoid: ["不要破坏揭露的冲击力"] },
+    ],
+    // 过渡章：承上启下
+    transition: [
+      { type: "hook", wordTarget: 250, goal: "承接上一章结尾", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要跳章"] },
+      { type: "emotional", wordTarget: 350, goal: "角色情绪缓冲", mustInclude: ["情绪的具体表现"], mustAvoid: ["不要过于拖沓"] },
+      { type: "dialogue", wordTarget: 400, goal: "日常互动，推进关系", mustInclude: ["关系的推进"], mustAvoid: ["不要变成流水账"] },
+      { type: "reveal", wordTarget: 350, goal: "埋下伏笔或小钩子", mustInclude: ["伏笔的具体内容"], mustAvoid: ["不要过于明显"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["小悬念"], mustAvoid: ["不要破坏过渡氛围"] },
+    ],
+  };
+
+  // 获取模板，回退到 mission
+  const template = templates[chapterType] || templates.mission;
+
+  // 根据 targetWordCount 等比调整各 Beat 字数
+  const totalTemplateWords = template.reduce((sum, b) => sum + b.wordTarget, 0);
+  const ratio = targetWordCount / totalTemplateWords;
+
+  return template.map(b => ({
+    ...b,
+    wordTarget: Math.round(b.wordTarget * ratio / 100) * 100, // 四舍五入到百位
+  }));
+}
 
 export async function executeWritingPhase(ctx: PhaseContext, jobId: string, startOrder?: number) {
   const job = await prisma.pipelineJob.findUnique({
@@ -62,6 +155,14 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
       } catch (e) {
         console.warn(`[writingPhase] 第${ch.order}章后处理失败:`, e);
       }
+    }
+
+    // 伏笔生命周期管理：标记逾期伏笔为 payoff_pending / expired
+    try {
+      const maxOrder = Math.max(...chapters.map((c: any) => c.order || 0));
+      await manageForeshadowLifecycle(job.novelId, maxOrder);
+    } catch (e) {
+      console.warn("[writingPhase] 伏笔生命周期管理失败:", e);
     }
 
     // 章纲修正：写完一卷后检查偏离度，修正下一卷章纲
@@ -294,6 +395,94 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       const compactContext = await assembler.assembleForChapter(order, enrichedChaptersMap.get(order) || card);
       const targetWordCount = config.targetWordCount || 2500;
 
+      // 生成 Beat 蓝图（章节内节奏单元）
+      const chapterOutlineForBeat = enrichedChaptersMap.get(order) || card;
+      let beatBlueprint = "";
+      try {
+        // 判断是否为关键章节（需要 LLM 生成 Beat）
+        const chapterType = chapterOutlineForBeat.chapterType || "mission";
+        const isKeyChapter = ["payoff", "danger_escalation", "info_reveal"].includes(chapterType)
+          || chapterOutlineForBeat.emotionData?.isClimax
+          || chapterOutlineForBeat.emotionData?.isTurningPoint;
+
+        let beats: any[] = [];
+
+        if (isKeyChapter) {
+          // 关键章节：使用 LLM 生成 Beat
+          const styleProfile = await prisma.styleProfile.findFirst({
+            where: { novelId, isDefault: true },
+            select: { styleDna: true },
+          });
+          let styleDna: any = null;
+          if (styleProfile?.styleDna) {
+            try { styleDna = JSON.parse(styleProfile.styleDna); } catch { /* ignore */ }
+          }
+          const beatResult = await generateChapterBeats(ctx, chapterOutlineForBeat, styleDna, order, targetWordCount);
+          beats = beatResult?.beats || [];
+        } else {
+          // 普通章节：使用模板生成 Beat（节省 LLM 调用）
+          beats = generateBeatTemplate(chapterType, targetWordCount, chapterOutlineForBeat);
+        }
+
+        if (beats.length > 0) {
+          // 保存到 ChapterBeat 表
+          for (let i = 0; i < beats.length; i++) {
+            const beat = beats[i];
+            await prisma.chapterBeat.upsert({
+              where: { novelId_chapterOrder_beatOrder: { novelId, chapterOrder: order, beatOrder: i + 1 } },
+              create: {
+                novelId, chapterOrder: order, beatOrder: i + 1,
+                type: beat.type || "transition",
+                goal: beat.goal || "",
+                wordTarget: beat.wordTarget || 300,
+                mustInclude: JSON.stringify(beat.mustInclude || []),
+                mustAvoid: JSON.stringify(beat.mustAvoid || []),
+              },
+              update: {
+                type: beat.type || "transition",
+                goal: beat.goal || "",
+                wordTarget: beat.wordTarget || 300,
+                mustInclude: JSON.stringify(beat.mustInclude || []),
+                mustAvoid: JSON.stringify(beat.mustAvoid || []),
+              },
+            }).catch(() => {});
+          }
+
+          // 构建 Beat 蓝图文本（包含 mustInclude 和 mustAvoid）
+          const beatLines = beats.map((b: any, i: number) => {
+            let line = `Beat ${i + 1} [${b.type}] ${b.wordTarget || 300}字：${b.goal}`;
+            if (b.mustInclude && b.mustInclude.length > 0) {
+              line += `\n  必须包含：${b.mustInclude.join("、")}`;
+            }
+            if (b.mustAvoid && b.mustAvoid.length > 0) {
+              line += `\n  必须避免：${b.mustAvoid.join("、")}`;
+            }
+            return line;
+          });
+          beatBlueprint = `\n\n【节奏蓝图 — 按以下 Beat 顺序写作】\n${beatLines.join("\n")}\n\n每个 Beat 之间用空行分隔。每个 Beat 必须有信息增量，禁止水字数。`;
+        }
+      } catch (e) {
+        console.warn(`[writingPhase] Beat 蓝图生成失败，跳过:`, e);
+      }
+
+      // 加载爽点链推进要求
+      let payoffChainHint = "";
+      try {
+        const { getActivePayoffStages } = await import("./payoffChainPhase");
+        const activeStages = await getActivePayoffStages(novelId, order);
+        if (activeStages.length > 0) {
+          const stageLines = activeStages.map(s =>
+            `「${s.chainName}」→ 本章应推进到：${s.stage.event}（第${s.stage.chapter}章）`
+          );
+          payoffChainHint = `\n\n【爽点链推进 — 必须在正文中体现】\n${stageLines.join("\n")}\n→ 正文中必须包含上述爽点的具体释放场景，不能跳过。`;
+        }
+      } catch (e) {
+        console.warn(`[writingPhase] 爽点链加载失败，跳过:`, e);
+      }
+
+      // 合并 beatBlueprint + payoffChainHint
+      const fullBeatBlueprint = beatBlueprint + payoffChainHint;
+
       // 构建人物约束（知识边界 + 人设 + 言语风格 + 关系状态）
       const { buildCharacterConstraints } = await import("./characterConstraints");
       const characterConstraints = await buildCharacterConstraints(novelId, order).catch((e) => {
@@ -316,6 +505,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
         compactContext,
         targetWordCount,
         characterConstraints,
+        beatBlueprint: fullBeatBlueprint,
       });
 
       let retryCount = 0;
@@ -338,6 +528,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
           compactContext,
           targetWordCount,
           characterConstraints,
+          beatBlueprint: fullBeatBlueprint,
           retryHint: qualityResult.retryHint,
         });
         qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
@@ -469,35 +660,26 @@ async function generateChapterDraft(ctx: PhaseContext, input: {
   targetWordCount: number;
   retryHint?: string;
   characterConstraints?: string;
+  beatBlueprint?: string;
 }) {
-  const { WRITING_SYSTEM_PROMPT } = await import("./writingRules");
-  const system = WRITING_SYSTEM_PROMPT;
+  // 使用 P0-P3 优先级 Prompt 架构 + Beat 蓝图
+  const system = input.compactContext + (input.beatBlueprint || "");
 
   const retrySection = input.retryHint
     ? `\n【重试修正要求 — 必须严格遵守】\n上一版存在以下问题，请务必修正：\n${input.retryHint}\n`
     : "";
 
-  const characterSection = input.characterConstraints
-    ? `\n${input.characterConstraints}\n`
-    : "";
+  const prompt = `请根据以上约束，写出第${input.order}章的完整内容。
 
-  const prompt = `请为「${input.novel.title}」写第${input.order}章的完整正文。
+目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.8)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
 
-${input.compactContext}
-${characterSection}
-【写作要求】
+写作要求：
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
-2. 目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.8)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
-3. 场景转换用空行分隔，不要用「场景一」「场景二」这样的标记
-4. 对话用引号「」标注，不要用 ""
-5. 第一章必须在前 300 字内建立冲突或悬念，不要用风景描写开头
-6. 每段不超过 4 行，保持阅读节奏
-7. 必须使用第三人称视角（他/她/角色名），禁止使用「我」「我们」
-8. ⚠️ 必须严格遵守【人物约束】中的所有规则：
-   - 角色不能做"绝不会做"的事
-   - 角色不能知道他们"不应该知道"的信息
-   - 言语风格必须符合设定
-   - 角色关系必须符合当前章节状态
+2. 场景转换用空行分隔，不要用「场景一」「场景二」这样的标记
+3. 对话用引号「」标注，不要用 ""
+4. 第一章必须在前 300 字内建立冲突或悬念，不要用风景描写开头
+5. 每段不超过 4 行，保持阅读节奏
+6. 必须使用第三人称视角（他/她/角色名），禁止使用「我」「我们」
 ${retrySection}
 请开始写作：`;
 

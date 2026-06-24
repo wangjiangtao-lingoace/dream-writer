@@ -49,6 +49,11 @@ const novelUpdateSchema = z.object({
   volumeCount: z.number().int().min(1).max(100).nullable().optional(),
   chaptersPerVol: z.number().int().min(1).max(200).nullable().optional(),
   status: z.string().trim().min(1).optional(),
+  // 7 层 Prompt 架构新增字段
+  coreSellingPoint: z.string().nullable().optional(),
+  corePayoffs: z.string().nullable().optional(),
+  coreConflict: z.string().nullable().optional(),
+  readerExpectations: z.string().nullable().optional(),
 });
 
 const chapterCreateSchema = z.object({

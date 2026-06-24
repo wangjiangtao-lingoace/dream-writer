@@ -97,7 +97,7 @@ const ChapterSidebar: React.FC<ChapterSidebarProps> = ({ chapters, activeChapter
                   marginBottom: "0.25rem",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.375rem" }}>
-                    <span>{String(ch.order).padStart(3, "0")} {ch.title}</span>
+                    <span>{ch.title.match(/^第[一二三四五六七八九十百千万\d]+章/) ? ch.title : `${String(ch.order).padStart(3, "0")} ${ch.title}`}</span>
                     <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.75rem" }}>{ch.wordCount > 0 ? `${(ch.wordCount / 1000).toFixed(1)}k` : "未写"}</span>
                   </div>
                   <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>

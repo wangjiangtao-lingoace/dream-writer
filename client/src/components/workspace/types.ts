@@ -66,8 +66,20 @@ export interface ChapterWithVolume {
 export interface WorkspaceData {
   novel: { title: string; targetWordCount: number };
   chapters: ChapterWithVolume[];
-  characters: Array<{ id: string; name: string; role: string; identity?: string; arcSummary?: string }>;
-  foreshadows: Array<{ id: string; title: string; description?: string; status: string; plantChapter?: number; payoffChapter?: number }>;
+  characters: Array<{
+    id: string; name: string; role: string;
+    identity?: string; motivation?: string; appearance?: string;
+    background?: string; relationsText?: string; notes?: string;
+    arcSummary?: string; arcDetail?: string; speechStyle?: string;
+    powerLevel?: string; firstAppear?: number | null; lastAppear?: number | null;
+    appearanceCount?: number | null;
+  }>;
+  worldviews?: Array<{
+    id: string; name: string; summary?: string;
+    rules?: string; powerSystem?: string; geography?: string;
+    factions?: string; history?: string; culture?: string; customNotes?: string;
+  }>;
+  foreshadows: Array<{ id: string; title: string; description?: string; status: string; plantChapter?: number | null; payoffChapter?: number | null }>;
   storyState: {
     currentEmotion: string;
     emotionIntensity: number;
@@ -86,6 +98,13 @@ export interface RadarScores {
 }
 
 export interface AIReview {
-  score: number;
-  suggestions: string[];
+  overallScore: number;
+  dimensions: { hook: number; plot: number; character: number; writing: number; excitement: number };
+  comment: string;
+  suggestions: Array<{ type: string; severity: string; description: string; suggestion: string }>;
+  readerFeedback: Array<{ readerType: string; score: number; comment: string }>;
+  commercialPotential: string;
+  strengths: string[];
+  weaknesses: string[];
+  generatedAt?: string;
 }
