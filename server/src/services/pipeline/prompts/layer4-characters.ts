@@ -5,6 +5,8 @@
  * 重点是行为规则，不是人物传记。
  */
 
+import { formatJsonArray } from "../promptFormatters";
+
 interface CharacterInfo {
   name: string;
   role?: string;
@@ -13,6 +15,13 @@ interface CharacterInfo {
   motivation?: string;
   speechStyle?: string;
   notes?: string;  // JSON string with canDo/cannotDo
+  // v3.0 新增字段
+  behaviorRules?: string;      // JSON array string
+  forbiddenBehavior?: string;  // JSON array string
+  signatureLines?: string;     // JSON array string
+  signatureScenes?: string;    // JSON array string
+  comedyMechanisms?: string;   // JSON array string
+  emotionalHooks?: string;     // JSON array string
 }
 
 interface CharacterNotes {
@@ -48,6 +57,42 @@ export function buildLayer4Characters(characters: CharacterInfo[]): string {
     // 绝不会（从 notes 中提取）
     if (notes.cannotDo && notes.cannotDo.length > 0) {
       parts.push(`绝不会：${notes.cannotDo.join('、')}`);
+    }
+
+    // 行为规则
+    const behaviorRules = formatJsonArray(char.behaviorRules);
+    if (behaviorRules) {
+      parts.push(`行为规则：${behaviorRules}`);
+    }
+
+    // 禁止行为
+    const forbiddenBehavior = formatJsonArray(char.forbiddenBehavior);
+    if (forbiddenBehavior) {
+      parts.push(`禁止行为：${forbiddenBehavior}`);
+    }
+
+    // 标志台词
+    const signatureLines = formatJsonArray(char.signatureLines);
+    if (signatureLines) {
+      parts.push(`标志台词：${signatureLines}`);
+    }
+
+    // 标志场景
+    const signatureScenes = formatJsonArray(char.signatureScenes);
+    if (signatureScenes) {
+      parts.push(`标志场景：${signatureScenes}`);
+    }
+
+    // 喜剧机制
+    const comedyMechanisms = formatJsonArray(char.comedyMechanisms);
+    if (comedyMechanisms) {
+      parts.push(`喜剧机制：${comedyMechanisms}`);
+    }
+
+    // 情绪触发点
+    const emotionalHooks = formatJsonArray(char.emotionalHooks);
+    if (emotionalHooks) {
+      parts.push(`情绪触发点：${emotionalHooks}`);
     }
 
     // 说话风格

@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext } from "./pipelineUtils";
 import { generatePayoffChains } from "./generators";
+import { loadMaterialContextForNovel } from "./materialContext";
 
 /**
  * 爽点链生成阶段：在卷纲生成后、章纲生成前运行
@@ -36,7 +37,8 @@ export async function executePayoffChainPhase(
   }
 
   // 生成爽点链
-  const chainResult = await generatePayoffChains(ctx, novelId, outlineResult, volumeResult, config);
+  const materialContext = await loadMaterialContextForNovel(novelId, jobId).catch(() => "");
+  const chainResult = await generatePayoffChains(ctx, novelId, outlineResult, volumeResult, config, materialContext);
 
   if (!chainResult?.payoffChains?.length) {
     console.warn("[payoffChain] 爽点链生成失败或为空");

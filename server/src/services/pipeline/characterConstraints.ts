@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "../../db/prisma";
+import { formatJsonArray } from "./promptFormatters";
 
 /**
  * 核心函数：构建角色约束文本（注入到写作 prompt 中）
@@ -44,6 +45,41 @@ export async function buildCharacterConstraints(
     // 2. 言语风格
     if (char.speechStyle) {
       sections.push(`言语风格：${char.speechStyle}`);
+    }
+
+    // 2.1 核心性格
+    if (char.personality) {
+      sections.push(`核心性格：${char.personality}`);
+    }
+
+    // 2.2 行为规则
+    if (char.behaviorRules) {
+      sections.push(`行为规则：${formatJsonArray(char.behaviorRules)}`);
+    }
+
+    // 2.3 禁止行为
+    if (char.forbiddenBehavior) {
+      sections.push(`禁止行为：${formatJsonArray(char.forbiddenBehavior)}`);
+    }
+
+    // 2.4 标志台词
+    if (char.signatureLines) {
+      sections.push(`标志台词：${formatJsonArray(char.signatureLines)}`);
+    }
+
+    // 2.5 标志场景
+    if (char.signatureScenes) {
+      sections.push(`标志场景：${formatJsonArray(char.signatureScenes)}`);
+    }
+
+    // 2.6 喜剧机制
+    if (char.comedyMechanisms) {
+      sections.push(`喜剧机制：${formatJsonArray(char.comedyMechanisms)}`);
+    }
+
+    // 2.7 情绪触发点
+    if (char.emotionalHooks) {
+      sections.push(`情绪触发点：${formatJsonArray(char.emotionalHooks)}`);
     }
 
     // 3. 动机与行为模式

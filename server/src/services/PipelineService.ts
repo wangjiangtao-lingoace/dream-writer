@@ -13,6 +13,7 @@ import { executeWritingPhase } from "./pipeline/writingPhase";
 import { executeStyleAnalysisPhase } from "./pipeline/styleAnalysisPhase";
 import { executeVolumesPhase, executeChapterOutlinePhase } from "./pipeline/legacyPhase";
 import { generateOutline, generateWorldview, generateCharacters, generateStyle, generateVolumeOutline, generateChapterOutlines, generateMainlinesAndHooks, generateEnrichedChapterOutlines, generateStoryArcs, generateConsistencyCheck } from "./pipeline/generators";
+import { loadMaterialContextForNovel } from "./pipeline/materialContext";
 
 export interface PipelineConfig {
   volumeCount?: number;
@@ -167,14 +168,22 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
 
   // 确认阶段结果
   async confirmPhase(jobId: string, phase: string, step: string, feedback?: string) {
-    const result = await prisma.phaseResult.update({
-      where: { jobId_phase_step: { jobId, phase, step } },
-      data: {
-        status: "confirmed",
-        confirmedByUser: true,
-        userFeedback: feedback,
-      },
-    });
+    let result;
+    try {
+      result = await prisma.phaseResult.update({
+        where: { jobId_phase_step: { jobId, phase, step } },
+        data: {
+          status: "confirmed",
+          confirmedByUser: true,
+          userFeedback: feedback,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === "P2025" || String(error?.message || "").includes("No record was found")) {
+        throw new Error(`阶段结果不存在：${phase}/${step}`);
+      }
+      throw error;
+    }
 
     const allResults = await prisma.phaseResult.findMany({
       where: { jobId, phase },
@@ -524,7 +533,8 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const volWv = volWvRes ? parseLlmJson(volWvRes.output) || {} : {};
         const volChar = volCharRes ? parseLlmJson(volCharRes.output) || {} : {};
         const volStyle = volStyleRes ? parseLlmJson(volStyleRes.output) || {} : {};
-        output = await generateVolumeOutline(ctx, job.novelId, outline, volWv, volChar, volStyle, config);
+        const volMaterialContext = await loadMaterialContextForNovel(job.novelId, jobId);
+        output = await generateVolumeOutline(ctx, job.novelId, outline, volWv, volChar, volStyle, config, undefined, userHint, volMaterialContext);
         break;
       }
       case "chapter_outline": {
@@ -572,7 +582,13 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const v2Wv = v2WvRes ? parseLlmJson(v2WvRes.output) || {} : {};
         const v2Char = v2CharRes ? parseLlmJson(v2CharRes.output) || {} : {};
         const v2Style = v2StyleRes ? parseLlmJson(v2StyleRes.output) || {} : {};
-        output = await generateVolumeOutline(ctx, job.novelId, outline, v2Wv, v2Char, v2Style, config);
+        const v2MaterialContext = await loadMaterialContextForNovel(job.novelId, jobId);
+        // 素材有整体规划时，删除旧卷重新生成
+        if (v2MaterialContext.includes("整体规划")) {
+          await prisma.chapterOutline.deleteMany({ where: { novelId: job.novelId } });
+          await prisma.volume.deleteMany({ where: { novelId: job.novelId } });
+        }
+        output = await generateVolumeOutline(ctx, job.novelId, outline, v2Wv, v2Char, v2Style, config, undefined, userHint, v2MaterialContext);
         await _persistGeneratedAssets(job.novelId, "volume", output);
         break;
       }

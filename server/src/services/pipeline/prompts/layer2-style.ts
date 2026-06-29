@@ -23,6 +23,8 @@ interface StyleInfo {
   chapterOpeningStyle?: string;
   chapterEndingStyle?: string;
   dialogueStyle?: string;
+  humorStyle?: string;
+  contrastPatterns?: string[];
   narrativePov?: string;
   tense?: string;
   sentenceLength?: string;
@@ -226,6 +228,7 @@ ${style.references ? `参考作品：${style.references}` : ''}
   if (style.dialogueRatio) styleDims.push(`对话比例：${style.dialogueRatio}`);
   if (style.emotionIntensity) styleDims.push(`情感强度：${style.emotionIntensity}`);
   if (style.humorLevel && style.humorLevel !== 'none') styleDims.push(`幽默程度：${style.humorLevel}`);
+  if (style.humorStyle) styleDims.push(`搞笑风格：${style.humorStyle}`);
   if (style.chapterOpeningStyle) styleDims.push(`开篇：${style.chapterOpeningStyle}`);
   if (style.chapterEndingStyle) styleDims.push(`收尾：${style.chapterEndingStyle}`);
   if (style.dialogueStyle) styleDims.push(`对话风格：${style.dialogueStyle}`);
@@ -234,6 +237,12 @@ ${style.references ? `参考作品：${style.references}` : ''}
   if (styleDims.length > 0) {
     parts.push(`【风格维度】
 ${styleDims.join('\n')}`);
+  }
+
+  // 反差模式（喜剧核心）
+  if (style.contrastPatterns && style.contrastPatterns.length > 0) {
+    parts.push(`【反差/喜剧模式】
+${style.contrastPatterns.map(c => `- ${c}`).join('\n')}`);
   }
 
   // 写作重点

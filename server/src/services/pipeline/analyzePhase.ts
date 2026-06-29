@@ -4,6 +4,11 @@ import { getRagRetrieveService } from "../RagRetrieveService";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext } from "./pipelineUtils";
 import { generateOutline, generateOutlineFromStructured } from "./generators";
+import { executeCanonicalImport } from "./canonicalImport";
+import { mapMaterialSections } from "../material/MaterialAssetMapper";
+import { buildMaterialCoverageReport } from "../material/MaterialCoverageReport";
+import { importMaterialAssets } from "../material/MaterialImportService";
+import { parseMaterialSections, MaterialSection } from "../material/MaterialSectionParser";
 
 export async function executeAnalyzePhase(
   ctx: PhaseContext,
@@ -13,11 +18,25 @@ export async function executeAnalyzePhase(
 ) {
   const novel = await prisma.novel.findUnique({ where: { id: novelId } });
   if (!novel) throw new Error("作品不存在");
+  const materialSections = await importMaterialFromInspiration(ctx, jobId, novelId, novel.inspiration || "");
 
   // 结构化输入模式：跳过分析和拆解，直接从 DB 加载数据生成大纲
   if (config.inputMode === "structured") {
     await executeStructuredAnalyzePhase(ctx, jobId, novelId, novel, config);
     return;
+  }
+
+  // v3.0: 检测用户输入中的完整章节，自动导入为 canonical chapters
+  if (novel.inspiration && novel.inspiration.length >= 500) {
+    const canonicalText = getCanonicalMaterialText(materialSections) || novel.inspiration;
+    const { chapters, imported, skipped } = await executeCanonicalImport(novelId, canonicalText);
+    if (chapters.length > 0) {
+      console.log(`[analyzePhase] 检测到 ${chapters.length} 个用户原文章节，导入 ${imported} 个，跳过 ${skipped} 个`);
+      // canonical 导入后（或已存在），跳过后续的拆解流程，直接生成大纲
+      const lastCanonicalOrder = Math.max(...chapters.map(c => c.sortOrder));
+      await generateOutlineFromCanonicalChapters(ctx, jobId, novelId, novel, chapters, lastCanonicalOrder);
+      return;
+    }
   }
 
   const sourceType = config.sourceType || "idea";
@@ -89,6 +108,28 @@ export async function executeAnalyzePhase(
   await ctx.savePhaseResult(jobId, "outline", "outline", { source: outlineSourceTag }, outlineResult);
   await ctx.saveToKnowledgeBase(novelId, 'outline', '故事大纲', outlineResult);
   await ctx.persistGeneratedAssets(novelId, "outline", outlineResult);
+}
+
+async function importMaterialFromInspiration(
+  ctx: PhaseContext,
+  jobId: string,
+  novelId: string,
+  inspiration: string,
+): Promise<MaterialSection[]> {
+  if (!inspiration.trim()) return [];
+  const sections = parseMaterialSections(inspiration);
+  if (sections.length === 0) return [];
+
+  const assets = mapMaterialSections(sections);
+  await importMaterialAssets(novelId, assets);
+  const report = buildMaterialCoverageReport(sections, assets);
+  await ctx.savePhaseResult(jobId, "outline", "material_import", { source: "novel.inspiration" }, report);
+  return sections;
+}
+
+function getCanonicalMaterialText(sections: MaterialSection[]): string {
+  const canonical = sections.find(section => section.type === "canonical_chapters");
+  return canonical?.content || "";
 }
 
 async function executeStructuredAnalyzePhase(
@@ -555,4 +596,78 @@ ${knowledgeContext ? `【参考资料】\n${knowledgeContext}\n` : ""}
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 2000 });
   return parseLlmJson(result) || {};
+}
+
+/**
+ * v3.0: 从 canonical chapters 生成大纲
+ * 用户已给前三章，只做结构化提取，不重新生成
+ */
+async function generateOutlineFromCanonicalChapters(
+  ctx: PhaseContext,
+  jobId: string,
+  novelId: string,
+  novel: any,
+  chapters: { title: string; content: string; sortOrder: number }[],
+  lastCanonicalOrder: number,
+) {
+  const chapterSummary = chapters
+    .map((ch) => `第${ch.sortOrder}章 ${ch.title}\n${ch.content.slice(0, 300)}...`)
+    .join("\n\n");
+
+  const system = "你是一位资深网文策划。请基于用户提供的已有章节，提取故事大纲和后续规划。";
+  const prompt = `用户已提供以下完整章节（第1-${lastCanonicalOrder}章），这些章节不可改写，只能学习和承接。
+
+【已有章节】
+${chapterSummary}
+
+要求：
+1. 从已有章节中提取核心卖点、核心爽点、核心矛盾
+2. 提取人物设定和说话风格
+3. 提取世界观规则
+4. 规划后续卷结构（从第${lastCanonicalOrder + 1}章开始）
+5. 不要重新创作已有内容
+
+请输出JSON：
+{
+  "genre": "类型",
+  "coreSellingPoint": "核心卖点",
+  "corePayoffs": ["核心爽点1", "核心爽点2"],
+  "coreConflict": "核心矛盾",
+  "readerExpectations": ["读者期待1", "读者期待2"],
+  "characters": [{"name": "", "role": "", "personality": "", "speechStyle": "", "signatureLines": []}],
+  "volumes": [{"title": "", "goal": "", "targetWordCount": 0}],
+  "outline": "整体大纲描述"
+}`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 3000 });
+  const parsed = parseLlmJson(result);
+  if (!parsed) return;
+
+  // 保存提取的资产
+  const { persistGeneratedAssets } = await import("./pipelineUtils");
+
+  if (parsed.characters?.length) {
+    await persistGeneratedAssets(novelId, "character", { characters: parsed.characters });
+  }
+  if (parsed.volumes?.length) {
+    await persistGeneratedAssets(novelId, "volume", { volumes: parsed.volumes });
+  }
+
+  // 更新 Novel 大纲信息
+  await prisma.novel.update({
+    where: { id: novelId },
+    data: {
+      genre: parsed.genre || novel.genre,
+      outline: parsed.outline || novel.outline,
+      coreSellingPoint: parsed.coreSellingPoint || novel.coreSellingPoint,
+      corePayoffs: parsed.corePayoffs ? JSON.stringify(parsed.corePayoffs) : novel.corePayoffs,
+      coreConflict: parsed.coreConflict || novel.coreConflict,
+      readerExpectations: parsed.readerExpectations ? JSON.stringify(parsed.readerExpectations) : novel.readerExpectations,
+    },
+  });
+
+  // 保存 outline phase result，供 assetsPhase 读取
+  await ctx.savePhaseResult(jobId, "outline", "outline", { source: "canonical" }, parsed);
+
+  console.log(`[analyzePhase] 从用户原文提取大纲完成，第${lastCanonicalOrder + 1}章开始续写`);
 }

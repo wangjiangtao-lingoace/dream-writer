@@ -2,7 +2,21 @@ import { prisma } from "../../db/prisma";
 import { PipelineConfig } from "../PipelineService";
 import { PhaseContext, saveToKnowledgeBase, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateEnrichedChapterOutlines, generateStoryArcs } from "./generators";
+import { loadMaterialContextForNovel } from "./materialContext";
+import { checkMaterialConsistencyFromDb } from "../material/MaterialCoverageReport";
 import { executeConsistencyCheckPhase } from "./consistencyPhase";
+
+export const CHAPTER_TITLE_STYLE_RULES = `章节标题规则：
+1. 标题必须像已发表小说目录，不得像章纲说明。
+2. 优先 2-8 个汉字，最多 12 个字。
+3. 可以口语化，但必须有画面、有情绪、有余味。
+4. 禁止使用 PPT、KPI、系统、任务、规则、金手指、爽点、打工人、绩效 等设定说明词，除非用户原文章节标题已经使用。
+5. 禁止标题直接解释本章功能，如“触发任务”“信息揭露”“首次奖励到账”。
+6. 标题风格参考用户原文：
+   - 他们当时的嘲笑声好大呀
+   - 上香
+   - 第一个任务
+7. 好标题应像一句正文里能出现的话、一个动作、一个物件、一个反常场景。`;
 
 export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
@@ -13,10 +27,25 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
 
   const config = JSON.parse(job.config) as PipelineConfig;
   const novelId = job.novelId;
-  const volumeCount = config.volumeCount || 5;
-  const chaptersPerVolume = config.chaptersPerVolume || 30;
+  let volumeCount = config.volumeCount || 5;
+  let totalChapters = volumeCount * (config.chaptersPerVolume || 30);
+  const chaptersPerVolume = Math.ceil(totalChapters / volumeCount);
 
   try {
+    const continuationStartOrder = await getContinuationStartOrder(novelId);
+    const canonicalOffset = continuationStartOrder - 1;
+    const canonicalSummary = canonicalOffset > 0
+      ? await buildCanonicalContinuationSummary(novelId, canonicalOffset)
+      : "";
+    const materialContext = await loadMaterialContextForNovel(novelId, jobId).catch(() => "");
+    // 从素材上下文中提取卷数和章数（整体规划优先于 config 默认值）
+    if (materialContext) {
+      const volMatch = materialContext.match(/总卷数[：:]\s*(\d+)\s*卷/);
+      if (volMatch) volumeCount = parseInt(volMatch[1], 10);
+      const chMatch = materialContext.match(/总章数[：:]\s*(\d+)\s*章/);
+      if (chMatch) totalChapters = parseInt(chMatch[1], 10);
+    }
+
     // 缓存检查：如果所有卷的章纲已存在，跳过重新生成
     const existingOutlines = await prisma.phaseResult.findMany({
       where: { jobId, phase: "planning", step: { startsWith: "chapter_outline_vol_" } },
@@ -48,7 +77,10 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
       await ctx.updateJobProgress(jobId, "planning", stepName);
 
       // 构建前序卷摘要
-      const previousSummary = buildPreviousVolumeSummary(allChapterOutlines, volIdx);
+      const previousSummary = [
+        volIdx === 0 ? canonicalSummary : "",
+        buildPreviousVolumeSummary(allChapterOutlines, volIdx),
+      ].filter(Boolean).join("\n\n");
 
       // 分批生成章纲，每批 10 章，避免单次 maxTokens 不足导致质量衰减
       const BATCH_SIZE = 10;
@@ -63,12 +95,27 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
           ctx, novelId, volumeResult, volIdx, outlineResult, worldviewResult,
           charactersResult, styleResult, batchHint, config, undefined,
           batchStart, batchEnd,
+          {
+            canonicalOffset,
+            materialContext,
+            titleStyleRules: CHAPTER_TITLE_STYLE_RULES,
+            chapterRangeDescription: buildChapterRangeDescription(
+              volIdx,
+              batchStart,
+              batchEnd,
+              canonicalOffset,
+              chaptersPerVolume,
+            ),
+          },
         );
         allChapters.push(...(batchResult?.chapters || []));
       }
 
       const chapters = allChapters;
-      await persistVolumeChapterData(novelId, volIdx, chapters, volumeResult);
+      await persistVolumeChapterData(novelId, volIdx, chapters, volumeResult, {
+        canonicalOffset,
+        chaptersPerVolume,
+      });
 
       allChapterOutlines.chapterOutlines.push({
         volumeIndex: volIdx,
@@ -80,6 +127,15 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
         { chapters });
     }
 
+    // 资产一致性检查（软检查，warn 但不阻断）
+    const allOutlineText = allChapterOutlines.chapterOutlines
+      .flatMap((g: any) => (g.chapters || []).map((c: any) => `${c.title || ""} ${c.goal || ""} ${c.hook || ""}`))
+      .join(" ");
+    const consistencyResult = await checkMaterialConsistencyFromDb(novelId, allOutlineText);
+    if (consistencyResult.warnings.length > 0) {
+      console.log(`[chapterOutlines] 资产一致性检查：${consistencyResult.warnings.join("；")}`);
+    }
+
     // 生成跨卷故事弧线（缓存检查）
     const existingStoryArcs = await prisma.phaseResult.findUnique({
       where: { jobId_phase_step: { jobId, phase: "planning", step: "story_arcs" } },
@@ -89,9 +145,10 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
     } else {
     await ctx.updateJobProgress(jobId, "planning", "story_arcs");
     const enrichedSummary = buildChapterSummaryForArcs(allChapterOutlines);
+    const materialContext = await loadMaterialContextForNovel(novelId, jobId).catch(() => "");
     const storyArcs = await generateStoryArcs(
       ctx, novelId, outlineResult, { chapterOutlines: allChapterOutlines.chapterOutlines, enrichedSummary }, volumeResult,
-      worldviewResult, charactersResult, styleResult, config,
+      worldviewResult, charactersResult, styleResult, config, materialContext,
     );
     await persistStoryArcs(novelId, storyArcs);
     await ctx.savePhaseResult(jobId, "planning", "story_arcs",
@@ -113,6 +170,61 @@ export async function executeChapterOutlinesPhase(ctx: PhaseContext, jobId: stri
       data: { status: "error", lastError: error.message },
     });
   }
+}
+
+export function calculateChapterOutlineStartOrder(
+  volumeIndex: number,
+  chaptersPerVolume: number,
+  canonicalOffset = 0,
+): number {
+  return canonicalOffset + volumeIndex * chaptersPerVolume + 1;
+}
+
+export function buildChapterRangeDescription(
+  volumeIndex: number,
+  batchStart: number,
+  batchEnd: number,
+  canonicalOffset = 0,
+  chaptersPerVolume = batchEnd - batchStart,
+): string {
+  const volumeNumber = volumeIndex + 1;
+  const startOrder = calculateChapterOutlineStartOrder(volumeIndex, chaptersPerVolume, canonicalOffset) + batchStart;
+  const endOrder = startOrder + (batchEnd - batchStart) - 1;
+  const canonicalNotice = canonicalOffset > 0
+    ? `前${canonicalOffset}章是用户原文，必须只承接，不得重新规划或改写。`
+    : "";
+  return `请为第${volumeNumber}卷的全书第${startOrder}到第${endOrder}章设计详细章纲。${canonicalNotice}`;
+}
+
+async function getContinuationStartOrder(novelId: string): Promise<number> {
+  const lastCanonical = await prisma.chapter.findFirst({
+    where: {
+      novelId,
+      OR: [
+        { sourceType: "user_original" },
+        { isCanonical: true },
+        { canRewrite: false },
+      ],
+    },
+    orderBy: { order: "desc" },
+    select: { order: true },
+  });
+  return (lastCanonical?.order || 0) + 1;
+}
+
+async function buildCanonicalContinuationSummary(novelId: string, canonicalOffset: number): Promise<string> {
+  const summaries = await prisma.chapterSummary.findMany({
+    where: { novelId, chapterOrder: { lte: canonicalOffset } },
+    orderBy: { chapterOrder: "asc" },
+    select: { chapterOrder: true, title: true, summary: true, endingState: true },
+  });
+  const latest = summaries[summaries.length - 1];
+  const summaryLines = summaries.map(s => `第${s.chapterOrder}章《${s.title}》：${s.summary}`).join("\n");
+  return [
+    `【用户原文章节】前${canonicalOffset}章为用户原文，禁止重写、替换或重新规划；后续章纲必须从第${canonicalOffset + 1}章开始承接。`,
+    summaryLines ? `【原文概要】\n${summaryLines}` : "",
+    latest?.endingState ? `【最近原文结尾】\n${latest.endingState}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 /**
@@ -182,17 +294,40 @@ export function buildPreviousVolumeSummary(allChapterOutlines: any, currentVolId
   return summaryParts.join("\n\n");
 }
 
-export async function persistVolumeChapterData(novelId: string, volumeIndex: number, chapters: any[], volumeResult: any) {
+export async function persistVolumeChapterData(
+  novelId: string,
+  volumeIndex: number,
+  chapters: any[],
+  volumeResult: any,
+  options: { canonicalOffset?: number; chaptersPerVolume?: number } = {},
+) {
   const volumeNumber = volumeIndex + 1;
   const volume = await prisma.volume.findFirst({
     where: { novelId, sortOrder: volumeNumber },
   });
   if (!volume) return;
 
-  const globalStart = volumeIndex * (chapters?.length || 0) + 1;
+  const globalStart = calculateChapterOutlineStartOrder(
+    volumeIndex,
+    options.chaptersPerVolume || chapters?.length || 0,
+    options.canonicalOffset || 0,
+  );
 
   for (const [chIdx, chapter] of (chapters || []).entries()) {
     const globalOrder = globalStart + chIdx;
+
+    const existingCanonical = await prisma.chapter.findUnique({
+      where: { novelId_order: { novelId, order: globalOrder } },
+      select: { sourceType: true, isCanonical: true, canRewrite: true },
+    });
+    if (
+      existingCanonical?.sourceType === "user_original" ||
+      existingCanonical?.isCanonical === true ||
+      existingCanonical?.canRewrite === false
+    ) {
+      console.warn(`[chapterOutlines] 跳过第${globalOrder}章章纲写入：该章为用户原文 canonical`);
+      continue;
+    }
 
     // 1. 创建/更新 ChapterOutline
     await prisma.chapterOutline.upsert({
@@ -213,7 +348,14 @@ export async function persistVolumeChapterData(novelId: string, volumeIndex: num
         mustNotDo: JSON.stringify(chapter.mustNotDo || []),
         foreshadowing: JSON.stringify(chapter.foreshadowPlanted || []),
         payoff: JSON.stringify(chapter.foreshadowPayoff || []),
-        pleasurePoint: chapter.pleasurePoint?.description || (typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : ""),
+        pleasurePoint: typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : JSON.stringify(chapter.pleasurePoint || {}),
+        chapterType: chapter.chapterType || "mission",
+        readerPromise: chapter.readerPromise || "",
+        chapterFunction: chapter.chapterFunction || "",
+        requiredReaderEmotion: JSON.stringify(chapter.requiredReaderEmotion || []),
+        payoffChainRefs: JSON.stringify(chapter.payoffChainRefs || []),
+        comedyMechanism: chapter.comedyMechanism || "",
+        endingQuestion: chapter.endingQuestion || "",
       },
       update: {
         volumeId: volume.id,
@@ -229,7 +371,14 @@ export async function persistVolumeChapterData(novelId: string, volumeIndex: num
         mustNotDo: JSON.stringify(chapter.mustNotDo || []),
         foreshadowing: JSON.stringify(chapter.foreshadowPlanted || []),
         payoff: JSON.stringify(chapter.foreshadowPayoff || []),
-        pleasurePoint: chapter.pleasurePoint?.description || (typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : ""),
+        pleasurePoint: typeof chapter.pleasurePoint === "string" ? chapter.pleasurePoint : JSON.stringify(chapter.pleasurePoint || {}),
+        chapterType: chapter.chapterType || "mission",
+        readerPromise: chapter.readerPromise || "",
+        chapterFunction: chapter.chapterFunction || "",
+        requiredReaderEmotion: JSON.stringify(chapter.requiredReaderEmotion || []),
+        payoffChainRefs: JSON.stringify(chapter.payoffChainRefs || []),
+        comedyMechanism: chapter.comedyMechanism || "",
+        endingQuestion: chapter.endingQuestion || "",
       },
     });
 

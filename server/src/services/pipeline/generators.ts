@@ -407,7 +407,18 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
       "narrationRatio": 0.6
     },
     "forbiddenPatterns": ["绝对禁止的写法模式，如：文青式环境渲染、哲学感悟、大段设定解释"],
-    "requiredPatterns": ["每章必须遵守的写法，如：每段必须有信息增量、对话必须推进剧情"]
+    "requiredPatterns": ["每章必须遵守的写法，如：每段必须有信息增量、对话必须推进剧情"],
+    "fixedTaste": {
+      "readerComeFor": ["读者为什么来看这本书，如：看老祖装逼被打脸", "看社畜吐槽修仙界"],
+      "comedySource": ["本书的笑点来源，如：老祖怂但嘴硬", "阴阳两界认知差"],
+      "coreContradiction": ["本书的核心矛盾反差，如：表面废物实则大佬", "阴间享福阳间打工"],
+      "signatureScenes": ["本书的标志性场景，如：老祖邀功被拆穿", "林凡社畜吐槽"]
+    },
+    "chapterRhythm": {
+      "payoffEveryN": 2,
+      "comedyEveryN": 3,
+      "upgradeEveryN": 5
+    }
   }
 }`;
 
@@ -428,10 +439,18 @@ export async function generateVolumeOutline(
   config: PipelineConfig,
   inspiration?: string,
   userHint?: string,
+  materialContext?: string,
 ): Promise<any> {
-  const volumeCount = config.volumeCount || 5;
-  const chaptersPerVolume = config.chaptersPerVolume || 30;
-  const totalChapters = volumeCount * chaptersPerVolume;
+  // 从素材上下文中提取卷数和章数（整体规划优先于 config 默认值）
+  let volumeCount = config.volumeCount || 5;
+  let totalChapters = volumeCount * (config.chaptersPerVolume || 30);
+  if (materialContext) {
+    const volMatch = materialContext.match(/总卷数[：:]\s*(\d+)\s*卷/);
+    if (volMatch) volumeCount = parseInt(volMatch[1], 10);
+    const chMatch = materialContext.match(/总章数[：:]\s*(\d+)\s*章/);
+    if (chMatch) totalChapters = parseInt(chMatch[1], 10);
+  }
+  const chaptersPerVolume = Math.ceil(totalChapters / volumeCount);
 
   const system = `你是一位资深网文结构师，擅长规划长篇小说的卷结构。
 
@@ -471,7 +490,9 @@ export async function generateVolumeOutline(
     ? characters.characters.map((c: any) => `${c.name}（${c.role || "未知"}）：${c.motivation || ""}`).join("\n")
     : typeof characters === "string" ? characters : JSON.stringify(characters, null, 2);
 
-  const prompt = `请根据以下信息，规划${volumeCount}卷的内容（共${totalChapters}章，每卷${chaptersPerVolume}章）。
+  const hasMaterialPlan = materialContext?.includes("整体规划");
+  const prompt = `请根据以下信息，规划${volumeCount}卷的内容（共${totalChapters}章，每卷约${chaptersPerVolume}章）。
+${hasMaterialPlan ? "\n【最高优先级】素材中的「整体规划」包含完整的卷章分配和逐卷内容，必须严格按照该规划的卷数、章数、卷标题、逐卷内容来生成卷纲。不得自行增减卷数或改变卷结构。\n" : ""}
 
 【用户创意/灵感】
 ${inspiration || outline?.title ? `作品：${outline?.title || "未命名"}` : "无"}
@@ -488,6 +509,7 @@ ${characterSummary}
 
 【写作风格】
 ${style?.name ? `${style.name}：${style.description || ""}` : JSON.stringify(style, null, 2)}
+${materialContext ? `\n${materialContext}` : ""}
 ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 
 请生成JSON格式的卷纲，每卷必须包含明确的目标、冲突和情绪设计：
@@ -704,6 +726,12 @@ export async function generateEnrichedChapterOutlines(
   userHint?: string,
   batchStart?: number,
   batchEnd?: number,
+  generationContext?: {
+    canonicalOffset?: number;
+    chapterRangeDescription?: string;
+    materialContext?: string;
+    titleStyleRules?: string;
+  },
 ): Promise<any> {
   const totalChaptersPerVolume = config.chaptersPerVolume || 30;
   const chaptersPerVolume = (batchStart !== undefined && batchEnd !== undefined)
@@ -750,14 +778,20 @@ export async function generateEnrichedChapterOutlines(
     ? characters.characters.map((c: any) => `${c.name}（${c.role || ""}）：身份=${c.identity || ""}，性格=${c.personality || ""}，能力=${c.abilities || ""}，动机=${c.motivation || ""}`).join("\n")
     : JSON.stringify(characters || {}, null, 2);
 
-  const chapterRangeDesc = (batchStart !== undefined && batchEnd !== undefined)
+  const chapterRangeDesc = generationContext?.chapterRangeDescription || ((batchStart !== undefined && batchEnd !== undefined)
     ? `请为第${volumeNumber}卷的第${batchStart + 1}到第${batchEnd}章设计详细章纲。`
-    : `请为第${volumeNumber}卷设计${chaptersPerVolume}章的详细章纲。`;
+    : `请为第${volumeNumber}卷设计${chaptersPerVolume}章的详细章纲。`);
+  const canonicalNotice = generationContext?.canonicalOffset
+    ? `\n【续写硬约束】\n前${generationContext.canonicalOffset}章是用户原文 canonical 内容，禁止重新规划、替换或改写。你只需要生成从全书第${generationContext.canonicalOffset + 1}章开始的后续章纲，并且第一章必须承接用户原文最后一章结尾。`
+    : "";
 
   const prompt = `${chapterRangeDesc}
+${canonicalNotice}
 
 【故事大纲】
 ${typeof outline === "string" ? outline : JSON.stringify(outline, null, 2)}
+
+${generationContext?.materialContext ? `${generationContext.materialContext}\n` : ""}
 
 【第${volumeNumber}卷卷纲】
 ${JSON.stringify(volume, null, 2)}
@@ -770,6 +804,7 @@ ${characterProfiles}
 
 【风格约束】
 ${style?.name ? `${style.name}：${style.description || ""}` : JSON.stringify(style || {}, null, 2)}
+${generationContext?.titleStyleRules ? `\n【章节标题风格硬约束】\n${generationContext.titleStyleRules}` : ""}
 ${previousSummary ? `\n【前序卷章纲摘要】\n${previousSummary}` : ""}
 ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 
@@ -836,6 +871,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - transition：过渡章（承上启下，铺垫下一阶段）
 
 注意：
+- title 必须遵守【章节标题风格硬约束】，不得写成章纲功能名或设定说明
 - scene 必须是世界观中已设定的具体地点，不能模糊写"某处"
 - pov 必须是人物档案中的角色名
 - targetWordCount 根据章节重要性分配：开篇/高潮/转折章 4000-5000，普通推进章 2000-3000
@@ -861,6 +897,7 @@ export async function generateStoryArcs(
   characters: any,
   style: any,
   config: PipelineConfig,
+  materialContext?: string,
 ): Promise<any> {
   // 优先使用 enrichedSummary（含 conflict/emotion/characters/hooks/foreshadow），
   // 回退到原始 chapterOutlines 构建基础摘要
@@ -924,6 +961,7 @@ ${style?.name ? `${style.name}：${style.description || ""}\n基调：${style.to
 
 ${plantedHookTitles.length > 0 ? `【章纲中已埋的钩子（供交叉引用，避免重复）】\n${plantedHookTitles.join("、")}\n` : ""}
 ${plantedForeshadowTitles.length > 0 ? `【章纲中已埋的伏笔（供交叉引用）】\n${plantedForeshadowTitles.join("、")}\n` : ""}
+${materialContext ? `\n${materialContext}\n` : ""}
 
 请生成JSON格式的故事弧线：
 {
@@ -1126,7 +1164,12 @@ ${dnaHint}
       "goal": "本Beat的具体目标（必须可执行，写手据此能写出完整段落）",
       "wordTarget": 300,
       "mustInclude": ["必须包含的元素1", "必须包含的元素2"],
-      "mustAvoid": ["必须避免的元素1", "必须避免的元素2"]
+      "mustAvoid": ["必须避免的元素1", "必须避免的元素2"],
+      "visibleAction": "可见动作：角色在做什么（具体的身体动作/行为，不是内心独白）",
+      "opposition": "阻碍力量：谁或什么在阻止角色达成目标",
+      "turningMoment": "转折时刻：本Beat的关键转折点是什么（一句话描述）",
+      "resultState": "结果状态：Beat结束时角色/局势变成了什么状态",
+      "emotionTarget": "目标情绪：读者读完本Beat应感受到的情绪（如：紧张、心疼、爽快、好奇）"
     }
   ]
 }
@@ -1154,6 +1197,7 @@ export async function generatePayoffChains(
   outline: any,
   volumes: any,
   config: PipelineConfig,
+  materialContext?: string,
 ): Promise<any> {
   const totalChapters = (config.volumeCount || 5) * (config.chaptersPerVolume || 30);
 
@@ -1190,6 +1234,7 @@ ${outlineBrief}
 ${volumeBrief}
 
 【总章数】${totalChapters}章
+${materialContext ? `\n${materialContext}\n` : ""}
 
 请生成JSON格式的爽点链：
 {

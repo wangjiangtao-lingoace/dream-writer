@@ -6,6 +6,7 @@
 import { PhaseContext } from "./pipelineUtils";
 import { detectAiSmell, checkWordCount, QUALITY_THRESHOLDS } from "./writingRules";
 import { prisma } from "../../db/prisma";
+import { parseLlmJson } from "../../utils/parseJson";
 
 // 主题偏离检测：不同 genre 禁止出现的关键词
 const GENRE_FORBIDDEN_WORDS: Record<string, string[]> = {
@@ -35,7 +36,7 @@ export interface QualityScores {
 }
 
 export interface QualityIssue {
-  type: "ai_smell" | "word_count" | "genre_deviation" | "continuity";
+  type: "ai_smell" | "word_count" | "genre_deviation" | "continuity" | "narrative_quality";
   severity: "low" | "medium" | "high" | "critical";
   description: string;
 }
@@ -46,10 +47,24 @@ export interface QualityResult {
   issues: QualityIssue[];
   shouldRetry: boolean;
   retryHint?: string;
+  narrativeQuality?: NarrativeQualityResult;
+}
+
+export interface NarrativeQualityResult {
+  overallScore: number;         // 1-10
+  sceneConcrete: number;        // 1-10 场景具体度
+  readerPromiseFulfilled: number; // 1-10 读者承诺兑现
+  payoffVisible: number;        // 1-10 爽点可见度
+  comedyEffective: number;      // 1-10 喜剧效果
+  characterVoice: number;       // 1-10 人物声音区分度
+  emotionCurve: number;         // 1-10 情绪曲线
+  stateChanged: number;         // 1-10 状态变化
+  summaryInsteadOfScene: boolean; // 是否用概述代替了场景
+  issues: string[];
 }
 
 /**
- * 单章质量后验：纯程序检测，无 LLM 调用
+ * 单章质量后验：程序检测 + 条件 LLM 叙事质量检测
  */
 export async function validateChapterQuality(
   ctx: PhaseContext,
@@ -58,6 +73,7 @@ export async function validateChapterQuality(
   content: string,
   targetWordCount: number,
   chapterOutline: any,
+  options?: { isKeyChapter?: boolean; retryCount?: number },
 ): Promise<QualityResult> {
   const issues: QualityIssue[] = [];
 
@@ -101,7 +117,7 @@ export async function validateChapterQuality(
     });
   }
 
-  // 综合判定（无 LLM）
+  // 综合判定（程序检测）
   const scores: QualityScores = {
     aiSmell: aiSmellResult.percentage,
     wordCount: wordCountResult.compliant ? 10 : Math.round(wordCountResult.ratio * 10),
@@ -109,16 +125,57 @@ export async function validateChapterQuality(
     continuity: continuityResult.score,
   };
 
-  const shouldRetry =
+  const programShouldRetry =
     aiSmellResult.percentage > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT ||
     !wordCountResult.compliant ||
     genreResult.deviationScore >= 3 ||
     continuityResult.score < 5;
 
+  // 条件启用 LLM 叙事质量检测
+  let narrativeQuality: NarrativeQualityResult | undefined;
+  const hasWarnings = issues.some(i => i.severity === "high" || i.severity === "critical");
+  const retryCount = options?.retryCount || 0;
+  const shouldRunNarrativeLLM =
+    options?.isKeyChapter ||
+    scores.wordCount < 8 ||
+    scores.continuity < 7 ||
+    scores.genreDeviation > 0 ||
+    hasWarnings ||
+    retryCount > 0;
+
+  if (shouldRunNarrativeLLM) {
+    try {
+      narrativeQuality = await runNarrativeQualityCheck(ctx, content, chapterOutline, targetWordCount);
+    } catch (e) {
+      console.warn("[qualityCheck] LLM 叙事质量检测失败，跳过:", e);
+    }
+  }
+
+  // LLM 叙事检测结果参与 passed/shouldRetry 判定
+  let narrativeFailed = false;
+  if (narrativeQuality) {
+    narrativeFailed =
+      narrativeQuality.sceneConcrete < 7 ||
+      narrativeQuality.readerPromiseFulfilled < 7 ||
+      narrativeQuality.payoffVisible < 7 ||
+      narrativeQuality.characterVoice < 7 ||
+      narrativeQuality.emotionCurve < 6 ||
+      narrativeQuality.stateChanged < 7 ||
+      narrativeQuality.summaryInsteadOfScene === true;
+    if (narrativeFailed) {
+      issues.push({
+        type: "narrative_quality" as any,
+        severity: "high",
+        description: `叙事质量不合格：${narrativeQuality.issues.join("；") || "场景、爽点或人物口吻不足"}`,
+      });
+    }
+  }
+
+  const shouldRetry = programShouldRetry || narrativeFailed;
   const passed = issues.length === 0;
   const retryHint = shouldRetry ? issues.map((i) => i.description).join("；") : undefined;
 
-  return { passed, scores, issues, shouldRetry, retryHint };
+  return { passed, scores, issues, shouldRetry, retryHint, narrativeQuality };
 }
 
 /**
@@ -171,8 +228,8 @@ async function detectContinuityIssues(novelId: string, chapterOrder: number, con
       const currBeginning = content.slice(0, 300);
 
       // 检查是否有共同的关键词（简单的文本相似度）
-      const prevWords = new Set(prevEnding.match(/[一-龥]{2,}/g) || []);
-      const currWords = new Set(currBeginning.match(/[一-龥]{2,}/g) || []);
+      const prevWords = new Set<string>(prevEnding.match(/[一-龥]{2,}/g) || []);
+      const currWords = new Set<string>(currBeginning.match(/[一-龥]{2,}/g) || []);
 
       let commonWords = 0;
       for (const word of prevWords) {
@@ -237,4 +294,77 @@ async function detectGenreDeviation(novelId: string, content: string): Promise<{
   else if (matchCount >= 1) deviationScore = 1;
 
   return { genre, matchCount, matchedWords, deviationScore };
+}
+
+/**
+ * LLM 叙事质量检测（条件调用）
+ * 仅对关键章/风险章/重试章启用
+ */
+async function runNarrativeQualityCheck(
+  ctx: PhaseContext,
+  content: string,
+  chapterOutline: any,
+  targetWordCount: number,
+): Promise<NarrativeQualityResult> {
+  const system = `你是一位严苛的网文质量审读编辑。你的任务是评估章节的叙事质量，而不是文学质量。
+评分标准必须严格，不能放水：
+- 7分以上 = 合格，可以发布
+- 5-6分 = 勉强，需要修改
+- 5分以下 = 不合格，必须重写
+大多数 AI 生成的章节在 4-6 分之间，真正好的章节才能到 7+ 分。`;
+
+  const contentExcerpt = content.length > 6000
+    ? content.slice(0, 3000) + "\n...(中段省略)...\n" + content.slice(-3000)
+    : content;
+
+  const prompt = `请严格评估以下章节的叙事质量。
+
+【章节大纲】
+${JSON.stringify(chapterOutline || {}, null, 2)}
+
+【目标字数】${targetWordCount}
+
+【章节正文】
+${contentExcerpt}
+
+请逐项评分（1-10分），必须诚实打分：
+
+1. sceneConcrete（场景具体度）：场景是否具体可感？是否有空间/物件/动作细节？还是泛泛而谈？
+2. readerPromiseFulfilled（读者承诺兑现）：章纲承诺给读者的体验是否兑现了？如"爽""紧张""搞笑"是否真的做到了？
+3. payoffVisible（爽点可见度）：爽点是否清晰可感？还是模糊不清、一笔带过？
+4. comedyEffective（喜剧效果）：如果需要搞笑，是否真的好笑？是否只是硬凑笑点？
+5. characterVoice（人物声音区分度）：不同角色的说话方式是否有区别？还是千人一面？
+6. emotionCurve（情绪曲线）：是否有情绪起伏？还是全程平铺直叙？
+7. stateChanged（状态变化）：章节结束时，角色/局势是否发生了可感知的变化？
+8. summaryInsteadOfScene（是否概述代替场景）：是否用"几天后""他做了XX"的概述代替了具体场景？
+
+请返回JSON：
+{
+  "overallScore": 5,
+  "sceneConcrete": 5,
+  "readerPromiseFulfilled": 5,
+  "payoffVisible": 5,
+  "comedyEffective": 5,
+  "characterVoice": 5,
+  "emotionCurve": 5,
+  "stateChanged": 5,
+  "summaryInsteadOfScene": false,
+  "issues": ["具体问题1", "具体问题2"]
+}`;
+
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.3, maxTokens: 1500 });
+  const parsed = parseLlmJson(result) || {};
+
+  return {
+    overallScore: Number(parsed.overallScore) || 5,
+    sceneConcrete: Number(parsed.sceneConcrete) || 5,
+    readerPromiseFulfilled: Number(parsed.readerPromiseFulfilled) || 5,
+    payoffVisible: Number(parsed.payoffVisible) || 5,
+    comedyEffective: Number(parsed.comedyEffective) || 5,
+    characterVoice: Number(parsed.characterVoice) || 5,
+    emotionCurve: Number(parsed.emotionCurve) || 5,
+    stateChanged: Number(parsed.stateChanged) || 5,
+    summaryInsteadOfScene: !!parsed.summaryInsteadOfScene,
+    issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+  };
 }

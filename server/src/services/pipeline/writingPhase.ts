@@ -20,72 +20,69 @@ function generateBeatTemplate(chapterType: string, targetWordCount: number, outl
   const goal = outline.goal || "推进剧情";
   const conflict = outline.conflict || "核心冲突";
 
-  // 模板库：每种 chapterType 对应的 Beat 序列
+  // 场景动作模型字段
+  const sa = {
+    visibleAction: "", opposition: "", turningMoment: "", resultState: "", emotionTarget: "",
+  };
+
+  // 模板库：每种 chapterType 对应的 Beat 序列（含场景动作模型）
   const templates: Record<string, any[]> = {
-    // 任务触发章：开启新任务/新目标
     task_trigger: [
-      { type: "hook", wordTarget: 300, goal: "用意外事件或新信息制造好奇", mustInclude: [], mustAvoid: ["不要直接说出任务内容"] },
-      { type: "reveal", wordTarget: 400, goal: `揭示任务内容：${goal}`, mustInclude: ["任务的具体要求"], mustAvoid: ["不要用系统提示代替场景"] },
-      { type: "dialogue", wordTarget: 400, goal: "通过对话讨论任务的难度和意义", mustInclude: ["角色对任务的反应"], mustAvoid: ["不要变成旁白解说"] },
-      { type: "conflict", wordTarget: 400, goal: "展示任务的阻碍或代价", mustInclude: ["具体的困难"], mustAvoid: ["不要一笔带过"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["悬念问题"], mustAvoid: ["不要提前解答"] },
+      { type: "hook", wordTarget: 300, goal: "用意外事件或新信息制造好奇", ...sa, visibleAction: "角色发现异常信号或收到意外消息", opposition: "信息不足，无法判断真伪", turningMoment: "角色决定深入调查", resultState: "好奇心被激发，开始行动", emotionTarget: "好奇、紧张", mustInclude: [], mustAvoid: ["不要直接说出任务内容"] },
+      { type: "reveal", wordTarget: 400, goal: `揭示任务内容：${goal}`, ...sa, visibleAction: "角色通过具体场景了解到任务详情", opposition: "任务难度超出预期", turningMoment: "任务的真实要求被揭露", resultState: "角色明确了目标和代价", emotionTarget: "震惊、跃跃欲试", mustInclude: ["任务的具体要求"], mustAvoid: ["不要用系统提示代替场景"] },
+      { type: "dialogue", wordTarget: 400, goal: "通过对话讨论任务的难度和意义", ...sa, visibleAction: "角色之间面对面讨论", opposition: "角色之间意见分歧", turningMoment: "有人提出关键质疑", resultState: "达成初步共识或留下分歧", emotionTarget: "紧张、期待", mustInclude: ["角色对任务的反应"], mustAvoid: ["不要变成旁白解说"] },
+      { type: "conflict", wordTarget: 400, goal: "展示任务的阻碍或代价", ...sa, visibleAction: "角色遭遇第一个实际阻碍", opposition: "外部环境或对手的直接阻拦", turningMoment: "角色发现阻碍比预想更大", resultState: "角色从轻视转为重视", emotionTarget: "紧张、压迫感", mustInclude: ["具体的困难"], mustAvoid: ["不要一笔带过"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "角色做出一个关键决定或发现新线索", opposition: "决定可能带来未知风险", turningMoment: "新信息改变了一切", resultState: "悬念拉满，读者想看下一章", emotionTarget: "好奇、不安", mustInclude: ["悬念问题"], mustAvoid: ["不要提前解答"] },
     ],
-    // 任务执行章：完成具体任务
     mission: [
-      { type: "hook", wordTarget: 250, goal: "回顾目标，制造紧迫感", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要重复上一章内容"] },
-      { type: "conflict", wordTarget: 500, goal: `执行过程中的冲突：${conflict}`, mustInclude: ["具体的冲突场景"], mustAvoid: ["不要跳过冲突直接成功"] },
-      { type: "dialogue", wordTarget: 400, goal: "角色之间的配合或分歧", mustInclude: ["角色互动"], mustAvoid: ["不要变成独白"] },
-      { type: "twist", wordTarget: 350, goal: "意外变数，打破计划", mustInclude: ["意外的具体表现"], mustAvoid: ["不要用巧合解释"] },
-      { type: "payoff", wordTarget: 400, goal: "克服困难，完成任务", mustInclude: ["成功的具体过程"], mustAvoid: ["不要一笔带过成功"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["新悬念"], mustAvoid: ["不要仓促结尾"] },
+      { type: "hook", wordTarget: 250, goal: "回顾目标，制造紧迫感", ...sa, visibleAction: "角色检查装备/状态，准备行动", opposition: "时间紧迫或资源不足", turningMoment: "发现情况比预想紧急", resultState: "角色进入战斗/执行状态", emotionTarget: "紧迫、紧张", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要重复上一章内容"] },
+      { type: "conflict", wordTarget: 500, goal: `执行过程中的冲突：${conflict}`, ...sa, visibleAction: "主角进入任务现场，亲自观察异常，并做出第一次试探动作", opposition: "任务对象、环境危险或信息不足阻碍主角推进", turningMoment: "主角发现事情并不像任务描述那样简单", resultState: "主角从被动执行转为主动判断", emotionTarget: "紧张、好奇", mustInclude: ["具体的冲突场景"], mustAvoid: ["不要跳过冲突直接成功"] },
+      { type: "dialogue", wordTarget: 400, goal: "角色之间的配合或分歧", ...sa, visibleAction: "角色在行动中交换信息或争论策略", opposition: "不同角色对方法有分歧", turningMoment: "一个关键信息被提出", resultState: "策略确定或矛盾加深", emotionTarget: "紧张、信任感", mustInclude: ["角色互动"], mustAvoid: ["不要变成独白"] },
+      { type: "twist", wordTarget: 350, goal: "意外变数，打破计划", ...sa, visibleAction: "意外事件突然发生，角色被迫反应", opposition: "意外超出所有预判", turningMoment: "角色被迫放弃原计划", resultState: "局势逆转，角色陷入被动", emotionTarget: "震惊、紧张", mustInclude: ["意外的具体表现"], mustAvoid: ["不要用巧合解释"] },
+      { type: "payoff", wordTarget: 400, goal: "克服困难，完成任务", ...sa, visibleAction: "角色用具体行动化解危机", opposition: "最后的抵抗或反扑", turningMoment: "角色找到关键突破口", resultState: "任务完成，角色获得回报", emotionTarget: "爽快、成就感", mustInclude: ["成功的具体过程"], mustAvoid: ["不要一笔带过成功"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "新线索或新威胁出现", opposition: "胜利背后隐藏更大危机", turningMoment: "角色发现真正的挑战才刚开始", resultState: "读者期待下一章", emotionTarget: "好奇、期待", mustInclude: ["新悬念"], mustAvoid: ["不要仓促结尾"] },
     ],
-    // 爽点兑现章：释放爽点
     payoff: [
-      { type: "pressure", wordTarget: 400, goal: "施加压力，累积读者期待", mustInclude: ["压力的具体来源"], mustAvoid: ["不要过于轻松"] },
-      { type: "reversal", wordTarget: 400, goal: "反转局势，出乎意料", mustInclude: ["反转的具体表现"], mustAvoid: ["不要用巧合解释"] },
-      { type: "payoff", wordTarget: 500, goal: "爽点释放，读者情绪高涨", mustInclude: ["爽点的具体释放场景", "旁观者的反应"], mustAvoid: ["不要只用系统提示代替场景"] },
-      { type: "emotional", wordTarget: 300, goal: "角色和旁观者的反应", mustInclude: ["角色的情绪变化"], mustAvoid: ["不要忽略配角反应"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["新的期待"], mustAvoid: ["不要破坏爽感"] },
+      { type: "pressure", wordTarget: 400, goal: "施加压力，累积读者期待", ...sa, visibleAction: "对手/环境对角色施加直接压力", opposition: "对手占据上风", turningMoment: "角色被逼到绝境", resultState: "读者期待角色反击", emotionTarget: "憋屈、期待", mustInclude: ["压力的具体来源"], mustAvoid: ["不要过于轻松"] },
+      { type: "reversal", wordTarget: 400, goal: "反转局势，出乎意料", ...sa, visibleAction: "角色亮出隐藏的底牌/能力", opposition: "对手试图阻止反转", turningMoment: "局势彻底逆转", resultState: "角色从被动转为主动", emotionTarget: "震惊、兴奋", mustInclude: ["反转的具体表现"], mustAvoid: ["不要用巧合解释"] },
+      { type: "payoff", wordTarget: 500, goal: "爽点释放，读者情绪高涨", ...sa, visibleAction: "角色用具体行动碾压对手/完成壮举", opposition: "最后的抵抗", turningMoment: "爽点爆发的关键瞬间", resultState: "旁观者震惊，角色大获全胜", emotionTarget: "爽快、解气", mustInclude: ["爽点的具体释放场景", "旁观者的反应"], mustAvoid: ["不要只用系统提示代替场景"] },
+      { type: "emotional", wordTarget: 300, goal: "角色和旁观者的反应", ...sa, visibleAction: "角色和配角做出情绪反应", opposition: "余波未平", turningMoment: "角色的真实感受流露", resultState: "情绪释放完毕，关系变化", emotionTarget: "感动、满足", mustInclude: ["角色的情绪变化"], mustAvoid: ["不要忽略配角反应"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "胜利后的新线索出现", opposition: "更大的挑战隐约浮现", turningMoment: "角色意识到这只是开始", resultState: "读者期待更多", emotionTarget: "期待、兴奋", mustInclude: ["新的期待"], mustAvoid: ["不要破坏爽感"] },
     ],
-    // 喜剧日常章：轻松搞笑
     comedy_daily: [
-      { type: "hook", wordTarget: 250, goal: "用荒诞场景开篇", mustInclude: ["搞笑的具体场景"], mustAvoid: ["不要冷场"] },
-      { type: "dialogue", wordTarget: 500, goal: "角色之间的搞笑互动", mustInclude: ["搞笑的对话"], mustAvoid: ["不要变成流水账"] },
-      { type: "reveal", wordTarget: 350, goal: "揭示日常背后的秘密或反转", mustInclude: ["反转的具体内容"], mustAvoid: ["不要过于牵强"] },
-      { type: "emotional", wordTarget: 300, goal: "温情时刻，角色关系升温", mustInclude: ["温情的具体表现"], mustAvoid: ["不要过于煽情"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["小悬念"], mustAvoid: ["不要破坏轻松氛围"] },
+      { type: "hook", wordTarget: 250, goal: "用荒诞场景开篇", ...sa, visibleAction: "角色做出荒诞的动作或遭遇荒诞事件", opposition: "荒诞事件打乱了日常", turningMoment: "荒诞升级", resultState: "角色一脸懵逼", emotionTarget: "搞笑、好奇", mustInclude: ["搞笑的具体场景"], mustAvoid: ["不要冷场"] },
+      { type: "dialogue", wordTarget: 500, goal: "角色之间的搞笑互动", ...sa, visibleAction: "角色用搞笑的方式互动", opposition: "误解或认知差造成笑料", turningMoment: "笑点爆发", resultState: "关系更近一步", emotionTarget: "搞笑、轻松", mustInclude: ["搞笑的对话"], mustAvoid: ["不要变成流水账"] },
+      { type: "reveal", wordTarget: 350, goal: "揭示日常背后的秘密或反转", ...sa, visibleAction: "角色发现日常背后的真相", opposition: "真相出乎意料", turningMoment: "真相被揭露", resultState: "角色的认知被刷新", emotionTarget: "惊讶、好笑", mustInclude: ["反转的具体内容"], mustAvoid: ["不要过于牵强"] },
+      { type: "emotional", wordTarget: 300, goal: "温情时刻，角色关系升温", ...sa, visibleAction: "角色做出温暖的小举动", opposition: "之前的误会或隔阂", turningMoment: "角色敞开心扉", resultState: "关系升温", emotionTarget: "温馨、感动", mustInclude: ["温情的具体表现"], mustAvoid: ["不要过于煽情"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "轻松氛围中的小伏笔", opposition: "伏笔暗示未来麻烦", turningMoment: "角色发现新线索", resultState: "日常结束，新故事开始", emotionTarget: "好奇、轻松", mustInclude: ["小悬念"], mustAvoid: ["不要破坏轻松氛围"] },
     ],
-    // 人物关系章：升温/冲突/和解
     relationship: [
-      { type: "hook", wordTarget: 250, goal: "关系中的微妙变化", mustInclude: ["关系变化的信号"], mustAvoid: ["不要过于直白"] },
-      { type: "dialogue", wordTarget: 600, goal: "深入对话，揭示内心", mustInclude: ["内心的真实想法"], mustAvoid: ["不要变成说教"] },
-      { type: "conflict", wordTarget: 400, goal: "关系冲突或误解", mustInclude: ["冲突的具体原因"], mustAvoid: ["不要无理取闹"] },
-      { type: "emotional", wordTarget: 400, goal: "情感爆发或和解", mustInclude: ["情感的具体表现"], mustAvoid: ["不要强行和解"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["关系的新状态"], mustAvoid: ["不要留下隐患"] },
+      { type: "hook", wordTarget: 250, goal: "关系中的微妙变化", ...sa, visibleAction: "角色注意到对方的微妙变化", opposition: "不确定对方的真实想法", turningMoment: "一个细节打破了平衡", resultState: "关系出现裂痕或萌芽", emotionTarget: "微妙、不安", mustInclude: ["关系变化的信号"], mustAvoid: ["不要过于直白"] },
+      { type: "dialogue", wordTarget: 600, goal: "深入对话，揭示内心", ...sa, visibleAction: "角色面对面深入交谈", opposition: "彼此的防备和顾虑", turningMoment: "一方说出了真心话", resultState: "理解加深或误解加深", emotionTarget: "紧张、感动", mustInclude: ["内心的真实想法"], mustAvoid: ["不要变成说教"] },
+      { type: "conflict", wordTarget: 400, goal: "关系冲突或误解", ...sa, visibleAction: "冲突爆发，角色做出伤害对方的举动", opposition: "双方都不愿退让", turningMoment: "冲突达到顶点", resultState: "关系破裂或冷战", emotionTarget: "心疼、愤怒", mustInclude: ["冲突的具体原因"], mustAvoid: ["不要无理取闹"] },
+      { type: "emotional", wordTarget: 400, goal: "情感爆发或和解", ...sa, visibleAction: "角色做出关键的情感表达", opposition: "过去的伤痛或误解", turningMoment: "一方主动示弱或道歉", resultState: "和解或新的理解", emotionTarget: "感动、释然", mustInclude: ["情感的具体表现"], mustAvoid: ["不要强行和解"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "和解后的新信号", opposition: "关系进入新阶段的不确定性", turningMoment: "新的可能性出现", resultState: "关系新状态确立", emotionTarget: "期待、温暖", mustInclude: ["关系的新状态"], mustAvoid: ["不要留下隐患"] },
     ],
-    // 危机升级章：危险逼近
     danger_escalation: [
-      { type: "hook", wordTarget: 300, goal: "危险信号出现", mustInclude: ["危险的具体表现"], mustAvoid: ["不要轻描淡写"] },
-      { type: "conflict", wordTarget: 500, goal: "危机逐步升级", mustInclude: ["升级的具体过程"], mustAvoid: ["不要跳过升级"] },
-      { type: "reveal", wordTarget: 400, goal: "揭示危机的真正规模", mustInclude: ["规模的具体描述"], mustAvoid: ["不要过于夸张"] },
-      { type: "dialogue", wordTarget: 300, goal: "角色讨论对策", mustInclude: ["具体的对策"], mustAvoid: ["不要纸上谈兵"] },
-      { type: "hook_end", wordTarget: 300, goal: "危机达到顶点，悬念拉满", mustInclude: ["危机的顶点"], mustAvoid: ["不要轻易化解"] },
+      { type: "hook", wordTarget: 300, goal: "危险信号出现", ...sa, visibleAction: "角色发现危险的直接迹象", opposition: "危险正在逼近", turningMoment: "危险的真实程度被意识到", resultState: "角色进入警戒状态", emotionTarget: "紧张、不安", mustInclude: ["危险的具体表现"], mustAvoid: ["不要轻描淡写"] },
+      { type: "conflict", wordTarget: 500, goal: "危机逐步升级", ...sa, visibleAction: "角色与危险直接对抗", opposition: "危险不断升级", turningMoment: "角色发现无法正面对抗", resultState: "角色被迫后退或改变策略", emotionTarget: "紧张、压迫感", mustInclude: ["升级的具体过程"], mustAvoid: ["不要跳过升级"] },
+      { type: "reveal", wordTarget: 400, goal: "揭示危机的真正规模", ...sa, visibleAction: "角色发现危险的全貌", opposition: "全貌远超预想", turningMoment: "最坏的情况被确认", resultState: "角色陷入绝望或下定决心", emotionTarget: "震惊、恐惧", mustInclude: ["规模的具体描述"], mustAvoid: ["不要过于夸张"] },
+      { type: "dialogue", wordTarget: 300, goal: "角色讨论对策", ...sa, visibleAction: "角色在危机中紧急商议", opposition: "时间和资源都有限", turningMoment: "有人提出大胆方案", resultState: "确定最后的反击计划", emotionTarget: "紧迫、决绝", mustInclude: ["具体的对策"], mustAvoid: ["不要纸上谈兵"] },
+      { type: "hook_end", wordTarget: 300, goal: "危机达到顶点，悬念拉满", ...sa, visibleAction: "角色开始执行最后方案", opposition: "成败在此一举", turningMoment: "结果即将揭晓的瞬间", resultState: "悬念拉满", emotionTarget: "紧张、期待", mustInclude: ["危机的顶点"], mustAvoid: ["不要轻易化解"] },
     ],
-    // 信息揭露章：揭示秘密/真相
     info_reveal: [
-      { type: "hook", wordTarget: 300, goal: "铺垫即将揭露的信息", mustInclude: ["铺垫的具体内容"], mustAvoid: ["不要过于明显"] },
-      { type: "reveal", wordTarget: 500, goal: "第一个信息点揭露", mustInclude: ["信息的具体内容"], mustAvoid: ["不要一笔带过"] },
-      { type: "dialogue", wordTarget: 400, goal: "角色对信息的反应和讨论", mustInclude: ["角色的反应"], mustAvoid: ["不要过于冷静"] },
-      { type: "reveal", wordTarget: 400, goal: "更深层的真相揭露", mustInclude: ["真相的具体内容"], mustAvoid: ["不要过于复杂"] },
-      { type: "hook_end", wordTarget: 250, goal: "揭露引发新悬念", mustInclude: ["新悬念"], mustAvoid: ["不要破坏揭露的冲击力"] },
+      { type: "hook", wordTarget: 300, goal: "铺垫即将揭露的信息", ...sa, visibleAction: "角色发现线索或收到消息", opposition: "线索真假难辨", turningMoment: "角色决定追查", resultState: "好奇心达到顶点", emotionTarget: "好奇、不安", mustInclude: ["铺垫的具体内容"], mustAvoid: ["不要过于明显"] },
+      { type: "reveal", wordTarget: 500, goal: "第一个信息点揭露", ...sa, visibleAction: "角色亲眼看到/听到关键信息", opposition: "信息与已有认知矛盾", turningMoment: "真相的第一层面被揭开", resultState: "角色的认知被颠覆", emotionTarget: "震惊、好奇", mustInclude: ["信息的具体内容"], mustAvoid: ["不要一笔带过"] },
+      { type: "dialogue", wordTarget: 400, goal: "角色对信息的反应和讨论", ...sa, visibleAction: "角色之间讨论新信息", opposition: "不同角色接受程度不同", turningMoment: "有人提出更深层的疑问", resultState: "新的疑问产生", emotionTarget: "震惊、困惑", mustInclude: ["角色的反应"], mustAvoid: ["不要过于冷静"] },
+      { type: "reveal", wordTarget: 400, goal: "更深层的真相揭露", ...sa, visibleAction: "角色挖掘出更深层的真相", opposition: "真相背后的真相", turningMoment: "最核心的秘密被揭露", resultState: "世界观被刷新", emotionTarget: "震惊、恍然大悟", mustInclude: ["真相的具体内容"], mustAvoid: ["不要过于复杂"] },
+      { type: "hook_end", wordTarget: 250, goal: "揭露引发新悬念", ...sa, visibleAction: "真相揭露后出现新问题", opposition: "新问题比旧问题更严重", turningMoment: "角色意识到真正的挑战开始", resultState: "读者期待下一章", emotionTarget: "好奇、不安", mustInclude: ["新悬念"], mustAvoid: ["不要破坏揭露的冲击力"] },
     ],
-    // 过渡章：承上启下
     transition: [
-      { type: "hook", wordTarget: 250, goal: "承接上一章结尾", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要跳章"] },
-      { type: "emotional", wordTarget: 350, goal: "角色情绪缓冲", mustInclude: ["情绪的具体表现"], mustAvoid: ["不要过于拖沓"] },
-      { type: "dialogue", wordTarget: 400, goal: "日常互动，推进关系", mustInclude: ["关系的推进"], mustAvoid: ["不要变成流水账"] },
-      { type: "reveal", wordTarget: 350, goal: "埋下伏笔或小钩子", mustInclude: ["伏笔的具体内容"], mustAvoid: ["不要过于明显"] },
-      { type: "hook_end", wordTarget: 250, goal: hook, mustInclude: ["小悬念"], mustAvoid: ["不要破坏过渡氛围"] },
+      { type: "hook", wordTarget: 250, goal: "承接上一章结尾", ...sa, visibleAction: "角色处理上一章的余波", opposition: "余波未平", turningMoment: "新信号出现", resultState: "旧事收尾，新事开端", emotionTarget: "平静、期待", mustInclude: ["上一章结尾的承接"], mustAvoid: ["不要跳章"] },
+      { type: "emotional", wordTarget: 350, goal: "角色情绪缓冲", ...sa, visibleAction: "角色独处或与亲近的人相处", opposition: "内心的不安或期待", turningMoment: "角色做出内心决定", resultState: "情绪平稳，准备迎接新挑战", emotionTarget: "平静、温暖", mustInclude: ["情绪的具体表现"], mustAvoid: ["不要过于拖沓"] },
+      { type: "dialogue", wordTarget: 400, goal: "日常互动，推进关系", ...sa, visibleAction: "角色在日常中与他人互动", opposition: "小摩擦或小误会", turningMoment: "互动中透露新信息", resultState: "关系微妙变化", emotionTarget: "轻松、温馨", mustInclude: ["关系的推进"], mustAvoid: ["不要变成流水账"] },
+      { type: "reveal", wordTarget: 350, goal: "埋下伏笔或小钩子", ...sa, visibleAction: "角色注意到一个不起眼的细节", opposition: "细节看似无关紧要", turningMoment: "角色产生一丝疑虑", resultState: "伏笔埋下", emotionTarget: "微妙的不安", mustInclude: ["伏笔的具体内容"], mustAvoid: ["不要过于明显"] },
+      { type: "hook_end", wordTarget: 250, goal: hook, ...sa, visibleAction: "过渡结束时的信号", opposition: "新故事即将开始", turningMoment: "角色收到新消息/发现新情况", resultState: "新故事的序幕", emotionTarget: "期待", mustInclude: ["小悬念"], mustAvoid: ["不要破坏过渡氛围"] },
     ],
   };
 
@@ -129,9 +126,23 @@ export async function executeWritingPhase(ctx: PhaseContext, jobId: string, star
     await ctx.saveToKnowledgeBase(job.novelId, "chapter_draft", "自动仿写样章", { chapters });
 
     // 重建 enrichedChaptersMap（用于后处理）
+    // 必须与 generateInitialChapterDrafts 中的构建逻辑保持一致（含 canonicalOffset）
     const enrichedChaptersMap: Map<number, any> = new Map();
     const volumeCount = config.volumeCount || 5;
-    let globalOrder = 1;
+    const lastCanonicalForPost = await prisma.chapter.findFirst({
+      where: {
+        novelId: job.novelId,
+        OR: [
+          { sourceType: "user_original" },
+          { isCanonical: true },
+          { canRewrite: false },
+        ],
+      },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    const canonicalOffsetForPost = lastCanonicalForPost?.order || 0;
+    let globalOrder = canonicalOffsetForPost + 1;
     for (let v = 1; v <= volumeCount; v++) {
       const volRes = await prisma.phaseResult.findUnique({
         where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${v}` } },
@@ -278,10 +289,27 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   const chapterOutline = chapterOutlineResult ? parseLlmJson(chapterOutlineResult.output) || {} : {};
 
   // 从 planning 阶段加载所有卷的富化章纲
+  // 关键：章纲生成时有 canonicalOffset（前 N 章是用户原文），map key 必须与全局章节序号对齐
   const enrichedChaptersMap: Map<number, any> = new Map();
   if (pipelineVersion >= 2) {
     const volumeCount = config.volumeCount || 5;
-    let globalOrder = 1;
+    const chaptersPerVolume = config.chaptersPerVolume || 30;
+    // 计算 canonical 偏移量：最后一个 canonical 章节的 order
+    const lastCanonical = await prisma.chapter.findFirst({
+      where: {
+        novelId,
+        OR: [
+          { sourceType: "user_original" },
+          { isCanonical: true },
+          { canRewrite: false },
+        ],
+      },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    const canonicalOffset = lastCanonical?.order || 0;
+    // 章纲是从 canonicalOffset+1 开始生成的，所以 map key 从 canonicalOffset+1 开始
+    let globalOrder = canonicalOffset + 1;
     for (let v = 1; v <= volumeCount; v++) {
       const volRes = await prisma.phaseResult.findUnique({
         where: { jobId_phase_step: { jobId, phase: "planning", step: `chapter_outline_vol_${v}` } },
@@ -294,13 +322,35 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
         }
       }
     }
+    console.log(`[writingPhase] enrichedChaptersMap 构建完成：canonicalOffset=${canonicalOffset}, 共${enrichedChaptersMap.size}个章节, key范围=[${canonicalOffset + 1}, ${globalOrder - 1}]`);
   }
 
   const chapterCards = resolveChapterCards(chapterTemplate, chapterOutline, count);
   const previousChapters: Array<{ order: number; title: string; summary: string; ending: string }> = [];
   const generated = [];
   const failedChapters: Array<{ order: number; error: string }> = [];
-  const offset = (startOrder || 1) - 1;
+  const actualStartOrder = await resolveWritingStartOrder(novelId, startOrder);
+  const offset = actualStartOrder - 1;
+
+  // 校验章纲对齐：确保 enrichedChaptersMap 的 key 与全局序号一致
+  if (enrichedChaptersMap.size > 0) {
+    const canonicalChapters = novel.chapters
+      .filter(ch => ch.sourceType === "user_original" || ch.isCanonical || !ch.canRewrite)
+      .map(ch => ({ order: ch.order, title: ch.title }));
+    validateChapterAlignment(enrichedChaptersMap, canonicalChapters, actualStartOrder);
+  }
+
+  // 预加载 canonical 章节到 previousChapters，确保续写章节能获取到前文上下文
+  for (const ch of novel.chapters) {
+    if (ch.order < actualStartOrder && (ch.sourceType === "user_original" || ch.isCanonical || !ch.canRewrite)) {
+      previousChapters.push({
+        order: ch.order,
+        title: ch.title,
+        summary: ch.summary || ch.content?.slice(0, 100) || "",
+        ending: ch.content?.slice(-300) || "",
+      });
+    }
+  }
 
   for (let index = 0; index < count; index += 1) {
     // 检查暂停状态，实现即时暂停
@@ -342,6 +392,23 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       const existing = await prisma.chapter.findUnique({
         where: { novelId_order: { novelId, order } },
       });
+      // v3.0: 用户原文保护 — 跳过 canonical 章节
+      if (existing?.sourceType === "user_original" || existing?.isCanonical === true || existing?.canRewrite === false) {
+        console.log(`[writingPhase] 第${order}章为用户原文章节（sourceType=${existing.sourceType}），跳过 AI 生成`);
+        previousChapters.push({
+          order,
+          title: existing.title,
+          summary: existing.summary || existing.content.slice(0, 100),
+          ending: existing.content.slice(-300),
+        });
+        generated.push({
+          ...existing,
+          skipped: true,
+          skipReason: "user_original_canonical",
+        });
+        continue;
+      }
+
       if (existing?.content?.trim() && !config.overwriteExistingChapters) {
         previousChapters.push({
           order,
@@ -393,17 +460,29 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
 
       // 使用 ContextAssembler 组装精简上下文（~1,500 tokens vs 旧 ~15,000）
       const compactContext = await assembler.assembleForChapter(order, enrichedChaptersMap.get(order) || card);
-      const targetWordCount = config.targetWordCount || 2500;
+      // v3.0: 优先使用章纲的 targetWordCount（config.targetWordCount 是全书目标，不用于单章）
+      const chapterOutlineForTarget = enrichedChaptersMap.get(order) || card;
+      const targetWordCount =
+        chapterOutlineForTarget?.targetWordCount ||
+        card?.targetWordCount ||
+        novel.chapterWordMax ||
+        novel.chapterWordMin ||
+        2500;
 
       // 生成 Beat 蓝图（章节内节奏单元）
       const chapterOutlineForBeat = enrichedChaptersMap.get(order) || card;
       let beatBlueprint = "";
+      // 判断是否为关键章节（需要 LLM 生成 Beat + LLM 叙事质量检测）
+      const chapterType = chapterOutlineForBeat.chapterType || "mission";
+      const pleasurePoint = parsePleasurePointData(chapterOutlineForBeat.pleasurePoint);
+      const isKeyChapter =
+        order <= 3 ||
+        ["payoff", "danger_escalation", "info_reveal"].includes(chapterType) ||
+        chapterOutlineForBeat.emotionData?.isClimax === true ||
+        chapterOutlineForBeat.emotionData?.isTurningPoint === true ||
+        Number(pleasurePoint?.intensity || 0) >= 7 ||
+        Boolean(chapterOutlineForBeat.comedyMechanism && chapterType === "comedy_daily");
       try {
-        // 判断是否为关键章节（需要 LLM 生成 Beat）
-        const chapterType = chapterOutlineForBeat.chapterType || "mission";
-        const isKeyChapter = ["payoff", "danger_escalation", "info_reveal"].includes(chapterType)
-          || chapterOutlineForBeat.emotionData?.isClimax
-          || chapterOutlineForBeat.emotionData?.isTurningPoint;
 
         let beats: any[] = [];
 
@@ -424,6 +503,24 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
           beats = generateBeatTemplate(chapterType, targetWordCount, chapterOutlineForBeat);
         }
 
+        // 续写首章（canonical+1）：在模板 beats 前插入 continuity_hook，强制承接前文结尾
+        if (order === actualStartOrder && previousChapters.length > 0) {
+          const lastCanon = previousChapters[previousChapters.length - 1];
+          const continuityBeat = {
+            type: "continuity_hook",
+            wordTarget: 300,
+            goal: `强承接第${lastCanon.order}章「${lastCanon.title}」的结尾场景`,
+            visibleAction: `从第${lastCanon.order}章结尾的状态直接切入，展示角色的即时反应或环境变化`,
+            opposition: "前文留下的紧张感或悬念仍在延续",
+            turningMoment: "角色从前文的状态中做出新的选择或行动",
+            resultState: "自然过渡到本章的主要剧情",
+            emotionTarget: "紧张、好奇",
+            mustInclude: [`必须呼应第${lastCanon.order}章结尾的具体场景或台词`],
+            mustAvoid: ["不要重新介绍角色", "不要从头叙述背景", "不要跳过前文结尾直接进入新场景"],
+          };
+          beats.unshift(continuityBeat);
+        }
+
         if (beats.length > 0) {
           // 保存到 ChapterBeat 表
           for (let i = 0; i < beats.length; i++) {
@@ -437,6 +534,11 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
                 wordTarget: beat.wordTarget || 300,
                 mustInclude: JSON.stringify(beat.mustInclude || []),
                 mustAvoid: JSON.stringify(beat.mustAvoid || []),
+                visibleAction: beat.visibleAction || "",
+                opposition: beat.opposition || "",
+                turningMoment: beat.turningMoment || "",
+                resultState: beat.resultState || "",
+                emotionTarget: beat.emotionTarget || "",
               },
               update: {
                 type: beat.type || "transition",
@@ -444,13 +546,33 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
                 wordTarget: beat.wordTarget || 300,
                 mustInclude: JSON.stringify(beat.mustInclude || []),
                 mustAvoid: JSON.stringify(beat.mustAvoid || []),
+                visibleAction: beat.visibleAction || "",
+                opposition: beat.opposition || "",
+                turningMoment: beat.turningMoment || "",
+                resultState: beat.resultState || "",
+                emotionTarget: beat.emotionTarget || "",
               },
             }).catch(() => {});
           }
 
-          // 构建 Beat 蓝图文本（包含 mustInclude 和 mustAvoid）
+          // 构建 Beat 蓝图文本（包含场景动作模型）
           const beatLines = beats.map((b: any, i: number) => {
             let line = `Beat ${i + 1} [${b.type}] ${b.wordTarget || 300}字：${b.goal}`;
+            if (b.visibleAction) {
+              line += `\n  可见动作：${b.visibleAction}`;
+            }
+            if (b.opposition) {
+              line += `\n  阻碍力量：${b.opposition}`;
+            }
+            if (b.turningMoment) {
+              line += `\n  转折时刻：${b.turningMoment}`;
+            }
+            if (b.resultState) {
+              line += `\n  结果状态：${b.resultState}`;
+            }
+            if (b.emotionTarget) {
+              line += `\n  目标情绪：${b.emotionTarget}`;
+            }
             if (b.mustInclude && b.mustInclude.length > 0) {
               line += `\n  必须包含：${b.mustInclude.join("、")}`;
             }
@@ -509,7 +631,7 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
       });
 
       let retryCount = 0;
-      let qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
+      let qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card, { isKeyChapter, retryCount });
 
       while (!qualityResult.passed && qualityResult.shouldRetry && retryCount < QUALITY_THRESHOLDS.MAX_RETRY_COUNT) {
         retryCount++;
@@ -531,24 +653,31 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
           beatBlueprint: fullBeatBlueprint,
           retryHint: qualityResult.retryHint,
         });
-        qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card);
+        qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card, { isKeyChapter, retryCount });
       }
 
       // 保存质量日志
+      const logScores: any = { ...qualityResult.scores };
+      if (qualityResult.narrativeQuality) {
+        logScores.narrative = qualityResult.narrativeQuality;
+      }
       await prisma.chapterQualityLog.create({
         data: {
           novelId,
           chapterOrder: order,
           checkType: "post_gen",
-          scores: JSON.stringify(qualityResult.scores),
+          scores: JSON.stringify(logScores),
           issues: JSON.stringify(qualityResult.issues),
           retryCount,
           passed: qualityResult.passed,
         },
       }).catch((e) => console.warn(`[writingPhase] 质量日志保存失败:`, e));
 
-      // 更新 Chapter 质量字段（基于 AI 味和字数合规度计算）
-      const qualityScore = qualityResult.passed ? 8 : 5;
+      // 更新 Chapter 质量字段（有 LLM 叙事分数时优先使用）
+      const narrativeScore = qualityResult.narrativeQuality?.overallScore;
+      const qualityScore = qualityResult.passed
+        ? (narrativeScore ? Math.min(10, Math.round(narrativeScore)) : 8)
+        : 5;
 
       const updated = await prisma.chapter.update({
         where: { id: chapter.id },
@@ -671,7 +800,7 @@ async function generateChapterDraft(ctx: PhaseContext, input: {
 
   const prompt = `请根据以上约束，写出第${input.order}章的完整内容。
 
-目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.8)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
+目标字数：${input.targetWordCount} 中文字（不少于 ${Math.round(input.targetWordCount * 0.9)} 字，不超过 ${Math.round(input.targetWordCount * 1.2)} 字）
 
 写作要求：
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
@@ -823,6 +952,28 @@ function resolveChapterCards(chapterTemplate: any, chapterOutline: any, count: n
     ? chapterOutline.chapterOutlines.flatMap((volume: any) => Array.isArray(volume.chapters) ? volume.chapters : [])
     : [];
   return [...templateChapters, ...outlineChapters].slice(0, count);
+}
+
+/**
+ * 校验章纲对齐：确保 enrichedChaptersMap 中的章纲与期望的全局序号匹配
+ * 通过检查 canonical 章节的标题来验证偏移量是否正确
+ */
+function validateChapterAlignment(
+  enrichedChaptersMap: Map<number, any>,
+  canonicalChapters: Array<{ order: number; title: string }>,
+  expectedStartOrder: number,
+): void {
+  // 检查 canonical 章节不应出现在 enrichedChaptersMap 中
+  for (const ch of canonicalChapters) {
+    if (enrichedChaptersMap.has(ch.order)) {
+      const mapped = enrichedChaptersMap.get(ch.order);
+      console.warn(`[writingPhase] ⚠️ 章节对齐警告：canonical 第${ch.order}章「${ch.title}」在 enrichedChaptersMap 中存在值「${mapped?.title}」，可能偏移量有误`);
+    }
+  }
+  // 检查 expectedStartOrder 在 map 中存在
+  if (!enrichedChaptersMap.has(expectedStartOrder)) {
+    console.warn(`[writingPhase] ⚠️ 章节对齐警告：期望起始章节 ${expectedStartOrder} 不在 enrichedChaptersMap 中`);
+  }
 }
 
 /**
@@ -979,5 +1130,44 @@ ${actualSummaries.slice(-3).map(ch => ch.summary).join("\n")}
     console.log(`[writingPhase] 第${completedVolumes + 1}卷章纲已修正（偏离度：${deviation.deviationScore}）`);
   } catch (e) {
     console.warn("[writingPhase] 章纲偏离度检查失败:", e);
+  }
+}
+
+/**
+ * 解析写作起始章节：优先使用显式参数，否则自动从最后一个 canonical 章节 + 1 开始
+ */
+async function resolveWritingStartOrder(novelId: string, explicitStartOrder?: number): Promise<number> {
+  if (explicitStartOrder && explicitStartOrder > 0) {
+    return explicitStartOrder;
+  }
+  const lastCanonical = await prisma.chapter.findFirst({
+    where: {
+      novelId,
+      OR: [
+        { sourceType: "user_original" },
+        { isCanonical: true },
+        { canRewrite: false },
+      ],
+    },
+    orderBy: { order: "desc" },
+    select: { order: true },
+  });
+  if (lastCanonical) {
+    console.log(`[writingPhase] 检测到 canonical 章节，从第 ${lastCanonical.order + 1} 章开始写作`);
+    return lastCanonical.order + 1;
+  }
+  return 1;
+}
+
+/**
+ * 安全解析爽点数据（可能是 JSON 对象或纯文本）
+ */
+function parsePleasurePointData(value: unknown): { type?: string; intensity?: number; description?: string } | null {
+  if (!value) return null;
+  if (typeof value === "object") return value as any;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
   }
 }

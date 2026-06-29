@@ -162,6 +162,8 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
                     { type: "outline", label: "大纲设定 TXT" },
                     { type: "characters", label: "人物设定 TXT" },
                     { type: "worldview", label: "世界观设定 TXT" },
+                    { type: "volumes", label: "卷纲导出 TXT" },
+                    { type: "chapter-outlines", label: "章纲导出 TXT" },
                   ].map((item) => (
                     <div
                       key={item.type}

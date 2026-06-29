@@ -147,6 +147,141 @@ router.get("/:novelId/outline", async (req, res, next) => {
   }
 });
 
+// GET /api/export/:novelId/volumes — 卷纲导出
+router.get("/:novelId/volumes", async (req, res, next) => {
+  try {
+    const { novelId } = req.params;
+    const fmt = getFormat(req);
+    const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+    if (!novel) {
+      res.status(404).json({ success: false, error: "作品不存在" });
+      return;
+    }
+
+    const volumes = await prisma.volume.findMany({
+      where: { novelId },
+      orderBy: { sortOrder: "asc" },
+    });
+
+    const lines: string[] = [];
+
+    if (fmt === "markdown") {
+      lines.push(`# 《${novel.title}》卷纲`);
+      lines.push("");
+
+      for (const vol of volumes) {
+        lines.push(`## 第${vol.sortOrder}卷 ${vol.title}`);
+        lines.push("");
+        if (vol.goal) lines.push(`- **目标：**${vol.goal}`);
+        if (vol.conflict) lines.push(`- **冲突：**${vol.conflict}`);
+        if (vol.emotion) lines.push(`- **情绪：**${vol.emotion}`);
+        if (vol.mapName) lines.push(`- **地图：**${vol.mapName}`);
+        if (vol.endHook) lines.push(`- **结尾钩子：**${vol.endHook}`);
+        if (vol.keyEvents) lines.push(`- **关键事件：**${vol.keyEvents}`);
+        if (vol.turningPoint) lines.push(`- **转折点：**${vol.turningPoint}`);
+        if (vol.newChars) lines.push(`- **新角色：**${vol.newChars}`);
+        lines.push("");
+      }
+    } else {
+      lines.push(`《${novel.title}》卷纲`);
+      lines.push("=".repeat(40));
+      lines.push("");
+
+      for (const vol of volumes) {
+        lines.push(`【第${vol.sortOrder}卷】${vol.title}`);
+        lines.push("-".repeat(30));
+        if (vol.goal) lines.push(`目标：${vol.goal}`);
+        if (vol.conflict) lines.push(`冲突：${vol.conflict}`);
+        if (vol.emotion) lines.push(`情绪：${vol.emotion}`);
+        if (vol.mapName) lines.push(`地图：${vol.mapName}`);
+        if (vol.endHook) lines.push(`结尾钩子：${vol.endHook}`);
+        if (vol.keyEvents) lines.push(`关键事件：${vol.keyEvents}`);
+        if (vol.turningPoint) lines.push(`转折点：${vol.turningPoint}`);
+        if (vol.newChars) lines.push(`新角色：${vol.newChars}`);
+        lines.push("");
+      }
+    }
+
+    setContentHeaders(res, novel.title, "卷纲", fmt);
+    res.send(lines.join("\n"));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/export/:novelId/chapter-outlines — 章纲导出
+router.get("/:novelId/chapter-outlines", async (req, res, next) => {
+  try {
+    const { novelId } = req.params;
+    const fmt = getFormat(req);
+    const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+    if (!novel) {
+      res.status(404).json({ success: false, error: "作品不存在" });
+      return;
+    }
+
+    const [volumes, chapterOutlines] = await Promise.all([
+      prisma.volume.findMany({
+        where: { novelId },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, sortOrder: true, title: true },
+      }),
+      prisma.chapterOutline.findMany({
+        where: { novelId },
+        orderBy: { sortOrder: "asc" },
+      }),
+    ]);
+
+    const volumeMap = new Map(volumes.map(v => [v.id, v]));
+
+    const lines: string[] = [];
+
+    if (fmt === "markdown") {
+      lines.push(`# 《${novel.title}》章纲`);
+      lines.push("");
+
+      for (const ch of chapterOutlines) {
+        const vol = volumeMap.get(ch.volumeId);
+        const volLabel = vol ? `（第${vol.sortOrder}卷 ${vol.title}）` : "";
+        lines.push(`### 第${ch.sortOrder}章 ${ch.title}${volLabel}`);
+        lines.push("");
+        if (ch.goal) lines.push(`- **目标：**${ch.goal}`);
+        if (ch.conflict) lines.push(`- **冲突：**${ch.conflict}`);
+        if (ch.emotion) lines.push(`- **情绪：**${ch.emotion}`);
+        if (ch.hook) lines.push(`- **钩子：**${ch.hook}`);
+        if (ch.pleasurePoint) lines.push(`- **爽点：**${ch.pleasurePoint}`);
+        if (ch.foreshadowing) lines.push(`- **埋设伏笔：**${ch.foreshadowing}`);
+        if (ch.payoff) lines.push(`- **回收伏笔：**${ch.payoff}`);
+        lines.push("");
+      }
+    } else {
+      lines.push(`《${novel.title}》章纲`);
+      lines.push("=".repeat(40));
+      lines.push("");
+
+      for (const ch of chapterOutlines) {
+        const vol = volumeMap.get(ch.volumeId);
+        const volLabel = vol ? `（第${vol.sortOrder}卷 ${vol.title}）` : "";
+        lines.push(`【第${ch.sortOrder}章】${ch.title}${volLabel}`);
+        lines.push("-".repeat(30));
+        if (ch.goal) lines.push(`目标：${ch.goal}`);
+        if (ch.conflict) lines.push(`冲突：${ch.conflict}`);
+        if (ch.emotion) lines.push(`情绪：${ch.emotion}`);
+        if (ch.hook) lines.push(`钩子：${ch.hook}`);
+        if (ch.pleasurePoint) lines.push(`爽点：${ch.pleasurePoint}`);
+        if (ch.foreshadowing) lines.push(`埋设伏笔：${ch.foreshadowing}`);
+        if (ch.payoff) lines.push(`回收伏笔：${ch.payoff}`);
+        lines.push("");
+      }
+    }
+
+    setContentHeaders(res, novel.title, "章纲", fmt);
+    res.send(lines.join("\n"));
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/export/:novelId/characters — 人物设定
 router.get("/:novelId/characters", async (req, res, next) => {
   try {

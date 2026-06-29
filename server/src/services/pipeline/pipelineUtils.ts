@@ -211,6 +211,27 @@ export async function updateJobProgress(jobId: string, phase: string, step: stri
   });
 }
 
+export async function recordMaterialUsage(
+  novelId: string,
+  pipelineJobId: string | undefined,
+  usageStage: string,
+  assets: Array<{ assetType: string; assetId: string; title: string }>,
+) {
+  if (!pipelineJobId || assets.length === 0) return;
+  for (const asset of assets) {
+    await prisma.assetUsageRecord.create({
+      data: {
+        novelId,
+        pipelineJobId,
+        usageStage,
+        assetType: asset.assetType,
+        assetId: asset.assetId,
+        title: asset.title,
+      },
+    });
+  }
+}
+
 // ===== 资产持久化 =====
 
 export async function saveToKnowledgeBase(novelId: string, category: string, title: string, content: any) {
@@ -278,6 +299,10 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
         data: {
           genre: content.genre || undefined,
           outline: formatNovelOutline(content),
+          coreSellingPoint: content.coreSellingPoint || undefined,
+          corePayoffs: content.corePayoffs ? JSON.stringify(content.corePayoffs) : undefined,
+          coreConflict: content.coreConflict || undefined,
+          readerExpectations: content.readerExpectations ? JSON.stringify(content.readerExpectations) : undefined,
         },
       });
     }
@@ -356,7 +381,13 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
         emotionIntensity: style.emotionIntensity || "medium",
         humorLevel: style.humorStyle ? "medium" : (style.humorLevel || "low"),
         customRules: JSON.stringify(enhancedStyle),
-        styleDna: style.styleDna ? JSON.stringify(style.styleDna) : undefined,
+        styleDna: (() => {
+          const dna: any = style.styleDna || {};
+          // 兼容：fixedTaste/chapterRhythm 可能在 styleDna 内或外
+          if (!dna.fixedTaste && style.fixedTaste) dna.fixedTaste = style.fixedTaste;
+          if (!dna.chapterRhythm && style.chapterRhythm) dna.chapterRhythm = style.chapterRhythm;
+          return Object.keys(dna).length > 0 ? JSON.stringify(dna) : undefined;
+        })(),
         isDefault: true,
       };
       if (existing) {
@@ -369,28 +400,34 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
     if (category === "character" && Array.isArray(content?.characters)) {
       for (const character of content.characters.slice(0, 12)) {
         if (!character?.name) continue;
+        const characterData = {
+          novelId,
+          name: character.name,
+          role: character.role || "",
+          identity: character.identity || "",
+          motivation: character.motivation || "",
+          appearance: character.appearance || "",
+          background: character.background || "",
+          relationsText: character.relationsText || "",
+          personality: character.personality || "",
+          speechStyle: character.speechStyle || "",
+          arcSummary: character.arc || character.arcSummary || "",
+          arcDetail: character.arcDetail || "",
+          abilities: character.abilities || "",
+          behaviorRules: JSON.stringify(character.behaviorRules || []),
+          forbiddenBehavior: JSON.stringify(character.forbiddenBehavior || []),
+          signatureLines: JSON.stringify(character.signatureLines || []),
+          signatureScenes: JSON.stringify(character.signatureScenes || []),
+          comedyMechanisms: JSON.stringify(character.comedyMechanisms || []),
+          emotionalHooks: JSON.stringify(character.emotionalHooks || []),
+          rawProfile: character.rawProfile || "",
+          sourceType: character.sourceType || "ai_generated",
+          isCanonical: character.isCanonical || false,
+        };
         await prisma.character.upsert({
           where: { novelId_name: { novelId, name: character.name } },
-          create: {
-            novelId,
-            name: character.name,
-            role: character.role || "",
-            identity: character.identity || "",
-            motivation: character.motivation || "",
-            appearance: character.appearance || "",
-            background: character.background || "",
-            relationsText: character.relationsText || "",
-            arcSummary: character.arc || character.personality || "",
-          },
-          update: {
-            role: character.role || "",
-            identity: character.identity || "",
-            motivation: character.motivation || "",
-            appearance: character.appearance || "",
-            background: character.background || "",
-            relationsText: character.relationsText || "",
-            arcSummary: character.arc || character.personality || "",
-          },
+          create: characterData,
+          update: characterData,
         });
       }
     }

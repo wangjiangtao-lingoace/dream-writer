@@ -4,6 +4,7 @@ import { PhaseContext, autoAdvanceOrPause } from "./pipelineUtils";
 import { generateVolumeOutline } from "./generators";
 import { executeChapterOutlinesPhase } from "./chapterOutlinesPhase";
 import { executePayoffChainPhase } from "./payoffChainPhase";
+import { loadMaterialContextForNovel } from "./materialContext";
 
 /**
  * 统一的规划阶段（卷纲生成）
@@ -43,9 +44,13 @@ export async function executePlanningPhase_unified(ctx: PhaseContext, jobId: str
     // 3. 生成卷纲
     await ctx.updateJobProgress(jobId, "planning", "volume_outline");
     let volumeResult: any;
+    // 加载素材资产上下文（整体规划、完整创作文档、钩子表、约束规则等）
+    const materialContext = await loadMaterialContextForNovel(novelId, jobId);
+    // 素材中包含整体规划时，忽略大纲阶段提取的卷结构，用素材中的规划重新生成
+    const hasOverallPlan = materialContext.includes("【作者原始素材资产】") && materialContext.includes("整体规划");
     const existingVolumes = await prisma.volume.findMany({ where: { novelId }, take: 1 });
-    if (existingVolumes.length > 0) {
-      // 复用已有卷纲
+    if (existingVolumes.length > 0 && !hasOverallPlan) {
+      // 复用已有卷纲（仅当素材中没有整体规划时）
       const allVolumes = await prisma.volume.findMany({
         where: { novelId }, orderBy: { sortOrder: "asc" },
       });
@@ -60,10 +65,19 @@ export async function executePlanningPhase_unified(ctx: PhaseContext, jobId: str
         })),
       };
     } else {
-      // 构建 inspiration：原始灵感 + 额外上下文
-      const inspiration = [job.novel?.inspiration || "", extraContext].filter(Boolean).join("\n\n");
+      // 素材有整体规划时，删除旧卷重新生成；无旧卷时直接生成
+      if (existingVolumes.length > 0 && hasOverallPlan) {
+        await prisma.chapterOutline.deleteMany({ where: { novelId } });
+        await prisma.volume.deleteMany({ where: { novelId } });
+      }
+      // 构建 inspiration：原始灵感 + 额外上下文（素材有整体规划时截断灵感文本，避免 prompt 过长）
+      let inspirationText = job.novel?.inspiration || "";
+      if (hasOverallPlan && inspirationText.length > 3000) {
+        inspirationText = inspirationText.slice(0, 3000) + "\n...(灵感文本截断，详细内容见素材资产)";
+      }
+      const inspiration = [inspirationText, extraContext].filter(Boolean).join("\n\n");
       volumeResult = await generateVolumeOutline(
-        ctx, novelId, outlineResult, worldviewResult, charactersResult, styleResult, config, inspiration,
+        ctx, novelId, outlineResult, worldviewResult, charactersResult, styleResult, config, inspiration, undefined, materialContext,
       );
       await ctx.persistGeneratedAssets(novelId, "volume", volumeResult);
     }

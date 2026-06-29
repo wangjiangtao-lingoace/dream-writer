@@ -55,6 +55,7 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<ChapterOutline | null>(null);
   const [showChapterDetail, setShowChapterDetail] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const [volumeForm, setVolumeForm] = useState({
     title: "",
@@ -100,6 +101,13 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
   useEffect(() => {
     loadVolumes();
   }, [novelId]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleClickOutside = () => setShowExportMenu(false);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showExportMenu]);
 
   async function handleSaveVolume() {
     if (!volumeForm.title.trim()) {
@@ -335,6 +343,11 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
     return text.length > max ? text.substring(0, max) + "..." : text;
   }
 
+  function handleExport(type: "volumes" | "chapter-outlines") {
+    setShowExportMenu(false);
+    window.open(`/api/export/${novelId}/${type}`, "_blank");
+  }
+
   const totalChapters = volumes.reduce((sum, v) => sum + v.chapterOutlines.length, 0);
   const isBusy = loading || generating;
 
@@ -379,6 +392,64 @@ export default function VolumeEditor({ novelId, onNotice }: VolumeEditorProps) {
           <button type="button" onClick={() => { if (showChapterForm) { resetChapterForm(); } else { resetChapterForm(); setShowChapterForm(true); } }} disabled={!activeVolumeId}>
             {showChapterForm ? "收起" : "新建章"}
           </button>
+          <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowExportMenu(!showExportMenu)} disabled={volumes.length === 0}>
+              导出
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: "0.25rem",
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                zIndex: 10,
+                minWidth: "120px",
+              }}>
+                <button
+                  type="button"
+                  onClick={() => handleExport("volumes")}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "0.5rem 0.75rem",
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--text-primary)",
+                    fontSize: "0.875rem",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                >
+                  卷纲导出
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport("chapter-outlines")}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "0.5rem 0.75rem",
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--text-primary)",
+                    fontSize: "0.875rem",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                >
+                  章纲导出
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

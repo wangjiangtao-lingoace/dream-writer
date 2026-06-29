@@ -21,6 +21,7 @@
     "prisma:migrate": "prisma migrate dev --name init --schema prisma/schema.prisma",
     "db:migrate": "pnpm prisma:migrate",
     "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "import:material": "ts-node-dev --transpile-only --exit-child scripts/import-material-file.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

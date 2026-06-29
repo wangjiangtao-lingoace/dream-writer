@@ -40,6 +40,21 @@ router.post("/novel/:novelId/materialize-assets", async (req: Request, res: Resp
   }
 });
 
+router.get("/:jobId/material-report", async (req: Request, res: Response) => {
+  try {
+    const jobId = req.params.jobId as string;
+    const result = await prisma.phaseResult.findUnique({
+      where: { jobId_phase_step: { jobId, phase: "outline", step: "material_import" } },
+    });
+    if (!result) {
+      return res.status(404).json({ success: false, error: "素材导入报告不存在" });
+    }
+    res.json({ success: true, data: JSON.parse(result.output) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // SSE 流式推送写作阶段进度
 router.get("/:jobId/stream", async (req: Request, res: Response) => {
   const jobId = req.params.jobId as string;

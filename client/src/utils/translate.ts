@@ -221,6 +221,7 @@ export const pipelinePhaseLabels: Record<string, string> = {
 
 // Pipeline 步骤中文标签
 export const pipelineStepLabels: Record<string, string> = {
+  material_import: "素材资产导入",
   analyze: "智能分析",
   decompose: "拆解入库",
   outline: "故事大纲",

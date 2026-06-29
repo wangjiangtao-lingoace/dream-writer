@@ -15,6 +15,7 @@ import { buildLayer4Characters } from "./layer4-characters";
 import { buildLayer5Worldview } from "./layer5-worldview";
 import { buildLayer6ChapterTask } from "./layer6-chapter-task";
 import { buildLayer7ReaderExpect } from "./layer7-reader-expect";
+import { safeParseJson } from "../promptFormatters";
 
 // 7 层 Prompt 架构接口（保持向后兼容）
 export interface PromptLayers {
@@ -63,7 +64,7 @@ export async function buildFullSystemPrompt(params: {
   const worldviewLayer = buildLayer5Worldview(worldview);
   const chapterTask = buildLayer6ChapterTask(chapterOutline);
   const readerExpect = buildLayer7ReaderExpect(
-    JSON.parse(novel.readerExpectations || '[]')
+    safeParseJson<string[]>(novel.readerExpectations, [])
   );
 
   // 按 P0-P3 优先级组装

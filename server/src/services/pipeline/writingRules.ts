@@ -35,7 +35,7 @@ export { AI_SMELL_WORDS, AI_SMELL_PHRASES } from "./aiSmellWords";
 // 质量评分阈值
 export const QUALITY_THRESHOLDS = {
   AI_SMELL_MAX_PERCENT: 1.0,      // AI 味词汇占比上限（%）
-  WORD_COUNT_MIN_RATIO: 0.8,      // 字数下限比例
+  WORD_COUNT_MIN_RATIO: 0.9,      // 字数下限比例（与生成 Prompt 90% 对齐）
   WORD_COUNT_MAX_RATIO: 1.5,      // 字数上限比例
   STYLE_MIN_SCORE: 6,             // 风格最低分
   INFO_DENSITY_MIN_SCORE: 6,      // 信息密度最低分

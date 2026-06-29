@@ -1,6 +1,8 @@
 import { prisma } from "../../db/prisma";
 import { getRagRetrieveService } from "../RagRetrieveService";
 import { buildFullSystemPrompt } from "./prompts";
+import { safeParseRules } from "./promptFormatters";
+import { loadMaterialContextForNovel } from "./materialContext";
 
 /**
  * 按需组装章级创作上下文
@@ -25,16 +27,17 @@ export class ContextAssembler {
    */
   async assembleForChapter(chapterOrder: number, chapterOutline: any): Promise<string> {
     // 加载各层数据
-    const [characters, worldview, style, novel, previousChapterEnding] = await Promise.all([
+    const [characters, worldview, style, novel, previousChapterEnding, materialContext] = await Promise.all([
       this.loadInvolvedCharacters(chapterOutline),
-      this.loadWorldviewSummary(),
+      this.loadWorldviewSummary(chapterOutline?.chapterType),
       this.loadStyleCompact(),
       this.loadNovelMeta(),
       this.loadPreviousChapterEnding(chapterOrder),
+      loadMaterialContextForNovel(this.novelId).catch(() => ""),
     ]);
 
     // 使用 7 层 Prompt 架构组装
-    return buildFullSystemPrompt({
+    const prompt = buildFullSystemPrompt({
       novel,
       style,
       characters,
@@ -42,6 +45,7 @@ export class ContextAssembler {
       chapterOutline,
       previousChapterEnding,
     });
+    return materialContext ? `${materialContext}\n\n${prompt}` : prompt;
   }
 
   /**
@@ -53,17 +57,24 @@ export class ContextAssembler {
 
     return prisma.character.findMany({
       where: { novelId: this.novelId, name: { in: names } },
-      select: { name: true, role: true, identity: true, motivation: true, arcSummary: true, speechStyle: true },
+      select: {
+        name: true, role: true, identity: true, motivation: true,
+        arcSummary: true, speechStyle: true,
+        personality: true, appearance: true, background: true,
+        notes: true, powerLevel: true, behaviorRules: true,
+        forbiddenBehavior: true, signatureLines: true,
+        comedyMechanisms: true, emotionalHooks: true,
+      },
     });
   }
 
   /**
-   * 只加载世界观精简信息（扩展到 300 字）
+   * 加载世界观精简信息，按章节类型选择相关规则
    */
-  private async loadWorldviewSummary() {
+  private async loadWorldviewSummary(chapterType?: string) {
     const wv = await prisma.worldview.findFirst({
       where: { novelId: this.novelId },
-      select: { name: true, summary: true, rules: true, powerSystem: true },
+      select: { name: true, summary: true, rules: true, powerSystem: true, geography: true, factions: true },
     });
     if (!wv) return null;
 
@@ -72,10 +83,13 @@ export class ContextAssembler {
       powerSystemName = JSON.parse(wv.powerSystem || "{}")?.name || "";
     } catch { /* ignore */ }
 
+    // 按章节类型选择相关世界观规则
+    const relevantRules = getRelevantWorldRules(chapterType, wv);
+
     return {
       name: wv.name,
       summary: wv.summary?.slice(0, 300) || "",
-      rules: wv.rules?.slice(0, 300) || "",
+      rules: relevantRules,
       powerSystem: powerSystemName,
     };
   }
@@ -101,13 +115,15 @@ export class ContextAssembler {
     return {
       name: sp.name,
       description: sp.description,
-      toneAndAtmosphere: typeof rules.toneAndAtmosphere === 'object' ? JSON.stringify(rules.toneAndAtmosphere).slice(0, 100) : (rules.toneAndAtmosphere?.slice(0, 100) || ""),
+      toneAndAtmosphere: typeof rules.toneAndAtmosphere === 'object' ? JSON.stringify(rules.toneAndAtmosphere).slice(0, 500) : (rules.toneAndAtmosphere?.slice(0, 500) || ""),
       pacing: sp.pacing,
-      chapterOpeningStyle: typeof rules.chapterOpeningStyle === 'object' ? JSON.stringify(rules.chapterOpeningStyle).slice(0, 50) : (rules.chapterOpeningStyle?.slice(0, 50) || ""),
-      chapterEndingStyle: typeof rules.chapterEndingStyle === 'object' ? JSON.stringify(rules.chapterEndingStyle).slice(0, 50) : (rules.chapterEndingStyle?.slice(0, 50) || ""),
-      dialogueStyle: typeof rules.dialogueStyle === 'object' ? JSON.stringify(rules.dialogueStyle).slice(0, 50) : (rules.dialogueStyle?.slice(0, 50) || ""),
-      writingRules: Array.isArray(rules.writingRules) ? rules.writingRules.slice(0, 3) : [],
-      avoidList: Array.isArray(rules.avoidList) ? rules.avoidList.slice(0, 3) : [],
+      chapterOpeningStyle: typeof rules.chapterOpeningStyle === 'object' ? JSON.stringify(rules.chapterOpeningStyle).slice(0, 200) : (rules.chapterOpeningStyle?.slice(0, 200) || ""),
+      chapterEndingStyle: typeof rules.chapterEndingStyle === 'object' ? JSON.stringify(rules.chapterEndingStyle).slice(0, 200) : (rules.chapterEndingStyle?.slice(0, 200) || ""),
+      dialogueStyle: typeof rules.dialogueStyle === 'object' ? JSON.stringify(rules.dialogueStyle).slice(0, 200) : (rules.dialogueStyle?.slice(0, 200) || ""),
+      humorStyle: typeof rules.humorStyle === 'object' ? JSON.stringify(rules.humorStyle).slice(0, 300) : (rules.humorStyle?.slice(0, 300) || ""),
+      contrastPatterns: Array.isArray(rules.contrastPatterns) ? rules.contrastPatterns.slice(0, 4) : [],
+      writingRules: Array.isArray(rules.writingRules) ? rules.writingRules.slice(0, 5) : [],
+      avoidList: Array.isArray(rules.avoidList) ? rules.avoidList.slice(0, 5) : [],
       // 完整风格维度
       narrativePov: sp.narrativePov,
       tense: sp.tense,
@@ -190,6 +206,7 @@ export class ContextAssembler {
 
   /**
    * 加载上一章结尾内容（用于防止跳章）
+   * v3.0: 如果前一章是用户原文，增加承接说明
    */
   private async loadPreviousChapterEnding(chapterOrder: number): Promise<string> {
     if (chapterOrder <= 1) return "";
@@ -200,14 +217,20 @@ export class ContextAssembler {
         order: chapterOrder - 1,
         content: { not: "" },
       },
-      select: { content: true },
+      select: { content: true, sourceType: true, isCanonical: true, title: true },
       orderBy: { order: "desc" },
     });
 
     if (!prevChapter) return "";
 
-    // 取上一章最后 500 字
-    return prevChapter.content.slice(-500);
+    const ending = prevChapter.content.slice(-500);
+
+    // v3.0: 如果前一章是用户原文，添加承接说明
+    if (prevChapter.sourceType === "user_original" || prevChapter.isCanonical) {
+      return `【用户原文章节 — 第${chapterOrder - 1}章 ${prevChapter.title || ""} 结尾】\n${ending}\n\n【承接要求】本章开头必须承接上文，不得重新介绍设定或跳过关键事件。前序章节为用户原文，不可改写。`;
+    }
+
+    return ending;
   }
 
   /**
@@ -722,4 +745,39 @@ function buildEnrichedChapterBlockLocal(enriched: any): string {
   }
 
   return parts.length > 1 ? parts.join("\n") + "\n" : "";
+}
+
+/**
+ * 按章节类型选择相关世界观规则
+ * 不同类型的章节需要不同的世界观侧面
+ */
+function getRelevantWorldRules(
+  chapterType: string | undefined,
+  worldview: { rules?: string | null; powerSystem?: string | null; geography?: string | null; factions?: string | null },
+): string {
+  const ruleLines = safeParseRules(worldview.rules);
+  if (!chapterType || ruleLines.length === 0) return (worldview.rules || "").slice(0, 300);
+
+  const typeKeywords: Record<string, string[]> = {
+    payoff: ["力量", "等级", "能力", "突破", "升级", "奖励", "战力", "境界", "功法", "技能"],
+    danger_escalation: ["危险", "敌人", "势力", "威胁", "禁地", "规则", "惩罚", "死亡", "战斗", "追杀"],
+    comedy_daily: ["日常", "生活", "社会", "风俗", "习惯", "搞笑", "轻松", "宗门", "门派", "家族"],
+    info_reveal: ["秘密", "历史", "真相", "背景", "传说", "预言", "伏笔", "身世", "来历"],
+    mission: ["任务", "目标", "条件", "限制", "考验", "试炼", "奖励", "惩罚"],
+    emotional: ["情感", "关系", "羁绊", "师徒", "兄弟", "爱情", "友情", "仇恨"],
+  };
+
+  const keywords = typeKeywords[chapterType] || [];
+  if (keywords.length === 0) return ruleLines.join("；").slice(0, 300);
+
+  // 优先保留包含相关关键词的规则
+  const relevant = ruleLines.filter(rule =>
+    keywords.some(kw => rule.includes(kw))
+  );
+
+  // 有匹配结果时用匹配的，否则 fallback 到全量截断
+  if (relevant.length > 0) {
+    return relevant.join("；").slice(0, 400);
+  }
+  return ruleLines.join("；").slice(0, 300);
 }
