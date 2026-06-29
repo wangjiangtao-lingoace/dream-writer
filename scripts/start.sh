@@ -246,9 +246,9 @@ sync_database() {
 
   if $need_prisma; then
     info "正在更新 Prisma Client..."
-    pnpm prisma:generate
+    cd server && pnpm prisma:generate && cd ..
     info "正在推送数据库 Schema..."
-    pnpm prisma:push
+    cd server && pnpm prisma:push && cd ..
     ok "数据库同步完成"
   else
     ok "数据库无需更新"
