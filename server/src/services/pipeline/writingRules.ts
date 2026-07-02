@@ -9,7 +9,7 @@ import { AI_SMELL_WORDS, AI_SMELL_PHRASES } from "./aiSmellWords";
 export const WRITING_SYSTEM_PROMPT = `你是一位顶级中文网络小说作家，擅长写出让读者欲罢不能的故事。
 
 你的写作铁律：
-1. 禁止使用任何 AI 味词汇：不禁、不由得、宛如、仿佛、似乎在诉说、一缕、一抹、一丝、缓缓、淡淡地、静静地、默默地、轻轻地、娓娓道来、令人叹为观止、目光深邃、嘴角微微上扬
+1. 禁止使用AI味词汇（见 aiSmellWords 模块的 AI_SMELL_WORDS 和 AI_SMELL_PHRASES），以及任何类似的模板化表达
 2. 禁止用「他心想」「她暗想」开头的大段内心独白，用行动和对话展现人物内心
 3. 禁止用「突然」作为转折词，用具体的感官描写制造意外感
 4. 禁止大段旁白式设定解释，设定融入对话和行动中自然展现
@@ -34,7 +34,7 @@ export { AI_SMELL_WORDS, AI_SMELL_PHRASES } from "./aiSmellWords";
 
 // 质量评分阈值
 export const QUALITY_THRESHOLDS = {
-  AI_SMELL_MAX_PERCENT: 1.0,      // AI 味词汇占比上限（%）
+  AI_SMELL_MAX_PERCENT: 2.5,      // AI 味词汇占比上限（%）
   WORD_COUNT_MIN_RATIO: 0.9,      // 字数下限比例（与生成 Prompt 90% 对齐）
   WORD_COUNT_MAX_RATIO: 1.5,      // 字数上限比例
   STYLE_MIN_SCORE: 6,             // 风格最低分

@@ -66,20 +66,40 @@ export async function executePlanningPhase_unified(ctx: PhaseContext, jobId: str
       };
     } else {
       // 素材有整体规划时，删除旧卷重新生成；无旧卷时直接生成
+      let backupVolumes: any[] = [];
+      let backupChapterOutlines: any[] = [];
       if (existingVolumes.length > 0 && hasOverallPlan) {
+        // 先备份，生成失败时可恢复
+        backupVolumes = await prisma.volume.findMany({ where: { novelId } });
+        backupChapterOutlines = await prisma.chapterOutline.findMany({ where: { novelId } });
         await prisma.chapterOutline.deleteMany({ where: { novelId } });
         await prisma.volume.deleteMany({ where: { novelId } });
       }
       // 构建 inspiration：原始灵感 + 额外上下文（素材有整体规划时截断灵感文本，避免 prompt 过长）
       let inspirationText = job.novel?.inspiration || "";
       if (hasOverallPlan && inspirationText.length > 3000) {
+        console.warn(`[planningPhase] 灵感文本过长（${inspirationText.length}字），截断至3000字`);
         inspirationText = inspirationText.slice(0, 3000) + "\n...(灵感文本截断，详细内容见素材资产)";
       }
       const inspiration = [inspirationText, extraContext].filter(Boolean).join("\n\n");
-      volumeResult = await generateVolumeOutline(
-        ctx, novelId, outlineResult, worldviewResult, charactersResult, styleResult, config, inspiration, undefined, materialContext,
-      );
-      await ctx.persistGeneratedAssets(novelId, "volume", volumeResult);
+      try {
+        volumeResult = await generateVolumeOutline(
+          ctx, novelId, outlineResult, worldviewResult, charactersResult, styleResult, config, inspiration, undefined, materialContext,
+        );
+        await ctx.persistGeneratedAssets(novelId, "volume", volumeResult);
+      } catch (genError) {
+        // 生成失败，恢复备份数据
+        if (backupVolumes.length > 0) {
+          console.warn("[planningPhase] 卷纲生成失败，恢复备份数据");
+          for (const v of backupVolumes) {
+            await prisma.volume.create({ data: { novelId: v.novelId, sortOrder: v.sortOrder, title: v.title, goal: v.goal, conflict: v.conflict, emotion: v.emotion, newChars: v.newChars, mapName: v.mapName, endHook: v.endHook, keyEvents: v.keyEvents, turningPoint: v.turningPoint, climax: v.climax, foreshadowsPlanned: v.foreshadowsPlanned, characterArcs: v.characterArcs, targetWordCount: v.targetWordCount } }).catch(() => {});
+          }
+          for (const co of backupChapterOutlines) {
+            await prisma.chapterOutline.create({ data: { novelId: co.novelId, volumeId: co.volumeId, sortOrder: co.sortOrder, title: co.title, goal: co.goal, conflict: co.conflict, emotion: co.emotion, hook: co.hook, pleasurePoint: co.pleasurePoint, chapterType: co.chapterType, readerPromise: co.readerPromise, chapterFunction: co.chapterFunction, requiredReaderEmotion: co.requiredReaderEmotion, payoffChainRefs: co.payoffChainRefs, comedyMechanism: co.comedyMechanism, endingQuestion: co.endingQuestion } }).catch(() => {});
+          }
+        }
+        throw genError;
+      }
     }
     await ctx.savePhaseResult(jobId, "planning", "volume_outline",
       { outline: outlineResult, inspiration: job.novel?.inspiration }, volumeResult);

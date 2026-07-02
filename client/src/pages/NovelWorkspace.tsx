@@ -24,6 +24,9 @@ import { WorkspaceStandardLayout } from "../components/workspace/WorkspaceStanda
 import type { WorkspaceTab, WorkspaceGroupId, WorkspaceGroupDef, NovelDetail, WorkspaceData, RadarScores, AIReview } from "../components/workspace";
 import "../styles/pages/workspace.css";
 
+// 新手模式下保留的核心 Tab
+const SIMPLE_MODE_CORE_TABS: WorkspaceTab[] = ["write", "outline", "characters", "worldviews"];
+
 const NovelWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const { id, tab } = useParams<{ id: string; tab?: string }>();
@@ -34,6 +37,13 @@ const NovelWorkspace: React.FC = () => {
     (tab as WorkspaceTab) || "write"
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [simpleMode, setSimpleMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("workspace-simple-mode") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
   const [editingInspiration, setEditingInspiration] = useState(false);
@@ -49,6 +59,21 @@ const NovelWorkspace: React.FC = () => {
   }, [setSearchParams]);
   const [worldviews, setWorldviews] = useState<any[]>([]);
   const [editingWorldviewId, setEditingWorldviewId] = useState<string | null>(null);
+
+  // 新手模式切换，持久化到 localStorage
+  const handleToggleSimpleMode = useCallback(() => {
+    setSimpleMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("workspace-simple-mode", String(next));
+      } catch { /* ignore */ }
+      // 切换后，如果当前 tab 被隐藏，跳转到第一个核心 tab
+      if (next && !SIMPLE_MODE_CORE_TABS.includes(activeTab)) {
+        handleTabChange("write");
+      }
+      return next;
+    });
+  }, [activeTab]);
 
   // New state for 3-column layout
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData | null>(null);
@@ -556,8 +581,18 @@ const NovelWorkspace: React.FC = () => {
     },
   ];
 
+  // 新手模式下过滤 groupDefs，只保留核心 Tab
+  const effectiveGroupDefs = simpleMode
+    ? groupDefs
+        .map(g => ({
+          ...g,
+          tabs: g.tabs.filter(t => SIMPLE_MODE_CORE_TABS.includes(t.key)),
+        }))
+        .filter(g => g.tabs.length > 0)
+    : groupDefs;
+
   const handleGroupClick = (groupId: WorkspaceGroupId) => {
-    const group = groupDefs.find(g => g.id === groupId);
+    const group = effectiveGroupDefs.find(g => g.id === groupId);
     if (group && group.tabs.length > 0) {
       handleTabChange(group.tabs[0].key);
     }
@@ -847,6 +882,8 @@ const NovelWorkspace: React.FC = () => {
         continuing={continuing}
         showExportMenu={showExportMenu}
         isGeneratingReview={isGeneratingReview}
+        simpleMode={simpleMode}
+        onToggleSimpleMode={handleToggleSimpleMode}
         onNavigate={navigate}
         onSelectChapter={handleSelectChapter}
         onCreateChapter={handleCreateChapter}
@@ -869,8 +906,10 @@ const NovelWorkspace: React.FC = () => {
       aiProgress={aiProgress}
       activeTab={activeTab}
       activeGroupId={activeGroupId}
-      groupDefs={groupDefs}
+      groupDefs={effectiveGroupDefs}
       sidebarCollapsed={sidebarCollapsed}
+      simpleMode={simpleMode}
+      onToggleSimpleMode={handleToggleSimpleMode}
       onNavigate={navigate}
       onSave={handleSave}
       onTabChange={handleTabChange}

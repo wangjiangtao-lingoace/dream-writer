@@ -5,8 +5,10 @@
 
 import { PhaseContext } from "./pipelineUtils";
 import { detectAiSmell, checkWordCount, QUALITY_THRESHOLDS } from "./writingRules";
+import { detectSentencePatterns, detectParagraphPatterns, detectAIStructure, scoreProseStyle, scoreReadability } from "./aiSmellWords";
 import { prisma } from "../../db/prisma";
 import { parseLlmJson } from "../../utils/parseJson";
+import { detectStyleDeviation, type StyleFingerprint } from "./styleFingerprint";
 
 // 主题偏离检测：不同 genre 禁止出现的关键词
 const GENRE_FORBIDDEN_WORDS: Record<string, string[]> = {
@@ -16,6 +18,10 @@ const GENRE_FORBIDDEN_WORDS: Record<string, string[]> = {
   "言情": ["修仙", "灵气", "筑基", "金丹", "元婴", "渡劫", "飞升", "战斗", "杀戮", "血腥", "暴力"],
   "悬疑": ["修仙", "灵气", "筑基", "金丹", "元婴", "渡劫", "飞升", "魔法", "异世界"],
   "历史": ["手机", "互联网", "电脑", "汽车", "飞机", "现代", "科技", "公司"],
+  "科幻": ["修仙", "灵气", "筑基", "金丹", "元婴", "渡劫", "飞升", "法宝", "灵石", "丹田", "魔法", "异世界", "斗气", "武魂"],
+  "末日": ["修仙", "灵气", "魔法", "异世界", "古代", "朝廷", "皇帝", "江湖", "武林", "仙人", "法宝", "灵石"],
+  "游戏": ["修仙", "灵气", "古代", "朝廷", "皇帝", "江湖", "武林", "真实世界", "仙人", "法宝", "灵石"],
+  "竞技": ["修仙", "灵气", "魔法", "异世界", "古代", "朝廷", "皇帝", "斗气", "武魂", "法宝", "灵石"],
 };
 
 // 跳章检测：检查是否出现了不该出现的状态跳跃
@@ -33,6 +39,16 @@ export interface QualityScores {
   wordCount: number;    // 0-10, 字数合规度
   genreDeviation: number; // 0-10, 主题偏离度（0=无偏离）
   continuity: number;   // 0-10, 剧情承接度（10=完美承接）
+  // 深度检测维度
+  sentencePattern: number;   // 0-100, 句式AI味（越高越像AI）
+  paragraphPattern: number;  // 0-100, 段落AI味（越高越像AI）
+  structurePattern: number;  // 0-100, 结构AI味（越高越像AI）
+  // 综合分（加权后）
+  aiSmellComposite: number;  // 0-100, 综合AI味（词汇40% + 句式30% + 段落20% + 结构10%）
+  proseStyle: number;        // 0-10, 散文风格评分（10为最佳）
+  readability: number;       // 0-10, 可读性评分（10为最佳）
+  // 风格一致性
+  styleConsistency: number;  // 0-10, 风格一致性评分（10为完全一致，0为严重偏离）
 }
 
 export interface QualityIssue {
@@ -79,11 +95,68 @@ export async function validateChapterQuality(
 
   // 1. AI 味正则检测（纯程序）
   const aiSmellResult = detectAiSmell(content);
-  if (aiSmellResult.percentage > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT) {
+
+  // 1.1 句式模式检测
+  const sentencePatternResult = detectSentencePatterns(content);
+
+  // 1.2 段落模式检测
+  const paragraphPatternResult = detectParagraphPatterns(content);
+
+  // 1.3 结构模式检测
+  const structureResult = detectAIStructure(content);
+
+  // 1.4 散文风格检测
+  const proseStyleResult = scoreProseStyle(content);
+
+  // 1.5 可读性评分
+  const readabilityResult = scoreReadability(content);
+
+  // 1.6 综合 AI 味评分：词汇(40%) + 句式(25%) + 段落(15%) + 结构(10%) + 可读性(10%)
+  // 可读性分数转换为 AI 味分（10分制→百分制，分数越低越好）
+  const readabilityAsSmell = (10 - readabilityResult.score) * 10;
+  const aiSmellComposite =
+    aiSmellResult.percentage * 0.4 +
+    sentencePatternResult.score * 0.25 +
+    paragraphPatternResult.score * 0.15 +
+    structureResult.score * 0.1 +
+    readabilityAsSmell * 0.1;
+
+  if (aiSmellComposite > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT) {
+    const detailParts: string[] = [];
+    if (aiSmellResult.percentage > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT) {
+      detailParts.push(`词汇命中${aiSmellResult.matches.slice(0, 3).join("、")}`);
+    }
+    if (sentencePatternResult.score > 30) {
+      detailParts.push(...sentencePatternResult.details.slice(0, 2));
+    }
+    if (paragraphPatternResult.score > 30) {
+      detailParts.push(...paragraphPatternResult.details.slice(0, 2));
+    }
+    if (structureResult.score > 30) {
+      detailParts.push(...structureResult.details.slice(0, 2));
+    }
     issues.push({
       type: "ai_smell",
-      severity: aiSmellResult.percentage > 2 ? "critical" : "high",
-      description: `AI味词汇过多（${aiSmellResult.percentage.toFixed(2)}%）：${aiSmellResult.matches.slice(0, 5).join("、")}`,
+      severity: aiSmellComposite > 3 ? "critical" : "high",
+      description: `AI味过重（综合${aiSmellComposite.toFixed(1)}%：词汇${aiSmellResult.percentage.toFixed(1)}% + 句式${sentencePatternResult.score} + 段落${paragraphPatternResult.score} + 结构${structureResult.score}）：${detailParts.join("；")}`,
+    });
+  }
+
+  // 1.7 可读性问题报告
+  if (readabilityResult.score < 7) {
+    issues.push({
+      type: "ai_smell",
+      severity: readabilityResult.score < 5 ? "critical" : "high",
+      description: `可读性不佳（${readabilityResult.score}/10）：${readabilityResult.issues.join("；")}`,
+    });
+  }
+
+  // 1.8 散文风格问题报告
+  if (proseStyleResult.score < 7) {
+    issues.push({
+      type: "ai_smell",
+      severity: proseStyleResult.score < 5 ? "critical" : "high",
+      description: `散文风格不佳（${proseStyleResult.score}/10）：${proseStyleResult.issues.join("；")}`,
     });
   }
 
@@ -107,6 +180,16 @@ export async function validateChapterQuality(
     });
   }
 
+  // 3.5. 风格一致性检测（纯程序）
+  const styleConsistencyResult = await detectStyleConsistency(novelId, content);
+  if (styleConsistencyResult.score < 5) {
+    issues.push({
+      type: "narrative_quality",
+      severity: styleConsistencyResult.score < 3 ? "critical" : "high",
+      description: styleConsistencyResult.issues.join("；") || `风格一致性不足（${styleConsistencyResult.score}/10）`,
+    });
+  }
+
   // 4. 剧情承接检测（纯程序）
   const continuityResult = await detectContinuityIssues(novelId, chapterOrder, content);
   if (continuityResult.score < 7) {
@@ -123,13 +206,22 @@ export async function validateChapterQuality(
     wordCount: wordCountResult.compliant ? 10 : Math.round(wordCountResult.ratio * 10),
     genreDeviation: genreResult.deviationScore,
     continuity: continuityResult.score,
+    sentencePattern: sentencePatternResult.score,
+    paragraphPattern: paragraphPatternResult.score,
+    structurePattern: structureResult.score,
+    aiSmellComposite,
+    proseStyle: proseStyleResult.score,
+    readability: readabilityResult.score,
+    styleConsistency: styleConsistencyResult.score,
   };
 
   const programShouldRetry =
-    aiSmellResult.percentage > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT ||
+    aiSmellComposite > QUALITY_THRESHOLDS.AI_SMELL_MAX_PERCENT ||
     !wordCountResult.compliant ||
     genreResult.deviationScore >= 3 ||
-    continuityResult.score < 5;
+    continuityResult.score < 5 ||
+    proseStyleResult.score < 5 ||
+    styleConsistencyResult.score < 3;
 
   // 条件启用 LLM 叙事质量检测
   let narrativeQuality: NarrativeQualityResult | undefined;
@@ -311,7 +403,7 @@ async function runNarrativeQualityCheck(
 - 7分以上 = 合格，可以发布
 - 5-6分 = 勉强，需要修改
 - 5分以下 = 不合格，必须重写
-大多数 AI 生成的章节在 4-6 分之间，真正好的章节才能到 7+ 分。`;
+请根据实际质量独立评分，不要参考任何预设分数区间。`;
 
   const contentExcerpt = content.length > 6000
     ? content.slice(0, 3000) + "\n...(中段省略)...\n" + content.slice(-3000)
@@ -367,4 +459,45 @@ ${contentExcerpt}
     summaryInsteadOfScene: !!parsed.summaryInsteadOfScene,
     issues: Array.isArray(parsed.issues) ? parsed.issues : [],
   };
+}
+
+/**
+ * 风格一致性检测：从 StyleProfile 读取缓存指纹，检测生成内容的偏离度
+ * 返回 0-10 分（10 = 完全一致，0 = 严重偏离）
+ */
+async function detectStyleConsistency(
+  novelId: string,
+  content: string,
+): Promise<{ score: number; issues: string[] }> {
+  const issues: string[] = [];
+
+  try {
+    const styleProfile = await prisma.styleProfile.findFirst({
+      where: { novelId, isDefault: true },
+      select: { fingerprint: true },
+    });
+
+    if (!styleProfile?.fingerprint) {
+      // 无指纹，不扣分
+      return { score: 10, issues };
+    }
+
+    const fp: StyleFingerprint = JSON.parse(styleProfile.fingerprint);
+    const result = detectStyleDeviation(fp, content);
+
+    // 偏离度转为一致性分（10 - 偏离度）
+    const score = Math.max(0, 10 - result.deviationScore);
+
+    if (result.deviationScore > 3) {
+      const detailParts = result.deviations.map(
+        d => `${d.dimension}：期望${d.expected}，实际${d.actual}`
+      );
+      issues.push(`风格偏离（偏离度${result.deviationScore}/10）：${detailParts.slice(0, 3).join("；")}`);
+    }
+
+    return { score, issues };
+  } catch (e) {
+    console.warn("[qualityCheck] 风格一致性检测异常:", e);
+    return { score: 10, issues };
+  }
 }

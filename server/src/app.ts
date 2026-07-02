@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import { errorHandler } from "./middleware/errorHandler";
+import { apiKeyAuth } from "./middleware/auth";
 import novelRouter from "./routes/novels";
 import workspaceRouter from "./routes/workspace";
 import bookAnalysisRouter from "./routes/bookAnalysis";
@@ -95,6 +96,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(morgan("dev"));
+app.use("/api", apiKeyAuth);
 
 app.get("/api/health", async (_req: Request, res: Response) => {
   await checkDatabaseSchema();

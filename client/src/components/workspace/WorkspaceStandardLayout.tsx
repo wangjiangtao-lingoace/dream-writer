@@ -14,6 +14,7 @@ interface WorkspaceStandardLayoutProps {
   activeGroupId: WorkspaceGroupId;
   groupDefs: WorkspaceGroupDef[];
   sidebarCollapsed: boolean;
+  simpleMode?: boolean;
 
   // 回调函数
   onNavigate: (path: string) => void;
@@ -21,6 +22,7 @@ interface WorkspaceStandardLayoutProps {
   onTabChange: (tab: WorkspaceTab) => void;
   onGroupClick: (groupId: WorkspaceGroupId) => void;
   onToggleCollapse: () => void;
+  onToggleSimpleMode?: () => void;
   getAIActions: () => Array<{ key: string; label: string; icon: string; description: string; shortcut?: string; primary?: boolean }>;
 
   // 渲染函数
@@ -34,11 +36,13 @@ export const WorkspaceStandardLayout: React.FC<WorkspaceStandardLayoutProps> = (
   activeGroupId,
   groupDefs,
   sidebarCollapsed,
+  simpleMode,
   onNavigate,
   onSave,
   onTabChange,
   onGroupClick,
   onToggleCollapse,
+  onToggleSimpleMode,
   getAIActions,
   renderContent,
 }) => {
@@ -59,6 +63,8 @@ export const WorkspaceStandardLayout: React.FC<WorkspaceStandardLayoutProps> = (
             onBack={() => onNavigate("/")}
             onSave={onSave}
             onPipeline={() => onNavigate(`/novel/${novel?.id}/pipeline`)}
+            simpleMode={simpleMode}
+            onToggleSimpleMode={onToggleSimpleMode}
           />
 
           <div className="workspace-layout" style={{
@@ -94,6 +100,25 @@ export const WorkspaceStandardLayout: React.FC<WorkspaceStandardLayoutProps> = (
                       {t.label}
                     </button>
                   ))}
+                </div>
+              )}
+              {simpleMode && (
+                <div style={{
+                  padding: "0.5rem 1rem",
+                  background: "var(--accent-muted, rgba(99,102,241,0.08))",
+                  color: "var(--accent)",
+                  fontSize: "0.8125rem",
+                  borderBottom: "1px solid var(--border-default)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem", flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  新手模式已开启，隐藏了高级功能。可在顶部切换关闭。
                 </div>
               )}
               <div className="workspace-content-inner">

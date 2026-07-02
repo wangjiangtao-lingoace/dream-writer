@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "../components/ui/toast";
-import PipelineConfigModal, { PipelineConfig } from "../components/PipelineConfigModal";
+import PipelineConfigModal, { PipelineConfig, NovelFormData } from "../components/PipelineConfigModal";
 
 interface CharacterCard {
   name: string;
@@ -228,6 +228,12 @@ const NovelForm: React.FC = () => {
     border: "1px solid var(--border)", padding: "1.5rem", marginBottom: "1rem",
   };
 
+  const novelFormDataForRecommend: NovelFormData = {
+    outline: synopsis,
+    characterCount: characters.filter(c => c.name.trim()).length,
+    worldviewSummary: [worldview.summary, worldview.rules, worldview.powerSystem, worldview.geography, worldview.factions, worldview.history].filter(Boolean).join(""),
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
       {/* Header */}
@@ -325,12 +331,15 @@ const NovelForm: React.FC = () => {
 
             {/* 7 层 Prompt 架构新增字段 */}
             <div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border)", paddingTop: "1.5rem" }}>
-              <h3 style={{ fontSize: "0.875rem", color: "var(--text-primary)", marginBottom: "1rem", fontWeight: 600 }}>
-                核心卖点配置（决定 AI 能否抓住本书精髓）
+              <h3 style={{ fontSize: "0.875rem", color: "var(--text-primary)", marginBottom: "0.5rem", fontWeight: 600 }}>
+                高级选项（可跳过，AI 会自动生成）
               </h3>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
+                以下字段帮助 AI 更精准地理解你的创作意图，跳过也不影响创作
+              </p>
 
               <div style={{ marginBottom: "1.5rem" }}>
-                <label style={labelStyle}>核心卖点</label>
+                <label style={labelStyle}>核心卖点（可选）</label>
                 <textarea value={coreSellingPoint} onChange={e => setCoreSellingPoint(e.target.value)}
                   placeholder="例：老祖阴间打工，后代阳间享福" rows={2}
                   style={{ ...inputStyle, resize: "vertical" }} />
@@ -340,7 +349,7 @@ const NovelForm: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: "1.5rem" }}>
-                <label style={labelStyle}>核心爽点</label>
+                <label style={labelStyle}>核心爽点（可选）</label>
                 <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
                   <input value={payoffInput} onChange={e => setPayoffInput(e.target.value)}
                     placeholder="输入爽点后回车添加" style={{ ...inputStyle, flex: 1 }}
@@ -375,7 +384,7 @@ const NovelForm: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: "1.5rem" }}>
-                <label style={labelStyle}>核心矛盾</label>
+                <label style={labelStyle}>核心矛盾（可选）</label>
                 <textarea value={coreConflict} onChange={e => setCoreConflict(e.target.value)}
                   placeholder="例：阴间资源不足，祖宗竞争激烈" rows={2}
                   style={{ ...inputStyle, resize: "vertical" }} />
@@ -385,7 +394,7 @@ const NovelForm: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: "1.5rem" }}>
-                <label style={labelStyle}>读者期待</label>
+                <label style={labelStyle}>读者期待（可选）</label>
                 <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
                   <input value={expectationInput} onChange={e => setExpectationInput(e.target.value)}
                     placeholder="输入读者期待后回车添加" style={{ ...inputStyle, flex: 1 }}
@@ -641,6 +650,7 @@ const NovelForm: React.FC = () => {
         onClose={() => setConfigModalOpen(false)}
         onConfirm={handleConfigConfirm}
         mode="create"
+        novelFormData={novelFormDataForRecommend}
       />
     </div>
   );

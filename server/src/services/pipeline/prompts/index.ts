@@ -67,11 +67,20 @@ export async function buildFullSystemPrompt(params: {
     safeParseJson<string[]>(novel.readerExpectations, [])
   );
 
+  // 动态替换全局不变量占位符
+  const protagonist = characters.find(c => c.role === '主角' || c.role === 'protagonist');
+  const engineWithInvariants = engine
+    .replace(/\{\{genre\}\}/g, novel.genre || '未指定类型')
+    .replace(/\{\{protagonistName\}\}/g, protagonist?.name || '主角')
+    .replace(/\{\{worldviewSummary\}\}/g, worldview?.summary || worldview?.rules || '暂无世界观设定')
+    .replace(/\{\{coreConflict\}\}/g, novel.coreConflict || '暂无核心矛盾')
+    .replace(/\{\{languageStyle\}\}/g, style?.description || style?.name || '通俗白话');
+
   // 按 P0-P3 优先级组装
   const parts: string[] = [];
 
   // 基础引擎（始终在最前面）
-  parts.push(engine);
+  parts.push(engineWithInvariants);
 
   // P0: 最高优先级 — 章节任务 + 上一章结尾
   if (chapterTask || sellingPoints || previousChapterEnding) {

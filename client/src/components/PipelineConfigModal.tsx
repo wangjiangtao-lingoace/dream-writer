@@ -14,12 +14,34 @@ export interface PipelineConfig {
   maxChaptersPerBatch?: number;
 }
 
+export interface NovelFormData {
+  outline?: string;
+  characterCount?: number;
+  worldviewSummary?: string;
+}
+
+function recommendScale(data?: NovelFormData): string | null {
+  if (!data) return null;
+  const { outline = "", characterCount = 0, worldviewSummary = "" } = data;
+  if (outline.length > 500 || characterCount >= 5 || worldviewSummary.length > 300) {
+    return "长篇";
+  }
+  if (outline.length > 200 || characterCount >= 3) {
+    return "中篇";
+  }
+  if (outline.length > 0 || characterCount >= 1) {
+    return "短篇";
+  }
+  return null;
+}
+
 interface PipelineConfigModalProps {
   open: boolean;
   onClose: () => void;
   onConfirm: (config: PipelineConfig) => void;
   mode: "create" | "imitation";
   defaults?: Partial<PipelineConfig>;
+  novelFormData?: NovelFormData;
 }
 
 interface PresetOption {
@@ -58,6 +80,7 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
   onConfirm,
   mode,
   defaults,
+  novelFormData,
 }) => {
   const presets = mode === "imitation" ? IMITATION_PRESETS : CREATE_PRESETS;
 
@@ -77,8 +100,10 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
     [presets]
   );
 
+  const recommendedLabel = recommendScale(novelFormData);
+
   const mergedDefaults: PipelineConfig = { ...DEFAULT_CONFIG, ...defaults };
-  const initialPreset = findMatchingPreset(mergedDefaults);
+  const initialPreset = findMatchingPreset(mergedDefaults) ?? recommendedLabel;
 
   const [selectedPreset, setSelectedPreset] = useState<string | null>(initialPreset);
   const [autoContinue, setAutoContinue] = useState(mergedDefaults.autoContinue);
@@ -106,7 +131,7 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
   useEffect(() => {
     if (open) {
       const m: PipelineConfig = { ...DEFAULT_CONFIG, ...defaults };
-      const p = findMatchingPreset(m);
+      const p = findMatchingPreset(m) ?? recommendScale(novelFormData);
       setSelectedPreset(p);
       setAutoContinue(m.autoContinue);
       setAutoDraftChapters(m.autoDraftChapters);
@@ -117,7 +142,7 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
       setTokenBudget(m.tokenBudget);
       setMaxChaptersPerBatch(m.maxChaptersPerBatch);
     }
-  }, [open, defaults, findMatchingPreset]);
+  }, [open, defaults, findMatchingPreset, novelFormData]);
 
   const handlePresetSelect = (preset: PresetOption) => {
     setSelectedPreset(preset.label);
@@ -394,7 +419,24 @@ const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
                   style={presetCardStyle(selectedPreset === p.label)}
                   onClick={() => handlePresetSelect(p)}
                 >
-                  <div style={presetLabelStyle(selectedPreset === p.label)}>{p.label}</div>
+                  <div style={{ position: "relative" }}>
+                    <div style={presetLabelStyle(selectedPreset === p.label)}>{p.label}</div>
+                    {recommendedLabel === p.label && (
+                      <span style={{
+                        position: "absolute",
+                        top: "-0.375rem",
+                        right: "-1.5rem",
+                        fontSize: "0.5625rem",
+                        padding: "0.0625rem 0.3125rem",
+                        background: "var(--accent, #6366f1)",
+                        color: "#fff",
+                        borderRadius: "var(--radius-sm, 4px)",
+                        fontWeight: 600,
+                        lineHeight: 1.4,
+                        whiteSpace: "nowrap",
+                      }}>推荐</span>
+                    )}
+                  </div>
                   <div style={presetDescStyle}>{p.description}</div>
                 </div>
               ))}

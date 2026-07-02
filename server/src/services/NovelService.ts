@@ -142,41 +142,44 @@ export class NovelService {
     const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId, novelId },
     });
-    
+
     if (!chapter) {
       throw new Error("章节不存在。");
     }
-    
-    // 删除章节及其关联的 ChapterSummary
-    await prisma.chapter.delete({ where: { id: chapterId } });
-    await prisma.chapterSummary.deleteMany({ where: { novelId, chapterOrder: chapter.order } });
 
-    // 重新排列后续章节的序号
-    const subsequentChapters = await prisma.chapter.findMany({
-      where: {
-        novelId,
-        order: { gt: chapter.order },
-      },
-      orderBy: { order: "asc" },
-    });
-    
-    // 更新后续章节的序号
-    for (const ch of subsequentChapters) {
-      await prisma.chapter.update({
-        where: { id: ch.id },
-        data: { order: ch.order - 1 },
+    // 将删除章节 + 重排序号的所有 DB 操作放入事务，保证原子性
+    await prisma.$transaction(async (tx) => {
+      // 删除章节及其关联的 ChapterSummary
+      await tx.chapter.delete({ where: { id: chapterId } });
+      await tx.chapterSummary.deleteMany({ where: { novelId, chapterOrder: chapter.order } });
+
+      // 重新排列后续章节的序号
+      const subsequentChapters = await tx.chapter.findMany({
+        where: {
+          novelId,
+          order: { gt: chapter.order },
+        },
+        orderBy: { order: "asc" },
       });
-    }
 
-    // 同步调整后续 ChapterSummary 的 chapterOrder
-    await prisma.chapterSummary.updateMany({
-      where: {
-        novelId,
-        chapterOrder: { gt: chapter.order },
-      },
-      data: { chapterOrder: { decrement: 1 } },
+      // 更新后续章节的序号
+      for (const ch of subsequentChapters) {
+        await tx.chapter.update({
+          where: { id: ch.id },
+          data: { order: ch.order - 1 },
+        });
+      }
+
+      // 同步调整后续 ChapterSummary 的 chapterOrder
+      await tx.chapterSummary.updateMany({
+        where: {
+          novelId,
+          chapterOrder: { gt: chapter.order },
+        },
+        data: { chapterOrder: { decrement: 1 } },
+      });
     });
-    
+
     return { success: true };
   }
 }

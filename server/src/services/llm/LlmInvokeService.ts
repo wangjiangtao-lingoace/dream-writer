@@ -194,6 +194,7 @@ export class LlmInvokeService {
 
     const response = await fetch(`${finalConfig.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
+      signal: AbortSignal.timeout(120_000),
       headers: {
         "Content-Type": "application/json",
         ...(finalConfig.apiKey ? { Authorization: `Bearer ${finalConfig.apiKey}` } : {}),

@@ -411,47 +411,52 @@ export class BookAnalysisService {
       ].join("\n")),
     ].join("\n");
 
-    const asset = await prisma.knowledgeAsset.create({
-      data: {
-        novelId,
-        title: `拆书沉淀：${analysis.title}`,
-        category: "book_analysis_materialized",
-        content,
-        tags: "拆书,仿写准备,结构化记忆",
-      },
-    });
-
-    for (const section of sections) {
-      await prisma.memory.create({
+    // 将创建 asset + 创建 memories + 更新 bookAnalysis 放入事务，保证原子性
+    const result = await prisma.$transaction(async (tx) => {
+      const asset = await tx.knowledgeAsset.create({
         data: {
           novelId,
-          type: memoryTypeForSection(section.key),
-          category: `book_analysis:${section.key}`,
-          title: `拆书/${section.title}：${analysis.title}`,
-          content: section.content || "暂无内容。",
-          importance: section.key === "plot_structure" || section.key === "character_system" ? 8 : 6,
-          metadata: JSON.stringify({
-            source: "book_analysis",
-            analysisId: id,
-            sourceTitle: analysis.sourceTitle || analysis.title,
-            evidence: section.evidence,
-          }),
+          title: `拆书沉淀：${analysis.title}`,
+          category: "book_analysis_materialized",
+          content,
+          tags: "拆书,仿写准备,结构化记忆",
         },
       });
-    }
 
-    await prisma.bookAnalysis.update({
-      where: { id },
-      data: { publishedAssetId: asset.id },
+      for (const section of sections) {
+        await tx.memory.create({
+          data: {
+            novelId,
+            type: memoryTypeForSection(section.key),
+            category: `book_analysis:${section.key}`,
+            title: `拆书/${section.title}：${analysis.title}`,
+            content: section.content || "暂无内容。",
+            importance: section.key === "plot_structure" || section.key === "character_system" ? 8 : 6,
+            metadata: JSON.stringify({
+              source: "book_analysis",
+              analysisId: id,
+              sourceTitle: analysis.sourceTitle || analysis.title,
+              evidence: section.evidence,
+            }),
+          },
+        });
+      }
+
+      await tx.bookAnalysis.update({
+        where: { id },
+        data: { publishedAssetId: asset.id },
+      });
+
+      return {
+        analysisId: id,
+        novelId,
+        knowledgeAssetId: asset.id,
+        memoryCount: sections.length,
+        materializedAt: new Date().toISOString(),
+      };
     });
 
-    return {
-      analysisId: id,
-      novelId,
-      knowledgeAssetId: asset.id,
-      memoryCount: sections.length,
-      materializedAt: new Date().toISOString(),
-    };
+    return result;
   }
 
   private serializeDetail(row: any) {

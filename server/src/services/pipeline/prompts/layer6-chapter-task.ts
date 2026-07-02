@@ -37,12 +37,7 @@ interface ChapterOutlineInfo {
 export function buildLayer6ChapterTask(outline?: ChapterOutlineInfo | null): string {
   if (!outline) {
     return `【本章任务 — 章节导演指令】
-本章没有章纲数据。请严格承接上一章结尾，保持人物口吻、世界规则和当前剧情状态，不得跳跃。
-硬性要求：
-1. 不得重新开局；
-2. 不得跳过上一章结尾；
-3. 不得用旁白总结代替具体场景；
-4. 必须保持人物口吻一致。`;
+本章没有章纲数据。请根据前文自然延续剧情，保持角色一致性，推进主线发展。`;
   }
 
   const parts: string[] = [];

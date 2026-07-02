@@ -29,13 +29,37 @@ export async function buildWorkspaceAssetContext(novelId: string, jobId?: string
 
   const usageItems: Array<{ assetType: string; assetId: string; title: string }> = [];
   const lines: string[] = ["【当前作品已入库资产】"];
+
+  // 核心卖点与核心矛盾（置顶，LLM 优先关注）
+  if (novel?.coreSellingPoint?.trim() || novel?.coreConflict?.trim()) {
+    lines.push("## 核心设定");
+    if (novel.coreSellingPoint?.trim()) {
+      lines.push(`- 核心卖点：${novel.coreSellingPoint.trim()}`);
+    }
+    if (novel.coreConflict?.trim()) {
+      lines.push(`- 核心矛盾：${novel.coreConflict.trim()}`);
+    }
+    usageItems.push({ assetType: "novel_core", assetId: novel.id, title: `${novel.title}/核心设定` });
+  }
+
+  // 主角信息（优先于其他角色）
+  const protagonists = characters.filter(c => c.role === "主角");
+  const otherCharacters = characters.filter(c => c.role !== "主角");
+  if (protagonists.length) {
+    lines.push("## 主角");
+    for (const character of protagonists) {
+      lines.push(`- ${character.name}：${[character.role, character.identity, character.motivation, character.arcSummary].filter(Boolean).join(" / ")}`);
+      usageItems.push({ assetType: "character", assetId: character.id, title: character.name });
+    }
+  }
+
   if (novel?.outline?.trim()) {
     lines.push("## 当前作品大纲", novel.outline.trim());
     usageItems.push({ assetType: "novel_outline", assetId: novel.id, title: `${novel.title}/作品大纲` });
   }
-  if (characters.length) {
-    lines.push("## 人物卡");
-    for (const character of characters) {
+  if (otherCharacters.length) {
+    lines.push("## 其他角色");
+    for (const character of otherCharacters) {
       lines.push(`- ${character.name}：${[character.role, character.identity, character.motivation, character.arcSummary].filter(Boolean).join(" / ")}`);
       usageItems.push({ assetType: "character", assetId: character.id, title: character.name });
     }

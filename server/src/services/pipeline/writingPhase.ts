@@ -9,7 +9,7 @@ import { validateChapterQuality } from "./qualityCheck";
 import { QUALITY_THRESHOLDS } from "./writingRules";
 import { runPeriodicConsistencyCheck, persistPeriodicCheckResults } from "./periodicCheck";
 import { manageForeshadowLifecycle } from "../ForeshadowService";
-import { generateChapterBeats } from "./generators";
+import { generateChapterBeats, generateEditorPolish } from "./generators";
 
 /**
  * Beat 模板：根据 chapterType 生成标准化的节奏单元
@@ -353,11 +353,13 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
   }
 
   for (let index = 0; index < count; index += 1) {
-    // 检查暂停状态，实现即时暂停
-    const currentJob = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
-    if (currentJob?.status === "paused" || currentJob?.status === "error") {
-      console.log(`[writingPhase] 流程已${currentJob.status === "paused" ? "暂停" : "异常"}，停止写作`);
-      break;
+    // 每5章检查一次暂停状态，减少DB查询开销
+    if (index % 5 === 0) {
+      const currentJob = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+      if (currentJob?.status === "paused" || currentJob?.status === "error") {
+        console.log(`[writingPhase] 流程已${currentJob.status === "paused" ? "暂停" : "异常"}，停止写作`);
+        break;
+      }
     }
 
     // P0 #1: Token 预算检查
@@ -630,12 +632,31 @@ async function generateInitialChapterDrafts(ctx: PhaseContext, jobId: string, no
         beatBlueprint: fullBeatBlueprint,
       });
 
+      // 编辑 Agent 润色（默认启用，ENABLE_EDITOR_POLISH=false 可关闭）
+      if (process.env.ENABLE_EDITOR_POLISH !== "false") {
+        try {
+          const polishedContent = await generateEditorPolish(ctx, draft, {
+            chapterOutline: card.goal ? `目标：${card.goal}\n冲突：${card.conflict || ""}\n钩子：${card.hook || ""}` : "",
+            characters: characterConstraints || "",
+            styleGuide: novel.genre || "通俗白话",
+          }, Math.max(3000, Math.min(5000, Math.round(targetWordCount * 2))));
+          if (polishedContent && polishedContent.length > draft.length * 0.5) {
+            draft = polishedContent;
+          }
+        } catch (e) {
+          console.warn(`[writingPhase] 第${order}章编辑润色失败，使用原始正文:`, e);
+        }
+      }
+
       let retryCount = 0;
       let qualityResult = await validateChapterQuality(ctx, novelId, order, draft, targetWordCount, card, { isKeyChapter, retryCount });
 
       while (!qualityResult.passed && qualityResult.shouldRetry && retryCount < QUALITY_THRESHOLDS.MAX_RETRY_COUNT) {
         retryCount++;
-        console.log(`[writingPhase] 第${order}章质量不合格，第${retryCount}次重试：${qualityResult.retryHint}`);
+        // 重试退避：第1次等1秒，第2次等3秒
+        const retryDelay = retryCount === 1 ? 1000 : 3000;
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        console.log(`[writingPhase] 第${order}章质量不合格，第${retryCount}次重试（等待${retryDelay}ms）：${qualityResult.retryHint}`);
         draft = await generateChapterDraft(ctx, {
           novel,
           outline,

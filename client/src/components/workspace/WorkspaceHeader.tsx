@@ -5,6 +5,8 @@ interface WorkspaceHeaderProps {
   onBack: () => void;
   onSave: () => void;
   onPipeline: () => void;
+  simpleMode?: boolean;
+  onToggleSimpleMode?: () => void;
 }
 
 export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
@@ -12,6 +14,8 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   onBack,
   onSave,
   onPipeline,
+  simpleMode,
+  onToggleSimpleMode,
 }) => {
   return (
     <header className="workspace-header" style={{
@@ -49,7 +53,31 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
           margin: 0,
         }}>《{novelTitle}》</h1>
       </div>
-      <div className="header-actions" style={{ display: "flex", gap: "0.5rem" }}>
+      <div className="header-actions" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        {onToggleSimpleMode && (
+          <button
+            onClick={onToggleSimpleMode}
+            title={simpleMode ? "关闭新手模式" : "开启新手模式"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              background: simpleMode ? "var(--accent)" : "transparent",
+              color: simpleMode ? "var(--text-inverse)" : "var(--text-secondary)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+              transition: "all var(--transition-fast)",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem" }}>
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+            {simpleMode ? "新手模式" : "标准模式"}
+          </button>
+        )}
         <button className="btn-pipeline" onClick={onPipeline} style={{
           display: "inline-flex",
           alignItems: "center",

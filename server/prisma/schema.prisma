@@ -57,6 +57,8 @@ model Novel {
   chapterQualityLogs ChapterQualityLog[]
   chapterBeats     ChapterBeat[]
   payoffChains     PayoffChain[]
+  snapshots      ChapterSnapshot[]
+  causalLinks  CausalLink[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -121,6 +123,7 @@ model ChapterSummary {
   endingState     String   @default("")
   newHooks        String   @default("[]")
   resolvedHooks   String   @default("[]")
+  resolvedForeshadows String @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -159,6 +162,7 @@ model Character {
   signatureScenes   String?  // JSON: 标志性桥段
   comedyMechanisms  String?  // JSON: 喜剧机制
   emotionalHooks    String?  // JSON: 情绪触发点
+  growthCheckpoints String?  // JSON: [{chapter, description, type, createdAt}] 角色成长检查点
   rawProfile        String?  // 用户原始人物卡全文
   sourceType        String?  // user_original / ai_generated / extracted
   isCanonical       Boolean  @default(false) // 用户原文人物卡
@@ -495,7 +499,7 @@ model Memory {
   category    String   @default("") // 子分类
   title       String
   content     String   // 记忆内容
-  importance  Int      @default(5) // 1-10 重要程度
+  importance  Float    @default(5) // 1-10 重要程度
   chapterId   String?  // 关联章节
   metadata    String   @default("{}") // 元数据 JSON
   lastAccessedAt DateTime?  // 最后被读取的时间
@@ -541,7 +545,10 @@ model StyleProfile {
 
   // 风格 DNA：可执行的节奏/语言/禁区约束
   styleDna        String?  // JSON: {readerEmotion, payoffMechanisms, rhythmRules, languageRules, forbiddenPatterns, requiredPatterns}
-  
+
+  // 风格指纹：从参考章节提取的量化风格信号
+  fingerprint     String?  // JSON: StyleFingerprint
+
   isDefault       Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -658,6 +665,7 @@ model Mainline {
   startChapter  Int?     // 起始章节
   endChapter    Int?     // 结束章节
   milestones    String   @default("[]") // 关键节点 JSON
+  milestoneStatus String @default("{}") // 里程碑完成状态 JSON: {milestoneIndex: chapterOrder}
   resolution    String   @default("")   // 结局走向
   priority      Int      @default(5)    // 优先级 1-10
   sortOrder     Int      @default(0)
@@ -885,4 +893,65 @@ model ChapterBeat {
 
   @@unique([novelId, chapterOrder, beatOrder])
   @@index([novelId, chapterOrder])
+}
+
+// 31. 章节快照（每章后处理完成后生成，用于注入后续章节 Prompt）
+model ChapterSnapshot {
+  id              String   @id @default(cuid())
+  novelId         String
+  chapterOrder    Int
+  chapterId       String?
+
+  // 主角状态
+  protagonistStatus   String?  // 主角当前处境
+  protagonistEmotion  String?  // 主角当前情绪
+  protagonistLocation String?  // 主角当前位置
+
+  // 配角状态（JSON 数组）
+  activeCharacters    String?  // [{name, status, location, emotion}]
+
+  // 剧情状态
+  currentPhase        String?  // setup/development/climax/resolution
+  mainConflictProgress String? // 核心矛盾进展
+  tensionLevel        Int?     // 当前张力等级 1-10
+
+  // 伏笔/钩子状态
+  activeForeshadowCount Int?   // 活跃伏笔数
+  unresolvedHookCount   Int?   // 未回收钩子数
+  resolvedInChapter     String? // 本章回收的伏笔/钩子 JSON
+
+  // 时间线
+  storyTimeline       String?  // 故事内时间线描述
+
+  // 章节元数据
+  wordCount           Int?
+  emotionType         String?  // 本章主导情绪
+  pleasurePointType   String?  // 本章爽点类型（如有）
+
+  createdAt       DateTime @default(now())
+
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+
+  @@unique([novelId, chapterOrder])
+  @@index([novelId, chapterOrder])
+  @@map("chapter_snapshots")
+}
+
+// 32. 因果链
+model CausalLink {
+  id              String   @id @default(cuid())
+  novelId         String
+  chapterOrder    Int
+  causeType       String
+  causeRefId      String?
+  causeDescription String
+  effectType      String
+  effectRefId     String?
+  effectDescription String
+  strength        Int      @default(5)
+  isMainConflict  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  @@index([novelId, chapterOrder])
+  @@map("causal_links")
 }

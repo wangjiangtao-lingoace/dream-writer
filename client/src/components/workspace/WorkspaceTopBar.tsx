@@ -16,6 +16,8 @@ interface WorkspaceTopBarProps {
     climax: boolean;
   };
   exportButton?: React.ReactNode;
+  simpleMode?: boolean;
+  onToggleSimpleMode?: () => void;
 }
 
 const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -35,7 +37,7 @@ const Pill: React.FC<{ color: string; bg: string; children: React.ReactNode }> =
   </span>
 );
 
-const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, writingStats, signals, exportButton }) => {
+const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, writingStats, signals, exportButton, simpleMode, onToggleSimpleMode }) => {
   const progressPct = writingStats.targetWordCount > 0
     ? Math.min(100, Math.round((writingStats.todayWordCount / writingStats.targetWordCount) * 100))
     : 0;
@@ -88,8 +90,33 @@ const WorkspaceTopBar: React.FC<WorkspaceTopBarProps> = ({ novelTitle, onBack, w
         <Metric label="连续创作" value={`${writingStats.streakDays}天`} />
       </div>
 
-      {/* Right: Export + Signals */}
+      {/* Right: SimpleMode + Export + Signals */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", justifyContent: "flex-end" }}>
+        {onToggleSimpleMode && (
+          <button
+            onClick={onToggleSimpleMode}
+            title={simpleMode ? "关闭新手模式" : "开启新手模式"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              padding: "0.25rem 0.5rem",
+              background: simpleMode ? "var(--accent)" : "transparent",
+              color: simpleMode ? "var(--text-inverse)" : "var(--text-secondary)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              transition: "all var(--transition-fast)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.75rem", height: "0.75rem" }}>
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+            {simpleMode ? "新手模式" : "标准模式"}
+          </button>
+        )}
         {exportButton}
         <Pill color="#c2410c" bg="rgba(234,179,8,0.1)">当前情绪：{signals.mood}</Pill>
         <Pill color="#047857" bg="rgba(34,197,94,0.1)">节奏：{signals.rhythm}</Pill>

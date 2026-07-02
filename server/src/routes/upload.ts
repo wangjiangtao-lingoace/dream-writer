@@ -137,6 +137,7 @@ router.post("/file", upload.single("file"), async (req: Request, res: Response) 
 });
 
 // 删除文件
+const resolvedUploadDir = path.resolve(uploadDir);
 router.delete("/file", async (req: Request, res: Response) => {
   try {
     const { path: filePath } = req.query;
@@ -144,7 +145,11 @@ router.delete("/file", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "缺少path参数" });
     }
 
-    const fullPath = path.resolve(process.cwd(), filePath as string);
+    const fullPath = path.resolve(resolvedUploadDir, filePath as string);
+    if (!fullPath.startsWith(resolvedUploadDir + path.sep) && fullPath !== resolvedUploadDir) {
+      return res.status(403).json({ success: false, error: "禁止访问该路径" });
+    }
+
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
       res.json({ success: true, message: "文件已删除" });

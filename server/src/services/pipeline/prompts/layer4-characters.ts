@@ -37,7 +37,18 @@ export function buildLayer4Characters(characters: CharacterInfo[]): string {
     return '';
   }
 
-  const charBlocks = characters.map(char => {
+  // 限制最多8个角色，优先保留：主角 > 反派 > 配角 > 其他
+  const MAX_CHARACTERS = 8;
+  const rolePriority: Record<string, number> = { "主角": 0, "反派": 1, "配角": 2 };
+  const sortedCharacters = [...characters].sort((a, b) => {
+    const pa = rolePriority[a.role ?? ""] ?? 3;
+    const pb = rolePriority[b.role ?? ""] ?? 3;
+    return pa - pb;
+  });
+  const displayCharacters = sortedCharacters.slice(0, MAX_CHARACTERS);
+  const hasMore = characters.length > MAX_CHARACTERS;
+
+  const charBlocks = displayCharacters.map(char => {
     const parts: string[] = [];
 
     // 基本信息
@@ -104,7 +115,7 @@ export function buildLayer4Characters(characters: CharacterInfo[]): string {
   });
 
   return `【角色约束】
-${charBlocks.join('\n\n')}`;
+${charBlocks.join('\n\n')}${hasMore ? `\n\n（共${characters.length}个角色，仅显示最重要的${MAX_CHARACTERS}个）` : ''}`;
 }
 
 /**

@@ -1,5 +1,120 @@
 import { prisma } from "../db/prisma";
 
+// ── 状态流转规则引擎 ──────────────────────────────────────────────
+
+/** 状态流转规则 */
+interface TransitionRule {
+  from: string;
+  to: string;
+  /** 规则检查函数，返回 true 表示满足流转条件 */
+  check: (ctx: TransitionContext) => boolean;
+  /** 流转原因描述 */
+  reason: string;
+}
+
+/** 流转检查所需的上下文数据 */
+interface TransitionContext {
+  currentPhase: string;
+  currentChapter: number;
+  tensionAccumulation: number;
+  pleasureCooldown: number;
+  mainConflict: string;
+  /** 数据库中 status != 'paid_off' 的伏笔数量 */
+  unresolvedForeshadowCount: number;
+  /** 是否所有伏笔已回收（数据库中没有 planted/active 状态的伏笔） */
+  allForeshadowsResolved: boolean;
+}
+
+/** 状态流转结果 */
+export interface TransitionResult {
+  transitioned: boolean;
+  from: string;
+  to: string;
+  reason: string;
+}
+
+/** 硬编码的流转规则，按优先级从高到低排列 */
+const TRANSITION_RULES: TransitionRule[] = [
+  // setup → development：前 3 章完成后自动进入发展阶段
+  {
+    from: "setup",
+    to: "development",
+    check: (ctx) => ctx.currentChapter > 3,
+    reason: "前3章完成，剧情进入发展阶段",
+  },
+  // development → climax：压抑值累积超过阈值，且爽点冷却已结束
+  {
+    from: "development",
+    to: "climax",
+    check: (ctx) => ctx.tensionAccumulation > 7 && ctx.pleasureCooldown <= 0,
+    reason: "压抑值累积 > 7 且爽点冷却结束，建议进入高潮阶段",
+  },
+  // climax → resolution：所有伏笔回收且主线矛盾不为空（说明主线有推进）
+  {
+    from: "climax",
+    to: "resolution",
+    check: (ctx) => ctx.allForeshadowsResolved && ctx.mainConflict !== "",
+    reason: "所有伏笔回收且主线推进，进入收尾阶段",
+  },
+];
+
+/**
+ * 自动状态流转检查
+ *
+ * 检查当前 StoryState 是否满足预定义的流转条件，如果满足则自动更新 currentPhase。
+ * 这是"建议"机制而非"强制"——手动调用 updateStoryState 设置的 currentPhase 始终优先。
+ *
+ * @returns 流转结果，如果没有触发流转则返回 null
+ */
+export async function autoTransitionState(
+  novelId: string,
+  chapterOrder: number,
+): Promise<TransitionResult | null> {
+  const state = await prisma.storyState.findUnique({ where: { novelId } });
+  if (!state) return null;
+
+  // 查询未回收的伏笔数量
+  const unresolvedCount = await prisma.foreshadow.count({
+    where: {
+      novelId,
+      status: { in: ["planted", "active"] },
+    },
+  });
+
+  const ctx: TransitionContext = {
+    currentPhase: state.currentPhase,
+    currentChapter: chapterOrder,
+    tensionAccumulation: state.tensionAccumulation,
+    pleasureCooldown: state.pleasureCooldown,
+    mainConflict: state.mainConflict,
+    unresolvedForeshadowCount: unresolvedCount,
+    allForeshadowsResolved: unresolvedCount === 0,
+  };
+
+  // 遍历规则，找到第一条匹配的规则并执行流转
+  for (const rule of TRANSITION_RULES) {
+    if (rule.from === ctx.currentPhase && rule.check(ctx)) {
+      await prisma.storyState.update({
+        where: { novelId },
+        data: { currentPhase: rule.to },
+      });
+
+      console.log(
+        `[autoTransition] novel=${novelId} ch=${chapterOrder}: ${rule.from} → ${rule.to} (${rule.reason})`,
+      );
+
+      return {
+        transitioned: true,
+        from: rule.from,
+        to: rule.to,
+        reason: rule.reason,
+      };
+    }
+  }
+
+  return null;
+}
+
 // 获取或创建剧情状态
 export async function getOrCreateStoryState(novelId: string) {
   let state = await prisma.storyState.findUnique({

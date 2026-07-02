@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { usePipelineSSE } from "../hooks/usePipelineSSE";
 import SmartJsonViewer from "../components/SmartJsonViewer";
 import { translatePipelinePhaseLabel, translatePipelineStepLabel, translateAssetType } from "../utils/translate";
 import "../styles/pages/pipeline.css";
@@ -39,6 +40,7 @@ interface PipelineData {
     selfScore?: number | null;
     selfComment?: string | null;
     output?: string | null;
+    metadata?: string | null;
   }>;
 }
 
@@ -59,6 +61,7 @@ interface PipelineJobResponse {
     selfScore?: number | null;
     selfComment?: string | null;
     output?: string | null;
+    metadata?: string | null;
   }>;
 }
 
@@ -79,6 +82,7 @@ const PipelinePage: React.FC = () => {
   const [confirmFeedback, setConfirmFeedback] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pipelineActionLoading, setPipelineActionLoading] = useState<"pause" | "resume" | null>(null);
+  const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set());
 
   // 卷纲菜单状态
   const [selectedVolume, setSelectedVolume] = useState<number | null>(null);
@@ -86,25 +90,58 @@ const PipelinePage: React.FC = () => {
   // 编辑模式：false=SmartJsonViewer可读视图，true=JSON高级编辑
   const [jsonEditMode, setJsonEditMode] = useState(false);
 
+  // SSE 相关状态
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [useFallbackPolling, setUseFallbackPolling] = useState(false);
+
   useEffect(() => {
     if (id) {
       loadPipeline(id);
     }
   }, [id]);
 
+  // SSE 实时推送
+  const debouncedUpdate = useMemo(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    return () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (id) loadPipeline(id, true);
+      }, 200);
+    };
+  }, [id]);
+
+  const handleSSEFallback = useCallback(() => {
+    setUseFallbackPolling(true);
+  }, []);
+
+  const { isConnected, reconnect } = usePipelineSSE({
+    jobId,
+    status: pipeline?.status,
+    onUpdate: debouncedUpdate,
+    onFallback: handleSSEFallback,
+  });
+
+  // 回退轮询（仅在 SSE 失败时启用）
   useEffect(() => {
-    if (!id || pipeline?.status === "completed" || pipeline?.status === "failed") return;
+    if (!id || !useFallbackPolling) return;
+    if (pipeline?.status === "completed" || pipeline?.status === "failed") return;
     const timer = window.setInterval(() => {
       loadPipeline(id, true);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [id, pipeline?.status]);
+  }, [id, pipeline?.status, useFallbackPolling]);
 
   const loadPipeline = async (novelId: string, silent = false) => {
     try {
       if (!silent) setLoading(true);
       const data = await api.get<PipelineJobResponse | null>(`/api/pipeline/novel/${novelId}`);
-      setPipeline(data ? mapPipelineJob(data) : null);
+      if (data) {
+        setPipeline(mapPipelineJob(data));
+        setJobId(data.id);
+      } else {
+        setPipeline(null);
+      }
       const workflow = await api.get<{ usage: { recent: Array<{ id: string; assetType: string; title: string; usageStage: string }> } }>(`/api/novels/${novelId}/workflow-status`);
       setUsage(workflow.usage?.recent || []);
     } catch (error) {
@@ -135,7 +172,9 @@ const PipelinePage: React.FC = () => {
     try {
       await api.post(`/api/pipeline/${pipeline.id}/resume`);
       toast.success("流程已恢复");
-      loadPipeline(id!);
+      setUseFallbackPolling(false);
+      await loadPipeline(id!);
+      reconnect();
     } catch (error) {
       console.error("恢复失败:", error);
       toast.error("恢复失败，请重试");
@@ -206,6 +245,42 @@ const PipelinePage: React.FC = () => {
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  };
+
+  const toggleRefExpand = (key: string) => {
+    setExpandedRefs((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const parseMetadata = (metadata?: string | null): Array<{ assetType: string; title: string }> => {
+    if (!metadata) return [];
+    try {
+      const parsed = JSON.parse(metadata);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const getAssetTypeLabel = (assetType: string): string => {
+    const labelMap: Record<string, string> = {
+      character: "角色",
+      worldview: "世界观",
+      memory: "记忆",
+      novel_outline: "大纲",
+      novel_core: "核心设定",
+      volume: "卷纲",
+      chapter_outline: "章纲",
+      mainline: "主线",
+      hook: "钩子",
+      knowledge_asset: "知识库",
+      book_analysis: "拆书",
+      imitation_plan: "仿写方案",
+    };
+    return labelMap[assetType] || assetType;
   };
 
   const translatePipelineError = (error: string | null): string => {
@@ -283,7 +358,10 @@ const PipelinePage: React.FC = () => {
       stages,
       config: job.config,
       lastError: job.lastError,
-      results,
+      results: results.map(r => ({
+        ...r,
+        metadata: r.metadata,
+      })),
     };
   };
 
@@ -1068,6 +1146,52 @@ const PipelinePage: React.FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* 引用信息面板 */}
+                    {(() => {
+                      const refItems = parseMetadata(result.metadata);
+                      const isRefExpanded = expandedRefs.has(resultKey);
+                      if (refItems.length === 0) return null;
+                      return (
+                        <div style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                          <button
+                            onClick={() => toggleRefExpand(resultKey)}
+                            style={{
+                              display: "flex", alignItems: "center", gap: "var(--space-1)",
+                              width: "100%", padding: "var(--space-2) var(--space-3)",
+                              background: "transparent", border: "none", cursor: "pointer",
+                              fontSize: "var(--text-xs)", color: "var(--text-muted)",
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{
+                              width: "0.75rem", height: "0.75rem", flexShrink: 0,
+                              transform: isRefExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                              transition: "transform 0.15s",
+                            }}>
+                              <path d="m9 18 6-6-6-6" />
+                            </svg>
+                            引用信息（{refItems.length} 项）
+                          </button>
+                          {isRefExpanded && (
+                            <div style={{
+                              display: "flex", flexWrap: "wrap", gap: "var(--space-1)",
+                              padding: "0 var(--space-3) var(--space-2)",
+                            }}>
+                              {refItems.map((item, idx) => (
+                                <span key={idx} style={{
+                                  display: "inline-flex", alignItems: "center", gap: "2px",
+                                  padding: "2px 8px", borderRadius: "var(--radius-full)",
+                                  background: "var(--accent-muted)", color: "var(--accent)",
+                                  fontSize: "var(--text-xs)", whiteSpace: "nowrap",
+                                }}>
+                                  {getAssetTypeLabel(item.assetType)}:{item.title}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </article>
                 );
               }) : (

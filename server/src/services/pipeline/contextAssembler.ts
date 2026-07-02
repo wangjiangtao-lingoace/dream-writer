@@ -1,8 +1,11 @@
 import { prisma } from "../../db/prisma";
 import { getRagRetrieveService } from "../RagRetrieveService";
-import { buildFullSystemPrompt } from "./prompts";
+import { LAYER1_WRITING_ENGINE } from "./prompts";
 import { safeParseRules } from "./promptFormatters";
 import { loadMaterialContextForNovel } from "./materialContext";
+import { buildSnapshotContext } from "./snapshotService";
+import { extractStyleFingerprint, fingerprintToPrompt, type StyleFingerprint } from "./styleFingerprint";
+import { buildCausalChainContext } from "./causalChainService";
 
 /**
  * 按需组装章级创作上下文
@@ -23,29 +26,93 @@ export class ContextAssembler {
   constructor(private novelId: string) {}
 
   /**
-   * 组装某章的精简创作上下文（使用 7 层 Prompt 架构）
+   * 组装某章的完整创作上下文（统一路径，包含全部 15 个维度）
+   *
+   * 统一了原 assembleForChapter（7 层 Prompt）和 buildCompactContext（15 维上下文）两条路径，
+   * 确保 RAG、记忆、StoryState、钩子、伏笔、主线、角色关系、情绪曲线等完整上下文均被包含。
    */
   async assembleForChapter(chapterOrder: number, chapterOutline: any): Promise<string> {
-    // 加载各层数据
-    const [characters, worldview, style, novel, previousChapterEnding, materialContext] = await Promise.all([
+    // 加载全部数据源（18 个维度，含快照、风格指纹和因果链）
+    const [
+      characters, worldview, style, novelMeta,
+      { recent: previousChapters, milestones: milestoneSummaries },
+      ragContext, memories, storyState, mainlines, characterRelations, emotionCurve,
+      activeHooks, plantedForeshadows, materialContext,
+      snapshotContext,
+      styleFingerprint,
+      causalChainContext,
+    ] = await Promise.all([
       this.loadInvolvedCharacters(chapterOutline),
       this.loadWorldviewSummary(chapterOutline?.chapterType),
       this.loadStyleCompact(),
       this.loadNovelMeta(),
-      this.loadPreviousChapterEnding(chapterOrder),
+      this.loadRecentSummaries(chapterOrder, 3),
+      this.loadRagContext(chapterOutline),
+      this.loadRelevantMemories(chapterOrder),
+      this.loadStoryState(chapterOrder),
+      this.loadMainlines(chapterOrder),
+      this.loadCharacterRelations(chapterOutline),
+      this.loadEmotionCurve(chapterOrder),
+      this.loadActiveHooks(),
+      this.loadPlantedForeshadows(),
       loadMaterialContextForNovel(this.novelId).catch(() => ""),
+      buildSnapshotContext(this.novelId, chapterOrder).catch(() => ""),
+      this.loadStyleFingerprint(chapterOrder),
+      buildCausalChainContext(this.novelId, chapterOrder).catch(() => ""),
     ]);
 
-    // 使用 7 层 Prompt 架构组装
-    const prompt = buildFullSystemPrompt({
-      novel,
+    // 统一调用 buildCompactContext（15 维上下文）
+    const compactContext = buildCompactContext({
+      novelMeta,
+      outline: chapterOutline,
+      enrichedChapter: chapterOutline,
       style,
+      previousChapters,
+      milestoneSummaries,
       characters,
       worldview,
-      chapterOutline,
-      previousChapterEnding,
+      ragContext,
+      memories,
+      storyState,
+      activeHooks,
+      plantedForeshadows,
+      mainlines,
+      characterRelations,
+      emotionCurve,
     });
-    return materialContext ? `${materialContext}\n\n${prompt}` : prompt;
+
+    // 替换 LAYER1_WRITING_ENGINE 中的占位符
+    let enginePrompt = LAYER1_WRITING_ENGINE;
+    const genre = novelMeta?.genre || "网络小说";
+    const protagonistName = (characters && characters.length > 0)
+      ? (characters.find((c: any) => (c.role || "").includes("主"))?.name || characters[0]?.name || "主角")
+      : "主角";
+    const worldviewSummary = worldview?.summary?.slice(0, 100) || "暂无世界观设定";
+    const coreConflict = novelMeta?.coreConflict || storyState?.mainConflict || "暂未设定核心矛盾";
+    const languageStyle = novelMeta?.genre ? `${novelMeta.genre}风格` : "通俗白话";
+
+    enginePrompt = enginePrompt.split("{{genre}}").join(genre);
+    enginePrompt = enginePrompt.split("{{protagonistName}}").join(protagonistName);
+    enginePrompt = enginePrompt.split("{{worldviewSummary}}").join(worldviewSummary);
+    enginePrompt = enginePrompt.split("{{coreConflict}}").join(coreConflict);
+    enginePrompt = enginePrompt.split("{{languageStyle}}").join(languageStyle);
+
+    // 前置基础写作引擎 + 附加素材上下文
+    const parts: string[] = [enginePrompt, compactContext];
+    if (snapshotContext) parts.push(snapshotContext);
+    if (materialContext) parts.push(materialContext);
+
+    // 注入风格指纹约束
+    if (styleFingerprint) {
+      parts.push(styleFingerprint);
+    }
+
+    // 注入因果链上下文
+    if (causalChainContext) {
+      parts.push(causalChainContext);
+    }
+
+    return parts.filter(Boolean).join("\n\n---\n\n");
   }
 
   /**
@@ -234,7 +301,7 @@ export class ContextAssembler {
   }
 
   /**
-   * 加载作品元信息
+   * 加载作品元信息（包含 genre，供 buildCompactContext 使用）
    */
   private async loadNovelMeta() {
     const novel = await prisma.novel.findUnique({
@@ -252,7 +319,7 @@ export class ContextAssembler {
     });
     return {
       title: novel?.title || "",
-      genre: novel?.genre || "",
+      genre: novel?.genre || undefined,
       theme: novel?.synopsis?.slice(0, 100) || "",
       // 7 层 Prompt 架构新增字段
       coreSellingPoint: novel?.coreSellingPoint || "",
@@ -464,6 +531,66 @@ export class ContextAssembler {
       },
     });
     return curve;
+  }
+
+  /**
+   * 加载风格指纹（从已写章节提取或从数据库读取缓存）
+   *
+   * 策略：
+   * 1. 优先从 StyleProfile.fingerprint 字段读取缓存
+   * 2. 如果是前 3 章（chapterOrder <= 3），从已写章节中提取指纹并缓存
+   * 3. 返回指纹的 Prompt 文本，供注入上下文
+   */
+  private async loadStyleFingerprint(chapterOrder: number): Promise<string | null> {
+    try {
+      // 1. 检查是否有缓存的指纹
+      const styleProfile = await prisma.styleProfile.findFirst({
+        where: { novelId: this.novelId, isDefault: true },
+        select: { id: true, fingerprint: true },
+      });
+
+      if (styleProfile?.fingerprint) {
+        try {
+          const fp = JSON.parse(styleProfile.fingerprint);
+          return fingerprintToPrompt(fp);
+        } catch {
+          // JSON 解析失败，继续提取
+        }
+      }
+
+      // 2. 如果是前 3 章，从已写章节中提取指纹
+      if (chapterOrder <= 3) {
+        const writtenChapters = await prisma.chapter.findMany({
+          where: {
+            novelId: this.novelId,
+            content: { not: "" },
+            order: { lt: chapterOrder },
+          },
+          orderBy: { order: "asc" },
+          take: 3,
+          select: { order: true, content: true },
+        });
+
+        if (writtenChapters.length >= 2) {
+          const fp = extractStyleFingerprint(writtenChapters);
+
+          // 缓存到 StyleProfile
+          if (styleProfile?.id) {
+            await prisma.styleProfile.update({
+              where: { id: styleProfile.id },
+              data: { fingerprint: JSON.stringify(fp) },
+            }).catch(() => {});
+          }
+
+          return fingerprintToPrompt(fp);
+        }
+      }
+
+      return null;
+    } catch (e) {
+      console.warn("[contextAssembler] 风格指纹加载失败:", e);
+      return null;
+    }
   }
 }
 

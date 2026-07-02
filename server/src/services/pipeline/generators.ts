@@ -23,8 +23,8 @@ export async function generateOutline(
 
 语言要求：
 - 使用通俗白话，像真人作者写给编辑看的策划文档，不要书面腔
-- 禁止 AI 味词汇：不禁、不由得、宛如、仿佛、似乎在诉说、一缕、一抹、一丝、缓缓、淡淡地、静静地、默默地、轻轻地、娓娓道来、令人叹为观止
-- 禁止空洞修饰语和万能形容词：深刻地、极大地、令人震撼的、无与伦比的
+- 禁止使用AI味词汇和套路化表达（具体的禁用词列表参见项目的 aiSmellWords 模块）
+- 禁止空洞修饰语和万能形容词
 - 每个字段的描述必须包含具体信息（人名、地名、事件、因果），不能用抽象概括代替
 
 质量要求：
@@ -86,7 +86,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 
 注意：输出的每个字段都应该尽量详细，保留原文的生动表达，不要压缩成干巴巴的概括。plotStructure 的 8 个阶段都必须填写。`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 6000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 10000 });
   return parseLlmJson(result) || {};
 }
 
@@ -112,7 +112,7 @@ export async function generateOutlineFromStructured(
 - 大纲必须足够详细支撑百万字长篇
 
 语言要求：
-- 使用通俗白话，禁止 AI 味词汇：不禁、不由得、宛如、仿佛、缓缓、淡淡地
+- 使用通俗白话，禁止AI味词汇和套路化表达（参见 aiSmellWords 模块）
 - 每个字段必须包含具体信息（人名、地名、事件、因果），不能用抽象概括代替`;
 
   const charactersText = structuredData.characters.map((c, i) =>
@@ -474,7 +474,7 @@ export async function generateVolumeOutline(
 4. 人物在各卷中的行为必须符合其性格和动机
 
 语言要求：
-- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地、娓娓道来）
+- 使用通俗白话，禁止AI味词汇和套路化表达（参见 aiSmellWords 模块）
 - 禁止空洞修饰语，每个描述必须包含具体信息（人名、事件、因果关系）
 - 不要写"本卷将探索…"、"读者将感受到…"这类 AI 套话
 
@@ -548,7 +548,7 @@ ${userHint ? `\n【用户修改意见】\n${userHint}` : ""}
 - characterArcs 说明本卷主要角色的起止状态和关键转变
 - targetWordCount 根据总字数和卷数合理分配`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 16000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.65, maxTokens: 16000 });
   if (!result) {
     console.error("[generateVolumeOutline] LLM returned null - call failed");
   } else {
@@ -589,7 +589,7 @@ export async function generateChapterOutlines(
 4. 冲突必须符合世界观的力量体系规则
 
 语言要求：
-- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地）
+- 使用通俗白话，禁止AI味词汇和套路化表达（参见 aiSmellWords 模块）
 - 禁止空洞修饰，每个字段都要有具体信息
 
 章纲质量要求——每章必须独立可执行：
@@ -764,7 +764,7 @@ export async function generateEnrichedChapterOutlines(
 5. 不得引入与已有设定矛盾的新元素
 
 语言要求：
-- 使用通俗白话，禁止 AI 味词汇（不禁、不由得、宛如、仿佛、缓缓、淡淡地、静静地、默默地、轻轻地）
+- 使用通俗白话，禁止AI味词汇和套路化表达（参见 aiSmellWords 模块）
 - 禁止空洞修饰，每个字段都要有具体信息
 
 章纲质量要求——每章必须独立可执行：
@@ -1185,7 +1185,7 @@ ${dnaHint}
 - mustInclude：列出该 Beat 必须包含的具体元素（人物、场景、动作、情绪等）
 - mustAvoid：列出该 Beat 必须避免的问题（跳章、水字数、AI味等）`;
 
-  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 2000 });
+  const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.5, maxTokens: 2000 });
   return parseLlmJson(result) || {};
 }
 
@@ -1262,4 +1262,64 @@ ${materialContext ? `\n${materialContext}\n` : ""}
 
   const result = await ctx.llmService.completeText({ system, prompt, temperature: 0.7, maxTokens: 3000 });
   return parseLlmJson(result) || {};
+}
+
+// ===== 编辑 Agent 润色 =====
+
+/**
+ * 编辑 Agent 润色：对 AI 生成的章节正文进行二次润色，使其更像人类写作。
+ * 默认启用，可通过环境变量 ENABLE_EDITOR_POLISH=false 关闭。
+ */
+export async function generateEditorPolish(
+  ctx: PhaseContext,
+  content: string,
+  context: {
+    chapterOutline: string;
+    characters: string;
+    styleGuide: string;
+  },
+  targetMaxTokens?: number,
+): Promise<string | null> {
+  const system = `你是资深文学编辑，任务是润色 AI 生成的小说文本，使其更像人类写作。要求：保持原文意思和剧情不变；优化句式多样性，避免连续相同句式；去除模板化表达和 AI 味词汇；增加口语化细节和感官描写；保持角色语言风格一致。
+
+核心约束：
+- 不得改变剧情走向、人物关系、关键对话的核心含义
+- 不得增加原文没有的情节或角色
+- 不得删除原文的关键信息
+- 保持原文的段落结构和节奏
+- 对话内容只润色措辞，不改变语义
+- 输出纯正文，不要 Markdown 标记`;
+
+  const prompt = `请润色以下章节正文。
+
+【章节大纲】
+${context.chapterOutline || "无"}
+
+【人物信息】
+${context.characters || "无"}
+
+【风格指南】
+${context.styleGuide || "通俗白话"}
+
+【原文】
+${content}
+
+请输出润色后的完整正文。要求：
+1. 保持原文的剧情、人物、对话核心含义不变
+2. 优化句式多样性，避免连续使用相同句式结构
+3. 去除 AI 味的模板化表达和套话
+4. 适当增加感官描写和口语化细节
+5. 保持角色语言风格一致
+6. 输出纯正文，不要任何标记或解释`;
+
+  const maxTokens = targetMaxTokens || Math.max(3000, Math.min(5000, Math.round(content.length * 1.5)));
+
+  const result = await ctx.llmService.completeText({
+    system,
+    prompt,
+    temperature: 0.4,
+    maxTokens,
+  });
+
+  return result?.trim() || null;
 }

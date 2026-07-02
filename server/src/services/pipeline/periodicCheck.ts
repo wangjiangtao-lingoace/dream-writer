@@ -31,10 +31,19 @@ export interface CharacterDrift {
   severity: "warning" | "critical";
 }
 
+export interface GrowthCheckpointAlert {
+  characterName: string;
+  lastCheckpointChapter: number;
+  chaptersSinceGrowth: number;
+  issue: string;
+  severity: "warning" | "critical";
+}
+
 export interface PeriodicCheckResult {
   hookAlerts: HookAlert[];
   foreshadowAlerts: ForeshadowAlert[];
   characterDrifts: CharacterDrift[];
+  growthCheckpointAlerts: GrowthCheckpointAlert[];
   emotionIssues: string[];
 }
 
@@ -53,10 +62,13 @@ export async function runPeriodicConsistencyCheck(
     checkEmotionRhythm(novelId, chapterOrder),
   ]);
 
-  // 角色漂移检测（LLM，较重，可选）
-  const characterDrifts = await detectCharacterDrifts(ctx, novelId, chapterOrder);
+  // 角色漂移检测 + 成长检查点（LLM，较重，可选）
+  const [characterDrifts, growthCheckpointAlerts] = await Promise.all([
+    detectCharacterDrifts(ctx, novelId, chapterOrder),
+    checkCharacterGrowthCheckpoints(novelId, chapterOrder),
+  ]);
 
-  return { hookAlerts, foreshadowAlerts, characterDrifts, emotionIssues };
+  return { hookAlerts, foreshadowAlerts, characterDrifts, growthCheckpointAlerts, emotionIssues };
 }
 
 /**
@@ -160,6 +172,68 @@ async function checkEmotionRhythm(novelId: string, currentChapter: number): Prom
   }
 
   return issues;
+}
+
+/**
+ * 检查角色成长检查点
+ * 检测主要角色是否在最近 N 章内有成长记录，无成长记录则告警
+ */
+async function checkCharacterGrowthCheckpoints(
+  novelId: string,
+  currentChapter: number,
+): Promise<GrowthCheckpointAlert[]> {
+  const alerts: GrowthCheckpointAlert[] = [];
+
+  // 获取活跃角色（最近 15 章内出场过，且有成长线设定）
+  const activeCharacters = await prisma.character.findMany({
+    where: {
+      novelId,
+      lastAppear: { gte: currentChapter - 15 },
+      OR: [
+        { arcSummary: { not: null } },
+        { arcDetail: { not: null } },
+      ],
+    },
+    select: { name: true, growthCheckpoints: true, lastAppear: true, arcSummary: true },
+    take: 10,
+  });
+
+  for (const char of activeCharacters) {
+    let checkpoints: Array<{ chapter: number; description: string; type: string }> = [];
+    try {
+      checkpoints = JSON.parse(char.growthCheckpoints || "[]");
+    } catch {
+      checkpoints = [];
+    }
+
+    const lastCheckpoint = checkpoints.length > 0
+      ? checkpoints[checkpoints.length - 1]
+      : null;
+
+    const lastCheckpointChapter = lastCheckpoint?.chapter ?? 0;
+    const chaptersSinceGrowth = currentChapter - lastCheckpointChapter;
+
+    // 超过 15 章无成长检查点 => critical；超过 10 章 => warning
+    if (chaptersSinceGrowth > 15) {
+      alerts.push({
+        characterName: char.name,
+        lastCheckpointChapter,
+        chaptersSinceGrowth,
+        issue: `角色「${char.name}」已 ${chaptersSinceGrowth} 章无成长记录，角色弧线可能停滞`,
+        severity: "critical",
+      });
+    } else if (chaptersSinceGrowth > 10) {
+      alerts.push({
+        characterName: char.name,
+        lastCheckpointChapter,
+        chaptersSinceGrowth,
+        issue: `角色「${char.name}」已 ${chaptersSinceGrowth} 章无成长记录，建议安排角色发展`,
+        severity: "warning",
+      });
+    }
+  }
+
+  return alerts;
 }
 
 /**
@@ -283,6 +357,17 @@ export async function persistPeriodicCheckResults(
       description: `角色「${drift.characterName}」人设漂移：${drift.driftDescription}`,
       evidence: `第${chapterOrder - 10}-${chapterOrder}章`,
       suggestion: "检查后续章节中该角色的行为是否符合设定",
+    });
+  }
+
+  for (const alert of result.growthCheckpointAlerts) {
+    issues.push({
+      novelId,
+      type: "character_growth",
+      severity: alert.severity,
+      description: alert.issue,
+      evidence: `最后成长检查点：第${alert.lastCheckpointChapter}章，距今${alert.chaptersSinceGrowth}章`,
+      suggestion: "在后续章节中安排该角色的成长事件（能力提升/性格转变/关系变化等）",
     });
   }
 

@@ -28,11 +28,14 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
     { novelId, topK: 10 }
   ) ?? "";
 
-  const [existingWorldview, existingCharacters, existingStyle] = await Promise.all([
+  const [worldviewRes, charactersRes, styleRes] = await Promise.allSettled([
     prisma.worldview.findFirst({ where: { novelId } }),
     prisma.character.findMany({ where: { novelId }, take: 1 }),
     prisma.styleProfile.findFirst({ where: { novelId, isDefault: true } }),
   ]);
+  const existingWorldview = worldviewRes.status === "fulfilled" ? worldviewRes.value : null;
+  const existingCharacters = charactersRes.status === "fulfilled" ? charactersRes.value : [];
+  const existingStyle = styleRes.status === "fulfilled" ? styleRes.value : null;
 
   // 世界观
   if (existingWorldview) {
@@ -59,7 +62,7 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
       { outline: outlineResult, source: "decomposed" }, {
         characters: allChars.map(c => ({
           name: c.name, role: c.role, identity: c.identity, motivation: c.motivation,
-          appearance: c.appearance, background: c.background, personality: c.arcSummary,
+          appearance: c.appearance, background: c.background, personality: c.personality || c.arcSummary,
           abilities: "", relationsText: c.relationsText,
         })),
       });
@@ -73,8 +76,8 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
   }
 
   // 风格（依赖世界观和人物，需在它们之后生成）
-  const styleWorldview = await ctx.getPhaseOutput(jobId, "assets", "worldview").catch(() => ({}));
-  const styleCharacters = await ctx.getPhaseOutput(jobId, "assets", "characters").catch(() => ({}));
+  const styleWorldview = await ctx.getPhaseOutput(jobId, "assets", "worldview").catch(() => null);
+  const styleCharacters = await ctx.getPhaseOutput(jobId, "assets", "characters").catch(() => null);
 
   if (existingStyle) {
     await ctx.updateJobProgress(jobId, "assets", "style");
@@ -87,7 +90,7 @@ export async function executeAssetsPhase(ctx: PhaseContext, jobId: string) {
       });
   } else {
     await ctx.updateJobProgress(jobId, "assets", "style");
-    const styleResult = await generateStyle(ctx, novelId, outlineResult, styleWorldview, styleCharacters, config);
+    const styleResult = await generateStyle(ctx, novelId, outlineResult, styleWorldview || {}, styleCharacters || {}, config);
     await ctx.savePhaseResult(jobId, "assets", "style", { outline: outlineResult }, styleResult);
     await ctx.saveToKnowledgeBase(novelId, 'style', '写作风格', styleResult);
   }

@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import AppRouter from "./router";
 import { AIProvider } from "./contexts/AIContext";
 import { Toaster } from "./components/ui/toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
@@ -22,10 +23,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <AIProvider>
-        <BrowserRouter>
-          <AppRouter />
-          <Toaster />
-        </BrowserRouter>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <AppRouter />
+            <Toaster />
+          </BrowserRouter>
+        </ErrorBoundary>
       </AIProvider>
     </QueryClientProvider>
   </React.StrictMode>,

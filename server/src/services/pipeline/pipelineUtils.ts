@@ -138,7 +138,7 @@ export async function getPhaseOutput(jobId: string, phase: string, step: string)
     where: { jobId_phase_step: { jobId, phase, step } },
   });
   if (!result) throw new Error(`未找到 ${phase}/${step} 的生成结果，请先完成该步骤。`);
-  return JSON.parse(result.output);
+  return safeJson(result.output, null);
 }
 
 export async function savePhaseResult(
@@ -159,7 +159,13 @@ export async function savePhaseResult(
       score = review.score;
       comment = review.comment;
       issues = review.issues;
-    } catch {}
+    } catch (reviewError: any) {
+      // 只对 LLM 调用错误静默，DB 错误需抛出
+      if (reviewError?.code && reviewError.code.startsWith("P")) {
+        throw reviewError;
+      }
+      console.warn("selfReview 调用失败（LLM 错误，已跳过）:", reviewError?.message || reviewError);
+    }
   }
 
   await prisma.phaseResult.upsert({
@@ -269,7 +275,9 @@ export async function saveToKnowledgeBase(novelId: string, category: string, tit
       category: `pipeline:${category}`,
       title,
       content: contentStr,
-      importance: category === "outline" || category === "chapter_draft" ? 8 : 7,
+      importance: category === "outline" || category === "chapter_draft" ? 8
+        : category === "character" || category === "worldview" ? 7
+        : category === "style" ? 6 : 7,
       metadata: JSON.stringify({ source: "pipeline", category }),
     },
   });
@@ -549,7 +557,8 @@ export async function persistGeneratedAssets(novelId: string, category: string, 
       }
     }
   } catch (error) {
-    console.warn("持久化 Pipeline 结构化资产失败:", error);
+    console.error("持久化 Pipeline 结构化资产失败:", error);
+    throw error;
   }
 }
 

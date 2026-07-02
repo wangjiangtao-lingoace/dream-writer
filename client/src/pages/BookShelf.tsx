@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Skeleton } from "../components/ui/Skeleton";
 import { toast } from "../components/ui/toast";
+import OnboardingGuide, { shouldShowOnboarding, completeOnboarding } from "../components/OnboardingGuide";
 import "../styles/pages/bookshelf.css";
 
 const PROVIDERS = [
@@ -36,6 +37,7 @@ const BookShelf: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const { data: defaultConfig } = useDefaultConfig();
   const createConfig = useCreateConfig();
 
@@ -47,6 +49,17 @@ const BookShelf: React.FC = () => {
   const [configError, setConfigError] = useState<string | null>(null);
 
   const selectedProvider = PROVIDERS.find((p) => p.value === provider);
+
+  useEffect(() => {
+    if (shouldShowOnboarding()) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const handleOnboardingComplete = () => {
+    completeOnboarding();
+    setShowOnboarding(false);
+  };
 
   const handleConfigSubmit = async () => {
     if (!apiKey.trim()) return;
@@ -318,6 +331,11 @@ const BookShelf: React.FC = () => {
           </Button>
         </div>
       </Modal>
+
+      {/* 首次使用引导 */}
+      {showOnboarding && (
+        <OnboardingGuide onComplete={handleOnboardingComplete} />
+      )}
     </div>
   );
 };

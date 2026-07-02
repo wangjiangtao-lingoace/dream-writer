@@ -4,6 +4,50 @@ import { generateConsistencyCheck } from "./generators";
 import { executeWritingPhase } from "./writingPhase";
 import { PipelineConfig } from "../PipelineService";
 
+const SIMILARITY_THRESHOLD = 0.7;
+
+/**
+ * 滑动窗口子串模糊匹配相似度（与 postProcessing.ts 逻辑一致）
+ */
+function substringSimilarity(short: string, long: string): number {
+  if (!short || !long) return 0;
+  if (long.includes(short)) return 1;
+
+  const sLen = short.length;
+  const lLen = long.length;
+  if (sLen > lLen) return substringSimilarity(long, short);
+
+  let best = 0;
+  for (let i = 0; i <= lLen - sLen; i++) {
+    let match = 0;
+    for (let j = 0; j < sLen; j++) {
+      if (short[j] === long[i + j]) match++;
+    }
+    const score = match / sLen;
+    if (score > best) {
+      best = score;
+      if (best >= 1) return 1;
+    }
+  }
+  return best;
+}
+
+/**
+ * 提取关键短语：标题前20字 + 描述前20字
+ */
+function extractKeywords(title: string, description?: string | null): string[] {
+  const keywords: string[] = [];
+  if (title) {
+    const t = title.slice(0, 20).trim();
+    if (t.length >= 2) keywords.push(t);
+  }
+  if (description) {
+    const d = description.slice(0, 20).trim();
+    if (d.length >= 2) keywords.push(d);
+  }
+  return keywords;
+}
+
 export async function executeConsistencyCheckPhase(ctx: PhaseContext, jobId: string) {
   const job = await prisma.pipelineJob.findUnique({
     where: { id: jobId },
@@ -434,18 +478,26 @@ function validateCharacterAppearance(
 
   // 扫描章纲文本字段，收集所有出现的角色名
   const textFields = ["goal", "conflict", "emotion", "hook"];
+  const appearedNames = new Set<string>();
   for (const co of chapterOutlines) {
-    const foundNames = new Set<string>();
     for (const field of textFields) {
       const text = co[field];
       if (!text || typeof text !== "string") continue;
       for (const name of nameSet) {
-        if (text.includes(name)) foundNames.add(name);
+        if (text.includes(name)) appearedNames.add(name);
       }
     }
-    // 如果章纲中没有任何已知角色出场，可能是一个问题（取决于章纲内容）
-    // 此处只记录章纲引用了但人物库中不存在的场景——由于 nameSet 已过滤，
-    // 这里只做正向校验：章纲中出现的角色都是已知的，无需额外告警
+  }
+
+  // 找出 Character 表中有但章纲中从未出现的角色
+  const unusedCharacters = [...nameSet].filter(name => !appearedNames.has(name));
+  for (const name of unusedCharacters) {
+    issues.push({
+      severity: "low",
+      description: `角色「${name}」在人物库中存在，但在所有章纲中从未出场`,
+      evidence: `人物库中有 ${nameSet.size} 个角色，章纲中引用了 ${appearedNames.size} 个`,
+      suggestion: "考虑在章纲中为该角色安排出场场景，或确认其为背景角色无需出场",
+    });
   }
 
   return issues;
@@ -520,7 +572,7 @@ ${issueList}
 
 /**
  * 检测已写完章节中的伏笔回收
- * 扫描章节内容中是否包含伏笔标题，如果包含则标记为已回收
+ * 使用滑动窗口模糊匹配（与 postProcessing.ts detectResolutionsInContent 逻辑一致，阈值 0.7）
  */
 async function detectForeshadowResolutions(novelId: string) {
   const plantedForeshadows = await prisma.foreshadow.findMany({
@@ -538,9 +590,17 @@ async function detectForeshadowResolutions(novelId: string) {
   for (const fs of plantedForeshadows) {
     const plantOrder = fs.plantChapter || 0;
     const relevantChapters = chapters.filter(ch => ch.order > plantOrder);
+    const keywords = extractKeywords(fs.title, fs.description);
 
     for (const ch of relevantChapters) {
-      if (ch.content.includes(fs.title)) {
+      let resolved = false;
+      for (const kw of keywords) {
+        if (substringSimilarity(kw, ch.content) >= SIMILARITY_THRESHOLD) {
+          resolved = true;
+          break;
+        }
+      }
+      if (resolved) {
         await prisma.foreshadow.update({
           where: { id: fs.id },
           data: { status: "paid_off", payoffChapter: ch.order },

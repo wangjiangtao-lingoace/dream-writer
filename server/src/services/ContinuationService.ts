@@ -96,17 +96,29 @@ async function generateChapterContent(params: {
   compactContext: string;
   targetWordCount: number;
   retryHint?: string;
+  styleProfile?: any;
+  coreSellingPoint?: string;
 }): Promise<string> {
-  const { novel, order, title, compactContext, targetWordCount, retryHint } = params;
+  const { novel, order, title, compactContext, targetWordCount, retryHint, styleProfile, coreSellingPoint } = params;
 
   const retrySection = retryHint
     ? `\n【重试修正要求 — 必须严格遵守】\n上一版存在以下问题，请务必修正：\n${retryHint}\n`
     : "";
 
+  // 风格约束注入
+  const styleSection = styleProfile
+    ? `\n【风格约束】\n风格：${styleProfile.name || ""} — ${styleProfile.description || ""}\n${styleProfile.masterWriterStyle ? `作家风格模仿：${styleProfile.masterWriterStyle}\n` : ""}${styleProfile.toneAndAtmosphere ? `基调：${styleProfile.toneAndAtmosphere}\n` : ""}${styleProfile.dialogueStyle ? `对话风格：${styleProfile.dialogueStyle}\n` : ""}${Array.isArray(styleProfile.writingRules) && styleProfile.writingRules.length ? `写作规则：${styleProfile.writingRules.join("；")}\n` : ""}${Array.isArray(styleProfile.avoidList) && styleProfile.avoidList.length ? `避免：${styleProfile.avoidList.join("；")}\n` : ""}`
+    : "";
+
+  // 核心卖点注入
+  const sellingPointSection = coreSellingPoint
+    ? `\n【核心卖点】${coreSellingPoint}\n`
+    : "";
+
   const prompt = `请为「${novel.title}」写第${order}章的完整正文。
 
 ${compactContext}
-
+${styleSection}${sellingPointSection}
 【写作要求】
 1. 输出纯正文，不要 Markdown 标记，不要提纲，不要解释
 2. 目标字数：${targetWordCount} 中文字（不少于 ${Math.round(targetWordCount * 0.8)} 字，不超过 ${Math.round(targetWordCount * 1.2)} 字）
@@ -182,12 +194,13 @@ export class ContinuationService {
       }));
     }
 
-    // 加载全量角色列表（大纲生成需要）
-    const [characters, hooks, foreshadows, storyState] = await Promise.all([
+    // 加载全量角色列表（大纲生成需要）+ 风格配置 + 核心卖点
+    const [characters, hooks, foreshadows, storyState, styleProfile] = await Promise.all([
       prisma.character.findMany({ where: { novelId }, orderBy: { updatedAt: "desc" }, take: 12 }),
       prisma.hook.findMany({ where: { novelId, status: "active" }, orderBy: { updatedAt: "desc" }, take: 8 }),
       prisma.foreshadow.findMany({ where: { novelId, status: "planted" }, orderBy: { updatedAt: "desc" }, take: 8 }),
       prisma.storyState.findUnique({ where: { novelId } }),
+      prisma.styleProfile.findFirst({ where: { novelId, isDefault: true } }),
     ]);
 
     const results: Array<{ id: string; order: number; title: string; content: string; retryCount: number; estimatedTokens: number }> = [];
@@ -218,6 +231,8 @@ export class ContinuationService {
         title: card.title || `第${nextOrder}章`,
         compactContext,
         targetWordCount,
+        styleProfile,
+        coreSellingPoint: novel.coreSellingPoint || undefined,
       });
 
       if (!content) {
@@ -242,6 +257,8 @@ export class ContinuationService {
           compactContext,
           targetWordCount,
           retryHint: qualityResult.retryHint,
+          styleProfile,
+          coreSellingPoint: novel.coreSellingPoint || undefined,
         });
         qualityResult = await validateChapterQuality(
           { llmService } as any, novelId, nextOrder, content, targetWordCount, card,

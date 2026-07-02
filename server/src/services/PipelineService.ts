@@ -72,51 +72,63 @@ export class PipelineService {
 
   // 启动流程
   async startPipeline(novelId: string, config: PipelineConfig = {}) {
-    const existing = await prisma.pipelineJob.findUnique({ where: { novelId } });
-    if (existing && existing.status === "running") {
-      throw new Error("该作品已有流程在运行中");
-    }
-
-    const volumeCount = config.volumeCount || 5;
+    // 深拷贝 config，避免修改调用者对象
+    const configCopy = structuredClone(config);
+    const volumeCount = configCopy.volumeCount || 5;
 
     // 向后兼容：迁移旧 mode 值
-    if (config.mode === "standalone" || config.mode === "continue") {
-      config.sourceType = config.sourceType || (config.mode === "continue" ? "content" : "idea");
-      config.mode = "create";
+    if (configCopy.mode === "standalone" || configCopy.mode === "continue") {
+      configCopy.sourceType = configCopy.sourceType || (configCopy.mode === "continue" ? "content" : "idea");
+      configCopy.mode = "create";
     }
 
     // continuationMode → overwriteExistingChapters 映射
-    if (config.continuationMode === "continue") {
-      config.overwriteExistingChapters = false;
-    } else if (config.continuationMode === "rewrite") {
-      config.overwriteExistingChapters = true;
+    if (configCopy.continuationMode === "continue") {
+      configCopy.overwriteExistingChapters = false;
+    } else if (configCopy.continuationMode === "rewrite") {
+      configCopy.overwriteExistingChapters = true;
     }
 
     // outline(3) + assets(3) + [style_analysis(1)] + planning(1+volumeCount+1) + consistency(1) + writing(1)
-    const hasStyleAnalysis = config.inputMode === "structured";
+    const hasStyleAnalysis = configCopy.inputMode === "structured";
     const totalSteps = 3 + 3 + (hasStyleAnalysis ? 1 : 0) + (1 + volumeCount + 1) + 1 + 1;
 
-    const configWithVersion = { ...config, pipelineVersion: 2 };
+    const configWithVersion = { ...configCopy, pipelineVersion: 2 };
 
-    const job = await prisma.pipelineJob.upsert({
-      where: { novelId },
-      create: {
-        novelId,
-        status: "running",
-        currentPhase: "planning",
-        currentStep: "outline",
-        config: JSON.stringify(configWithVersion),
-        totalSteps,
-      },
-      update: {
-        status: "running",
-        currentPhase: "planning",
-        currentStep: "outline",
-        config: JSON.stringify(configWithVersion),
-        progress: 0,
-        completedSteps: 0,
-        lastError: null,
-      },
+    // 将 stale 检测 + running 检查 + upsert 放入事务，消除竞态条件
+    const job = await prisma.$transaction(async (tx) => {
+      // stale job 检测：重置超过10分钟未更新的 running job
+      const staleThreshold = new Date(Date.now() - 10 * 60 * 1000);
+      await tx.pipelineJob.updateMany({
+        where: { status: "running", updatedAt: { lt: staleThreshold } },
+        data: { status: "error", lastError: "流程超时未响应，已自动标记为错误状态" },
+      });
+
+      const existing = await tx.pipelineJob.findUnique({ where: { novelId } });
+      if (existing && existing.status === "running") {
+        throw new Error("该作品已有流程在运行中");
+      }
+
+      return tx.pipelineJob.upsert({
+        where: { novelId },
+        create: {
+          novelId,
+          status: "running",
+          currentPhase: "planning",
+          currentStep: "outline",
+          config: JSON.stringify(configWithVersion),
+          totalSteps,
+        },
+        update: {
+          status: "running",
+          currentPhase: "planning",
+          currentStep: "outline",
+          config: JSON.stringify(configWithVersion),
+          progress: 0,
+          completedSteps: 0,
+          lastError: null,
+        },
+      });
     });
 
     this.executePipeline(job.id).catch(err => {
@@ -197,14 +209,18 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
     const ctx = this.ctx;
 
     if (pipelineVersion >= 2) {
-      if (allConfirmed && phase === "outline") {
+      if (!allConfirmed) return result;
+
+      if (phase === "outline") {
         await prisma.pipelineJob.update({
           where: { id: jobId },
           data: { status: "running", currentPhase: "assets", currentStep: "worldview" },
         });
         executeAssetsPhase(ctx, jobId);
+        return result;
       }
-      if (allConfirmed && phase === "assets") {
+
+      if (phase === "assets") {
         // 结构化输入 + 有已有章节 → 先运行风格分析
         if (config.inputMode === "structured" && job) {
           const hasChapters = await prisma.chapter.count({ where: { novelId: job.novelId, content: { not: "" } } });
@@ -228,7 +244,9 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           data: { status: "running", currentPhase: "planning", currentStep: "volume_outline" },
         });
         executePlanningPhase_unified(ctx, jobId);
+        return result;
       }
+
       if (phase === "planning" && step === "volume_outline") {
         const volumeOutlineConfirmed = allResults.find(r => r.step === "volume_outline")?.status === "confirmed";
         if (volumeOutlineConfirmed) {
@@ -241,8 +259,10 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
             executeChapterOutlinesPhase(ctx, jobId);
           }
         }
+        return result;
       }
-      if (allConfirmed && phase === "planning") {
+
+      if (phase === "planning") {
         const hasChapterOutlines = allResults.some(r => r.step.startsWith("chapter_outline_vol_"));
         const hasStoryArcs = allResults.some(r => r.step === "story_arcs");
         if (hasChapterOutlines && hasStoryArcs) {
@@ -252,8 +272,10 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
           });
           executeConsistencyCheckPhase(ctx, jobId);
         }
+        return result;
       }
-      if (allConfirmed && phase === "consistency_check") {
+
+      if (phase === "consistency_check") {
         await prisma.pipelineJob.update({
           where: { id: jobId },
           data: { status: "running", currentPhase: "writing", currentStep: "chapter_drafts" },
@@ -269,6 +291,7 @@ ${issues.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         } else {
           executeWritingPhase(ctx, jobId);
         }
+        return result;
       }
     } else {
       if (allConfirmed && phase === "outline") {

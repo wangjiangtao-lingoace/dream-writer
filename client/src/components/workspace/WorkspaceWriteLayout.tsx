@@ -28,8 +28,10 @@ interface WorkspaceWriteLayoutProps {
 
   // 状态
   aiProcessing?: string | null;
+  simpleMode?: boolean;
 
   // 回调函数
+  onToggleSimpleMode?: () => void;
   onNavigate: (path: string) => void;
   onSelectChapter: (chapterId: string) => void;
   onCreateChapter: () => void;
@@ -56,6 +58,8 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
   continuing,
   showExportMenu,
   isGeneratingReview,
+  simpleMode,
+  onToggleSimpleMode,
   onNavigate,
   onSelectChapter,
   onCreateChapter,
@@ -133,6 +137,8 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
           onBack={() => onNavigate("/")}
           writingStats={workspaceData?.writingStats || defaultWritingStats}
           signals={workspaceData?.signals || defaultSignals}
+          simpleMode={simpleMode}
+          onToggleSimpleMode={onToggleSimpleMode}
           exportButton={
             <div ref={exportMenuRef} style={{ position: "relative" }}>
               <button
@@ -183,6 +189,26 @@ export const WorkspaceWriteLayout: React.FC<WorkspaceWriteLayoutProps> = ({
             </div>
           }
         />
+
+        {simpleMode && (
+          <div style={{
+            padding: "0.5rem 1rem",
+            background: "var(--accent-muted, rgba(99,102,241,0.08))",
+            color: "var(--accent)",
+            fontSize: "0.8125rem",
+            borderBottom: "1px solid var(--border-default)",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: "0.875rem", height: "0.875rem", flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            新手模式已开启，隐藏了高级功能。可在顶部切换关闭。
+          </div>
+        )}
 
         <div className="workspace-write-body">
           <ChapterSidebar
