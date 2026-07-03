@@ -1,0 +1,30 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: 项目
+        - button "书架" [ref=e7] [cursor=pointer]:
+          - img [ref=e8]
+          - generic [ref=e11]: 书架
+        - button "创建新作品" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+          - generic [ref=e15]: 创建新作品
+      - generic [ref=e16]:
+        - generic [ref=e17]: 工具
+        - button "功能引导" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+          - generic [ref=e22]: 功能引导
+        - button "通用知识库" [ref=e23] [cursor=pointer]:
+          - img [ref=e24]
+          - generic [ref=e27]: 通用知识库
+      - generic [ref=e28]:
+        - generic [ref=e29]: 设置
+        - button "AI 模型配置" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e34]: AI 模型配置
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button "收起侧边栏" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+      - main [ref=e40]
+  - region "Notifications alt+T"

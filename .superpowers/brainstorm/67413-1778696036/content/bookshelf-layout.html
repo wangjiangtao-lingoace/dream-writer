@@ -1,0 +1,157 @@
+<h2>书架首页布局</h2>
+<p class="subtitle">用户打开应用看到的第一个画面。展示所有小说项目，提供快速入口。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Sidebar -->
+        <div style="width: 160px; background: #0c0c0e; border-right: 1px solid #222228; padding: 10px 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+            <div style="width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg, #f97316, #fb923c);"></div>
+            <div style="height: 7px; width: 55%; background: #e7e5e4; border-radius: 2px; opacity: 0.6;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px; background: rgba(249,115,22,0.1); margin-bottom: 3px;">
+            <div style="height: 6px; width: 50%; background: #f97316; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px; margin-bottom: 3px;">
+            <div style="height: 6px; width: 45%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px;">
+            <div style="height: 6px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Main content: Card grid -->
+        <div style="flex: 1; background: #08080a; padding: 16px;">
+          <!-- Header -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <div style="height: 12px; width: 80px; background: #e4e4e7; border-radius: 3px; opacity: 0.7;"></div>
+            <div style="height: 24px; width: 80px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 5px; opacity: 0.8;"></div>
+          </div>
+          <!-- Stats bar -->
+          <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+            <div style="flex: 1; background: #0f0f12; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+              <div style="font-size: 10px; color: #f97316; font-weight: 700;">3</div>
+              <div style="font-size: 6px; color: #6b6b76;">作品</div>
+            </div>
+            <div style="flex: 1; background: #0f0f12; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+              <div style="font-size: 10px; color: #fb923c; font-weight: 700;">12</div>
+              <div style="font-size: 6px; color: #6b6b76;">章节</div>
+            </div>
+            <div style="flex: 1; background: #0f0f12; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+              <div style="font-size: 10px; color: #f59e0b; font-weight: 700;">45k</div>
+              <div style="font-size: 6px; color: #6b6b76;">总字数</div>
+            </div>
+          </div>
+          <!-- Novel cards grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <!-- Card 1 (active) -->
+            <div style="background: #0f0f12; border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
+                <div style="height: 8px; width: 60%; background: #e4e4e7; border-radius: 2px; opacity: 0.7;"></div>
+                <div style="font-size: 6px; color: #22c55e; background: rgba(34,197,94,0.1); padding: 1px 4px; border-radius: 3px;">进行中</div>
+              </div>
+              <div style="height: 4px; width: 90%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+              <div style="height: 4px; width: 75%; background: #1c1c22; border-radius: 2px; margin-bottom: 8px;"></div>
+              <!-- Progress bar -->
+              <div style="height: 3px; background: #1a1a20; border-radius: 2px; overflow: hidden;">
+                <div style="width: 35%; height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 2px;"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                <div style="font-size: 5px; color: #6b6b76;">3/10 章</div>
+                <div style="font-size: 5px; color: #6b6b76;">45,000 字</div>
+              </div>
+            </div>
+            <!-- Card 2 -->
+            <div style="background: #0f0f12; border: 1px solid #222228; border-radius: 8px; padding: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
+                <div style="height: 8px; width: 55%; background: #3a3a42; border-radius: 2px;"></div>
+                <div style="font-size: 6px; color: #6b6b76; background: #1a1a20; padding: 1px 4px; border-radius: 3px;">草稿</div>
+              </div>
+              <div style="height: 4px; width: 85%; background: #1c1c22; border-radius: 2px; margin-bottom: 3px;"></div>
+              <div style="height: 4px; width: 70%; background: #1c1c22; border-radius: 2px; margin-bottom: 8px;"></div>
+              <div style="height: 3px; background: #1a1a20; border-radius: 2px;"></div>
+              <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                <div style="font-size: 5px; color: #6b6b76;">0/20 章</div>
+                <div style="font-size: 5px; color: #6b6b76;">0 字</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 仪表盘卡片</h3>
+      <p>顶部统计概览（作品数/章节/字数）+ 小说卡片网格。每张卡片显示标题、状态、进度条、字数。快速创建按钮。类似项目管理工具的看板视图。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Sidebar -->
+        <div style="width: 160px; background: #0c0c0e; border-right: 1px solid #222228; padding: 10px 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+            <div style="width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg, #f97316, #fb923c);"></div>
+            <div style="height: 7px; width: 55%; background: #e7e5e4; border-radius: 2px; opacity: 0.6;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px; background: rgba(249,115,22,0.1); margin-bottom: 3px;">
+            <div style="height: 6px; width: 50%; background: #f97316; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px; margin-bottom: 3px;">
+            <div style="height: 6px; width: 45%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 5px 6px; border-radius: 4px;">
+            <div style="height: 6px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Main content: List view -->
+        <div style="flex: 1; background: #08080a; padding: 16px;">
+          <!-- Header -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <div style="height: 12px; width: 80px; background: #e4e4e7; border-radius: 3px; opacity: 0.7;"></div>
+            <div style="display: flex; gap: 6px;">
+              <div style="height: 24px; width: 60px; background: #111114; border: 1px solid #222228; border-radius: 5px;"></div>
+              <div style="height: 24px; width: 80px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 5px; opacity: 0.8;"></div>
+            </div>
+          </div>
+          <!-- List items -->
+          <div style="background: #0f0f12; border: 1px solid #222228; border-radius: 8px; overflow: hidden;">
+            <!-- Item 1 -->
+            <div style="padding: 10px 12px; border-bottom: 1px solid #1a1a20; display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 42px; background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(251,146,60,0.1)); border-radius: 4px; border: 1px solid rgba(249,115,22,0.3);"></div>
+              <div style="flex: 1;">
+                <div style="height: 7px; width: 50%; background: #e4e4e7; border-radius: 2px; margin-bottom: 4px; opacity: 0.7;"></div>
+                <div style="height: 4px; width: 80%; background: #1c1c22; border-radius: 2px;"></div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 7px; color: #22c55e;">进行中</div>
+                <div style="font-size: 6px; color: #6b6b76;">45,000 字</div>
+              </div>
+              <div style="width: 60px; height: 3px; background: #1a1a20; border-radius: 2px; overflow: hidden;">
+                <div style="width: 35%; height: 100%; background: #f97316; border-radius: 2px;"></div>
+              </div>
+            </div>
+            <!-- Item 2 -->
+            <div style="padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 42px; background: #111114; border-radius: 4px; border: 1px solid #222228;"></div>
+              <div style="flex: 1;">
+                <div style="height: 7px; width: 45%; background: #3a3a42; border-radius: 2px; margin-bottom: 4px;"></div>
+                <div style="height: 4px; width: 75%; background: #1c1c22; border-radius: 2px;"></div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 7px; color: #6b6b76;">草稿</div>
+                <div style="font-size: 6px; color: #6b6b76;">0 字</div>
+              </div>
+              <div style="width: 60px; height: 3px; background: #1a1a20; border-radius: 2px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 列表视图</h3>
+      <p>紧凑列表展示每部小说：封面缩略图 + 标题 + 摘要 + 状态 + 进度条。信息密度高，适合多部作品管理。支持排序和筛选。</p>
+    </div>
+  </div>
+</div>

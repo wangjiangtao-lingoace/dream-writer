@@ -1,0 +1,170 @@
+<h2>Pipeline 流水线可视化</h2>
+<p class="subtitle">AI 批量生成章节时，用户需要看到进度、阶段、和每个步骤的状态。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #222228; background: #0c0c0e; padding: 14px;">
+        <!-- Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <div style="height: 10px; width: 100px; background: #e4e4e7; border-radius: 3px; opacity: 0.7;"></div>
+          <div style="display: flex; gap: 6px;">
+            <div style="height: 22px; width: 50px; background: #1a1a20; border: 1px solid #2a2a32; border-radius: 4px;"></div>
+            <div style="height: 22px; width: 50px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 4px; opacity: 0.7;"></div>
+          </div>
+        </div>
+        <!-- Horizontal stage flow -->
+        <div style="display: flex; gap: 4px; margin-bottom: 14px;">
+          <!-- Stage 1: Done -->
+          <div style="flex: 1; background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.3); border-radius: 6px; padding: 8px; position: relative;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></div>
+              <div style="font-size: 7px; color: #22c55e; font-weight: 600;">大纲</div>
+            </div>
+            <div style="font-size: 6px; color: #6b6b76;">已完成</div>
+          </div>
+          <!-- Connector -->
+          <div style="display: flex; align-items: center; color: #3a3a42; font-size: 8px;">→</div>
+          <!-- Stage 2: Active -->
+          <div style="flex: 1; background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.3); border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: #f97316; animation: pulse 2s infinite;"></div>
+              <div style="font-size: 7px; color: #fb923c; font-weight: 600;">正文生成</div>
+            </div>
+            <div style="font-size: 6px; color: #6b6b76;">3/10 章</div>
+            <div style="height: 2px; background: #1a1a20; border-radius: 1px; margin-top: 4px; overflow: hidden;">
+              <div style="width: 30%; height: 100%; background: #f97316; border-radius: 1px;"></div>
+            </div>
+          </div>
+          <!-- Connector -->
+          <div style="display: flex; align-items: center; color: #3a3a42; font-size: 8px;">→</div>
+          <!-- Stage 3: Pending -->
+          <div style="flex: 1; background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: #3a3a42;"></div>
+              <div style="font-size: 7px; color: #6b6b76; font-weight: 500;">一致性检查</div>
+            </div>
+            <div style="font-size: 6px; color: #3a3a42;">等待中</div>
+          </div>
+          <!-- Connector -->
+          <div style="display: flex; align-items: center; color: #3a3a42; font-size: 8px;">→</div>
+          <!-- Stage 4: Pending -->
+          <div style="flex: 1; background: #111114; border: 1px solid #222228; border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: #3a3a42;"></div>
+              <div style="font-size: 7px; color: #6b6b76; font-weight: 500;">润色优化</div>
+            </div>
+            <div style="font-size: 6px; color: #3a3a42;">等待中</div>
+          </div>
+        </div>
+        <!-- Chapter detail list -->
+        <div style="background: #0a0a0e; border-radius: 6px; border: 1px solid #1a1a20;">
+          <div style="padding: 6px 10px; border-bottom: 1px solid #1a1a20; display: flex; align-items: center; gap: 8px;">
+            <div style="width: 5px; height: 5px; border-radius: 50%; background: #22c55e;"></div>
+            <div style="font-size: 7px; color: #e4e4e7; flex: 1;">第1章 · 开局</div>
+            <div style="font-size: 6px; color: #22c55e;">✓ 已完成</div>
+          </div>
+          <div style="padding: 6px 10px; border-bottom: 1px solid #1a1a20; display: flex; align-items: center; gap: 8px;">
+            <div style="width: 5px; height: 5px; border-radius: 50%; background: #22c55e;"></div>
+            <div style="font-size: 7px; color: #e4e4e7; flex: 1;">第2章 · 命案</div>
+            <div style="font-size: 6px; color: #22c55e;">✓ 已完成</div>
+          </div>
+          <div style="padding: 6px 10px; border-bottom: 1px solid #1a1a20; display: flex; align-items: center; gap: 8px;">
+            <div style="width: 5px; height: 5px; border-radius: 50%; background: #f97316; animation: pulse 2s infinite;"></div>
+            <div style="font-size: 7px; color: #e4e4e7; flex: 1;">第3章 · 审讯</div>
+            <div style="font-size: 6px; color: #fb923c;">生成中...</div>
+          </div>
+          <div style="padding: 6px 10px; display: flex; align-items: center; gap: 8px;">
+            <div style="width: 5px; height: 5px; border-radius: 50%; background: #3a3a42;"></div>
+            <div style="font-size: 7px; color: #6b6b76; flex: 1;">第4章 · 线索</div>
+            <div style="font-size: 6px; color: #3a3a42;">等待中</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 阶段流 + 章节列表</h3>
+      <p>顶部横向阶段流（大纲→正文→检查→润色），每个阶段显示状态和进度。下方章节列表显示每章的实时状态。清晰直观。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #222228; background: #0c0c0e; padding: 14px;">
+        <!-- Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <div style="height: 10px; width: 100px; background: #e4e4e7; border-radius: 3px; opacity: 0.7;"></div>
+          <div style="display: flex; gap: 6px;">
+            <div style="height: 22px; width: 50px; background: #1a1a20; border: 1px solid #2a2a32; border-radius: 4px;"></div>
+            <div style="height: 22px; width: 50px; background: linear-gradient(135deg, #f97316, #fb923c); border-radius: 4px; opacity: 0.7;"></div>
+          </div>
+        </div>
+        <!-- Kanban columns -->
+        <div style="display: flex; gap: 8px;">
+          <!-- Column: Pending -->
+          <div style="flex: 1; background: #0a0a0e; border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <div style="font-size: 7px; color: #6b6b76; font-weight: 600;">待处理</div>
+              <div style="font-size: 6px; color: #3a3a42; background: #1a1a20; padding: 0 4px; border-radius: 2px;">3</div>
+            </div>
+            <div style="background: #111114; border: 1px solid #222228; border-radius: 5px; padding: 6px; margin-bottom: 4px;">
+              <div style="height: 5px; width: 60%; background: #3a3a42; border-radius: 2px; margin-bottom: 3px;"></div>
+              <div style="height: 4px; width: 80%; background: #1c1c22; border-radius: 2px;"></div>
+            </div>
+            <div style="background: #111114; border: 1px solid #222228; border-radius: 5px; padding: 6px; margin-bottom: 4px;">
+              <div style="height: 5px; width: 55%; background: #3a3a42; border-radius: 2px; margin-bottom: 3px;"></div>
+              <div style="height: 4px; width: 75%; background: #1c1c22; border-radius: 2px;"></div>
+            </div>
+            <div style="background: #111114; border: 1px solid #222228; border-radius: 5px; padding: 6px;">
+              <div style="height: 5px; width: 50%; background: #3a3a42; border-radius: 2px; margin-bottom: 3px;"></div>
+              <div style="height: 4px; width: 70%; background: #1c1c22; border-radius: 2px;"></div>
+            </div>
+          </div>
+          <!-- Column: In Progress -->
+          <div style="flex: 1; background: rgba(249,115,22,0.04); border: 1px solid rgba(249,115,22,0.15); border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <div style="font-size: 7px; color: #fb923c; font-weight: 600;">生成中</div>
+              <div style="font-size: 6px; color: #f97316; background: rgba(249,115,22,0.15); padding: 0 4px; border-radius: 2px;">1</div>
+            </div>
+            <div style="background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.25); border-radius: 5px; padding: 6px;">
+              <div style="height: 5px; width: 55%; background: #fb923c; border-radius: 2px; margin-bottom: 3px; opacity: 0.7;"></div>
+              <div style="height: 4px; width: 80%; background: #1c1c22; border-radius: 2px; margin-bottom: 4px;"></div>
+              <div style="height: 2px; background: #1a1a20; border-radius: 1px; overflow: hidden;">
+                <div style="width: 60%; height: 100%; background: #f97316; border-radius: 1px;"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Column: Review -->
+          <div style="flex: 1; background: #0a0a0e; border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <div style="font-size: 7px; color: #6b6b76; font-weight: 600;">待审核</div>
+              <div style="font-size: 6px; color: #3a3a42; background: #1a1a20; padding: 0 4px; border-radius: 2px;">0</div>
+            </div>
+            <div style="text-align: center; padding: 12px 0;">
+              <div style="font-size: 6px; color: #3a3a42;">无</div>
+            </div>
+          </div>
+          <!-- Column: Done -->
+          <div style="flex: 1; background: #0a0a0e; border-radius: 6px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <div style="font-size: 7px; color: #22c55e; font-weight: 600;">已完成</div>
+              <div style="font-size: 6px; color: #22c55e; background: rgba(34,197,94,0.15); padding: 0 4px; border-radius: 2px;">6</div>
+            </div>
+            <div style="background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); border-radius: 5px; padding: 6px; margin-bottom: 4px;">
+              <div style="height: 5px; width: 50%; background: #22c55e; border-radius: 2px; margin-bottom: 2px; opacity: 0.5;"></div>
+              <div style="height: 4px; width: 70%; background: #1c1c22; border-radius: 2px;"></div>
+            </div>
+            <div style="background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); border-radius: 5px; padding: 6px;">
+              <div style="height: 5px; width: 45%; background: #22c55e; border-radius: 2px; margin-bottom: 2px; opacity: 0.5;"></div>
+              <div style="height: 4px; width: 65%; background: #1c1c22; border-radius: 2px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 看板视图</h3>
+      <p>看板列：待处理 → 生成中 → 待审核 → 已完成。每张卡片是一章，可拖拽。适合需要精细控制每章状态的场景。类似 Trello/Jira。</p>
+    </div>
+  </div>
+</div>

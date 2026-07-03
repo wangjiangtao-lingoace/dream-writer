@@ -1,0 +1,957 @@
+// Dream Writer - 轻量版 Schema
+// 扩展支持: 卷纲 / 章纲 / 伏笔 / 爽点 / 一致性问题
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 1. 小说主表
+model Novel {
+  id          String   @id @default(cuid())
+  title       String
+  inspiration String?
+  outline     String?
+  genre       String?
+  coverImage  String?   // 封面图路径
+  synopsis    String?   // 故事简介/梗概
+  targetWordCount Int   @default(300000) // 目标总字数
+  chapterWordMin  Int   @default(2000)  // 章节最小字数
+  chapterWordMax  Int   @default(4000)  // 章节最大字数
+  volumeCount     Int   @default(1)     // 卷数
+  chaptersPerVol  Int   @default(20)    // 每卷章节数
+  status      String   @default("drafting")
+  // 7 层 Prompt 架构新增字段
+  coreSellingPoint  String?   // 核心卖点
+  corePayoffs       String?   // JSON array - 核心爽点列表
+  coreConflict      String?   // 核心矛盾
+  readerExpectations String?  // JSON array - 读者期待列表
+  chapters    Chapter[]
+  characters  Character[]
+  characterRelations CharacterRelation[]
+  assets      KnowledgeAsset[] @relation("NovelAssets")
+  volumes     Volume[]
+  chapterOutlines ChapterOutline[]
+  foreshadows Foreshadow[]
+  memories    Memory[]
+  styleProfiles StyleProfile[]
+  storyState  StoryState?
+  storyStateLogs StoryStateLog[]
+  pleasurePoints PleasurePoint[]
+  emotionCurve EmotionCurve[]
+  consistencyIssues ConsistencyIssue[]
+  consistencyCheckResults ConsistencyCheckResult[]
+  mainlines   Mainline[]
+  hooks       Hook[]
+  worldviews  Worldview[]
+  bookAnalysisBindings BookAnalysisBinding[]
+  imitationPlans ImitationPlan[]
+  assetUsageRecords AssetUsageRecord[]
+  pipelineJob PipelineJob?
+  autoGenerateStatus AutoGenerateStatus?
+  writingSessions WritingSession[]
+  chapterSummaries ChapterSummary[]
+  chapterQualityLogs ChapterQualityLog[]
+  chapterBeats     ChapterBeat[]
+  payoffChains     PayoffChain[]
+  snapshots      ChapterSnapshot[]
+  causalLinks  CausalLink[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+// 2. 章节
+model Chapter {
+  id        String   @id @default(cuid())
+  novelId   String
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  order     Int
+  title     String
+  content   String   @default("")
+  summary   String?
+  wordCount Int      @default(0)
+  status    String   @default("planned")
+  source    String   @default("manual")
+  qualityScore Int?  // 质量评分 1-10
+  aiSmellCount Int   @default(0)  // AI 味词汇命中数
+  reviewStatus String @default("pending") // pending/reviewed/approved/rejected
+  reviewNotes  String? // 审核备注
+  // v3.0 用户原文保护
+  sourceType      String?   // user_original / ai_generated / ai_rewritten / imported
+  isCanonical     Boolean   @default(false) // 用户原文/已发表正文
+  canRewrite      Boolean   @default(true)  // 是否允许 AI 重写
+  originalContent String?   // 用户原始内容备份
+  sourceHash      String?   // 内容 hash，用于去重
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revisions ChapterRevision[]
+
+  @@unique([novelId, order])
+  @@index([novelId, order])
+}
+
+// 2.0.1 章节版本历史
+model ChapterRevision {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  content   String
+  title     String
+  wordCount Int
+  revision  Int
+  createdAt DateTime @default(now())
+
+  @@unique([chapterId, revision])
+  @@index([chapterId, revision])
+}
+
+// 2.1 章级概要（用于续写时的精简上下文传递，节省 token）
+model ChapterSummary {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder    Int
+  title           String
+  summary         String
+  keyEvents       String   @default("[]")
+  characterStates String   @default("{}")
+  endingState     String   @default("")
+  newHooks        String   @default("[]")
+  resolvedHooks   String   @default("[]")
+  resolvedForeshadows String @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([novelId, chapterOrder])
+  @@index([novelId, chapterOrder])
+}
+
+// 3. 人物卡
+model Character {
+  id            String   @id @default(cuid())
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  name          String
+  role          String?
+  identity      String?
+  motivation    String?
+  appearance    String?
+  background    String?
+  relationsText String?
+  notes         String?
+  powerLevel    String?  // 战力等级
+  firstAppear   Int?     // 首次出场章节
+  arcSummary    String?  // 角色弧线摘要（30字速查）
+  arcDetail     String?  // 详细成长线（200字）
+  speechStyle   String?  // 言语风格：粗犷/文雅/简洁/啰嗦/幽默/冷酷
+  lastAppear    Int?     // 最后出场章节
+  appearanceCount Int    @default(0)  // 出场次数
+  knowledgeScope String? // JSON: [{chapter, knowledge}] 角色知识范围
+  tags          String?  // 标签 JSON
+  // v3.0 核心人物字段
+  personality       String?  // 核心性格描述
+  abilities         String?  // 能力体系
+  behaviorRules     String?  // JSON: 角色必须遵守的行为规则
+  forbiddenBehavior String?  // JSON: 角色禁止行为
+  signatureLines    String?  // JSON: 口癖、名句、标志性台词
+  signatureScenes   String?  // JSON: 标志性桥段
+  comedyMechanisms  String?  // JSON: 喜剧机制
+  emotionalHooks    String?  // JSON: 情绪触发点
+  growthCheckpoints String?  // JSON: [{chapter, description, type, createdAt}] 角色成长检查点
+  rawProfile        String?  // 用户原始人物卡全文
+  sourceType        String?  // user_original / ai_generated / extracted
+  isCanonical       Boolean  @default(false) // 用户原文人物卡
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  charARelations CharacterRelation[] @relation("CharARelations")
+  charBRelations CharacterRelation[] @relation("CharBRelations")
+
+  @@unique([novelId, name]) // 同一作品下角色名唯一
+  @@index([novelId])
+}
+
+// 4. 世界观（每部作品独立）
+model Worldview {
+  id          String   @id @default(cuid())
+  novelId     String?  // 绑定到作品，null表示全局世界观
+  novel       Novel?   @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  name        String
+  summary     String?
+  rules       String?
+  geography   String?
+  factions    String?
+  history     String?
+  powerSystem String?  // 力量体系
+  economy     String?  // 经济体系
+  culture     String?  // 文化设定
+  technology  String?  // 科技/魔法水平
+  customNotes String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, name]) // 同一作品下世界观名称唯一
+  @@index([novelId])
+}
+
+// 5. 资料库
+model KnowledgeAsset {
+  id        String   @id @default(cuid())
+  novelId   String?
+  novel     Novel?   @relation("NovelAssets", fields: [novelId], references: [id], onDelete: SetNull)
+  title     String
+  category  String
+  content   String
+  tags      String?
+  chunks    RagChunk[]
+  publishedBookAnalyses BookAnalysis[] @relation("PublishedBookAnalysis")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([novelId, updatedAt])
+}
+
+model BookAnalysis {
+  id               String   @id @default(cuid())
+  title            String
+  sourceTitle      String?
+  sourceText       String
+  status           String   @default("draft")
+  summary          String?
+  progress         Int      @default(0)
+  currentStage     String?
+  currentItemKey   String?
+  currentItemLabel String?
+  lastError        String?
+  publishedAssetId String?
+  publishedAsset   KnowledgeAsset? @relation("PublishedBookAnalysis", fields: [publishedAssetId], references: [id], onDelete: SetNull)
+  sections         BookAnalysisSection[]
+  bindings         BookAnalysisBinding[]
+  imitationPlans   ImitationPlan[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([publishedAssetId])
+}
+
+model BookAnalysisBinding {
+  id         String   @id @default(cuid())
+  novelId    String
+  novel      Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  analysisId String
+  analysis   BookAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  source     String   @default("manual")
+  createdAt  DateTime @default(now())
+
+  @@unique([novelId, analysisId])
+  @@index([novelId, createdAt])
+  @@index([analysisId])
+}
+
+model BookAnalysisSection {
+  id             String   @id @default(cuid())
+  analysisId     String
+  analysis       BookAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  sectionKey     String
+  title          String
+  status         String   @default("idle")
+  aiContent      String?
+  editedContent  String?
+  notes          String?
+  structuredData String?
+  evidence       String?
+  frozen         Boolean  @default(false)
+  usedForImitation Boolean @default(true)
+  sortOrder      Int
+  updatedAt      DateTime @updatedAt
+
+  @@unique([analysisId, sectionKey])
+  @@index([analysisId, sortOrder])
+}
+
+model AssetUsageRecord {
+  id            String   @id @default(cuid())
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  pipelineJobId String?
+  assetType     String
+  assetId       String
+  title         String
+  usageStage    String   @default("pipeline_context")
+  createdAt     DateTime @default(now())
+
+  @@index([novelId, assetType])
+  @@index([pipelineJobId])
+}
+
+model ImitationPlan {
+  id             String   @id @default(cuid())
+  novelId        String
+  novel          Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  bookAnalysisId String
+  bookAnalysis   BookAnalysis @relation(fields: [bookAnalysisId], references: [id], onDelete: Cascade)
+  title          String
+  status         String   @default("succeeded")
+  sectionPlans   String   @default("[]")
+  blueprint      String   @default("{}")
+  chapterTemplate String  @default("{}")
+  sampleDrafts   String   @default("[]")
+  knowledgeAssetId String?
+  pipelineJobId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([novelId, updatedAt])
+  @@index([bookAnalysisId])
+}
+
+// 6. RAG 切片
+model RagChunk {
+  id            String   @id @default(cuid())
+  ownerType     String
+  ownerId       String
+  novelId       String?
+  assetId       String?
+  asset         KnowledgeAsset? @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  chunkIndex    Int
+  text          String
+  qdrantPointId String?
+  embedModel    String
+  createdAt     DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+  @@index([novelId])
+}
+
+// 7. 应用设置
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// 7b. AI 模型配置（BYOK）
+model AIConfig {
+  id        String   @id @default(cuid())
+  provider  String
+  model     String
+  apiKey    String   // AES-256 加密存储
+  baseUrl   String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([provider])
+}
+
+// 8. 生成日志
+model GenerationLog {
+  id               String   @id @default(cuid())
+  novelId          String
+  chapterId        String?
+  taskType         String
+  status           String
+  errorMsg         String?
+  durationMs       Int?
+  promptTokens     Int?     // 输入 token 数
+  completionTokens Int?     // 输出 token 数
+  totalTokens      Int?     // 总 token 数
+  cost             Float?   // 费用（元）
+  provider         String?  // 使用的 provider
+  model            String?  // 使用的模型
+  createdAt        DateTime @default(now())
+
+  @@index([novelId, createdAt])
+}
+
+// 9. 卷纲
+model Volume {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  sortOrder       Int
+  title           String
+  goal            String   @default("")   // 本卷目标
+  conflict        String   @default("")   // 主要冲突
+  emotion         String   @default("")   // 主要情绪
+  newChars        String   @default("[]") // 新角色 JSON
+  mapName         String   @default("")   // 新地图
+  endHook         String   @default("")   // 结尾钩子
+  chapterCount    Int      @default(10)   // 本卷章数
+  wordCountTarget Int      @default(20000) // 目标字数
+  keyEvents       String   @default("[]") // 关键事件 JSON
+  turningPoint    String   @default("")   // 转折点
+  climax          String   @default("")   // 高潮描述
+  foreshadowsPlanned String @default("[]") // 本卷计划埋设的伏笔 JSON
+  characterArcs   String   @default("[]") // 本卷角色成长弧线 JSON
+  targetWordCount Int      @default(0)    // 本卷目标字数
+  status          String   @default("planned")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  chapterOutlines ChapterOutline[]
+
+  @@unique([novelId, sortOrder])
+  @@index([novelId, sortOrder])
+}
+
+// 10. 章纲
+model ChapterOutline {
+  id            String   @id @default(cuid())
+  volumeId      String
+  volume        Volume   @relation(fields: [volumeId], references: [id], onDelete: Cascade)
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  sortOrder     Int
+  title         String
+  goal          String   @default("")   // 章节目标
+  conflict      String   @default("")   // 冲突
+  emotion       String   @default("")   // 情绪基调
+  hook          String   @default("")   // 章末钩子
+  foreshadowing String   @default("[]") // 埋设伏笔 JSON
+  payoff        String   @default("[]") // 回收伏笔 JSON
+  pleasurePoint String   @default("")   // 爽点设计
+  scene         String   @default("")   // 场景/地点
+  pov           String   @default("")   // 视角角色
+  targetWordCount Int    @default(0)    // 目标字数
+  mustDo        String?   // JSON array - 必须完成的事项
+  mustNotDo     String?   // JSON array - 禁止完成的事项
+  // v2.5 新增字段
+  chapterType   String   @default("mission") // 章节类型：task_trigger/mission/payoff/comedy_daily/relationship/danger_escalation/info_reveal/transition
+  readerPromise String   @default("")   // 读者承诺：本章让读者看到什么
+  chapterFunction String @default("")   // 章节功能：兑现什么+开启什么
+  requiredReaderEmotion String @default("[]") // JSON array - 读者应感受到的情绪
+  payoffChainRefs String @default("[]") // JSON array - 关联的爽点链阶段
+  comedyMechanism String  @default("")   // 喜剧机制（如适用）
+  endingQuestion  String  @default("")   // 章末悬念问题
+  status        String   @default("planned")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([novelId, sortOrder])
+  @@index([novelId, sortOrder])
+  @@index([volumeId, sortOrder])
+}
+
+// 11. 伏笔
+model Foreshadow {
+  id            String   @id @default(cuid())
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  plantChapter  Int?     // 埋设章节序号
+  payoffChapter Int?     // 回收章节序号
+  title         String
+  description   String   @default("")
+  intensity     Int      @default(5)  // 重要度 1-10
+  status        String   @default("planted") // planted/paid_off/expired
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([novelId, status])
+}
+
+
+// 13. 一致性问题
+model ConsistencyIssue {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterId   String?
+  type        String   // power/character/world/timeline/foreshadow
+  severity    String   @default("medium") // low/medium/high/critical
+  description String
+  evidence    String   @default("")
+  suggestion  String   @default("")
+  status      String   @default("open") // open/resolved/ignored
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([novelId, status])
+}
+
+// 13b. 一致性校验结果汇总
+model ConsistencyCheckResult {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterId   String
+  overallScore Int     @default(0)
+  summary     String   @default("")
+  checkedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, chapterId])
+  @@index([novelId, checkedAt])
+}
+
+// 14. 记忆系统
+model Memory {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  type        String   // world/character/plot/foreshadow/pleasure/style
+  category    String   @default("") // 子分类
+  title       String
+  content     String   // 记忆内容
+  importance  Float    @default(5) // 1-10 重要程度
+  chapterId   String?  // 关联章节
+  metadata    String   @default("{}") // 元数据 JSON
+  lastAccessedAt DateTime?  // 最后被读取的时间
+  accessCount    Int     @default(0)  // 被读取次数
+  lastAccessedChapter Int? // 最后被读取的章节号
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([novelId, type])
+  @@index([novelId, importance])
+}
+
+// 15. 风格配置
+model StyleProfile {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  name            String   // 风格名称
+  description     String   @default("") // 风格描述
+  
+  // 叙事风格
+  narrativePov    String   @default("third_person") // first_person/third_person/mixed
+  tense           String   @default("past") // past/present
+  pacing          String   @default("balanced") // slow/balanced/fast
+  
+  // 语言风格
+  sentenceLength  String   @default("mixed") // short/medium/long/mixed
+  vocabulary      String   @default("modern") // modern/classical/mixed
+  dialogueRatio   String   @default("balanced") // low/balanced/high
+  
+  // 情感风格
+  emotionIntensity String  @default("medium") // low/medium/high
+  humorLevel      String   @default("low") // none/low/medium/high
+  
+  // 特殊要求
+  avoidAIWords    Boolean  @default(true) // 避免 AI 味词汇
+  useShortSentences Boolean @default(true) // 多用短句
+  useDialogue     Boolean  @default(true) // 多用对话
+  useSensoryDetail Boolean @default(true) // 使用感官描写
+  
+  // 自定义规则
+  customRules     String   @default("[]") // JSON 数组
+
+  // 风格 DNA：可执行的节奏/语言/禁区约束
+  styleDna        String?  // JSON: {readerEmotion, payoffMechanisms, rhythmRules, languageRules, forbiddenPatterns, requiredPatterns}
+
+  // 风格指纹：从参考章节提取的量化风格信号
+  fingerprint     String?  // JSON: StyleFingerprint
+
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([novelId])
+  @@index([novelId, isDefault])
+}
+
+// 16. 剧情状态机
+model StoryState {
+  id              String   @id @default(cuid())
+  novelId         String   @unique
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  
+  // 当前阶段
+  currentVolume   Int      @default(1) // 当前卷
+  currentChapter  Int      @default(1) // 当前章
+  currentPhase    String   @default("setup") // setup/development/climax/resolution
+  
+  // 主线状态
+  mainPlotProgress String  @default("") // 主线进度描述
+  mainConflict    String   @default("") // 当前核心矛盾
+  
+  // 角色状态
+  protagonistLevel String   @default("") // 主角当前等级/实力
+  protagonistGoal String    @default("") // 主角当前目标
+  protagonistStatus String  @default("") // 主角当前处境
+  
+  // 情绪状态
+  currentEmotion  String   @default("neutral") // neutral/tension/release/depression/climax
+  emotionIntensity Int     @default(5) // 1-10
+  tensionAccumulation Int  @default(0) // 累积压抑值
+  
+  // 爽点状态
+  lastPleasureChapter Int  @default(0) // 上次爽点章节
+  pleasureType    String   @default("") // 上次爽点类型
+  pleasureCooldown Int     @default(0) // 爽点冷却值
+  
+  // 伏笔状态
+  activeForeshadows String  @default("[]") // JSON: 活跃伏笔列表
+  pendingPayoffs  String   @default("[]") // JSON: 待回收伏笔
+  
+  // 禁止/允许列表
+  forbiddenActions String  @default("[]") // JSON: 当前禁止的剧情
+  allowedActions  String   @default("[]") // JSON: 当前允许的剧情
+  
+  // 读者状态
+  readerExpectation String  @default("") // 读者当前期待
+  readerFatigue   Int      @default(0) // 读者疲劳度
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([novelId])
+}
+
+// 17. 爽点记录（增强版）
+model PleasurePoint {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterId       String?
+  chapterOrder    Int      // 章节序号
+  
+  // 爽点信息
+  type            String   // golden_finger/revenge/shock/romance/resource/status/power
+  subType         String   @default("") // 子类型
+  intensity       Int      @default(5) // 1-10 强度
+  description     String   @default("")
+  
+  // 关联信息
+  characters      String   @default("[]") // JSON: 涉及角色
+  conflict        String   @default("") // 关联冲突
+  
+  createdAt       DateTime @default(now())
+
+  @@index([novelId, chapterOrder])
+  @@index([novelId, type])
+}
+
+// 18. 情绪曲线
+model EmotionCurve {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder    Int      // 章节序号
+  
+  // 情绪数据
+  emotionType     String   // tension/release/depression/climax/neutral
+  intensity       Int      // 1-10
+  tensionLevel    Int      @default(0) // 压抑值
+  releaseLevel    Int      @default(0) // 释放值
+  
+  // 节奏标记
+  isClimax        Boolean  @default(false) // 是否高潮
+  isTurningPoint  Boolean  @default(false) // 是否转折
+  isBreathing     Boolean  @default(false) // 是否喘息
+  
+  description     String   @default("") // 情绪描述
+  
+  createdAt       DateTime @default(now())
+
+  @@index([novelId, chapterOrder])
+}
+
+// 19. 主线
+model Mainline {
+  id            String   @id @default(cuid())
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  type          String   @default("main") // main/sub/emotional/mystery
+  startChapter  Int?     // 起始章节
+  endChapter    Int?     // 结束章节
+  milestones    String   @default("[]") // 关键节点 JSON
+  milestoneStatus String @default("{}") // 里程碑完成状态 JSON: {milestoneIndex: chapterOrder}
+  resolution    String   @default("")   // 结局走向
+  priority      Int      @default(5)    // 优先级 1-10
+  sortOrder     Int      @default(0)
+  status        String   @default("active") // active/paused/completed
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([novelId, sortOrder])
+}
+
+// 20. 钩子
+model Hook {
+  id                String   @id @default(cuid())
+  novelId           String
+  novel             Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterId         String?
+  title             String
+  description       String?
+  type              String   @default("suspense") // suspense/foreshadow/cliffhanger/comedy/mystery/reversal/power_up/romance
+  intensity         Int      @default(5)          // 1-10
+  plannedChapter    Int?     // 计划使用章节
+  resolvedChapter   Int?     // 计划揭示章节
+  relatedForeshadow String?  // 关联伏笔 ID
+  targetAudience    String   @default("") // 目标读者反应
+  category          String   @default("") // 分类标签
+  status            String   @default("planted")  // planted/active/resolved/abandoned
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([novelId, type])
+  @@index([novelId, status])
+  @@index([novelId, plannedChapter])
+}
+
+// 21. 通用知识库
+model GeneralKnowledge {
+  id        String   @id @default(cuid())
+  title     String
+  category  String   // phrase/setting/template/character/worldview
+  content   String
+  tags      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category, updatedAt])
+}
+
+// 22. 流程任务
+model PipelineJob {
+  id              String   @id @default(cuid())
+  novelId         String   @unique
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  
+  status          String   @default("pending") // pending/running/paused/completed/error
+  currentPhase    String   @default("planning") // planning/structuring/writing/quality_check
+  currentStep     String   @default("")         // 当前步骤名称
+  
+  config          String   @default("{}") // JSON: 流程配置
+  
+  progress        Int      @default(0) // 0-100
+  totalSteps      Int      @default(20)
+  completedSteps  Int      @default(0)
+  
+  lastError       String?
+  retryCount      Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  phaseResults    PhaseResult[]
+  
+  @@index([novelId])
+  @@index([status])
+}
+
+// 24. 自动生成状态
+model AutoGenerateStatus {
+  id               String   @id @default(cuid())
+  novelId          String   @unique
+  novel            Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  status           String   @default("idle") // idle/running/paused/completed/error
+  currentVolume    Int      @default(1)
+  currentChapter   Int      @default(1)
+  totalChapters    Int      @default(0)
+  completedChapters Int     @default(0)
+  errors           String   @default("[]") // JSON: Array<{ chapter: number; error: string }>
+  startedAt        DateTime?
+  updatedAt        DateTime @updatedAt
+
+  @@index([novelId])
+}
+
+// 23. 阶段结果
+model PhaseResult {
+  id              String   @id @default(cuid())
+  jobId           String
+  job             PipelineJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  phase           String   // planning/structuring/writing/quality_check
+  step            String   // outline/worldview/characters/style/volume/chapter_outline/mainline_hook/content/consistency
+  
+  input           String   @default("{}") // JSON: 输入参数
+  output          String   @default("{}") // JSON: AI生成结果
+  
+  selfScore       Int?     // AI自评分数 1-10
+  selfComment     String?  // AI自评说明
+  issues          String   @default("[]") // JSON: 发现的问题
+  fixes           String   @default("[]") // JSON: 修复记录
+  
+  status          String   @default("pending") // pending/generating/reviewing/fixing/completed/confirmed/rejected
+  confirmedByUser Boolean  @default(false)
+  userFeedback    String?  // 用户反馈
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([jobId, phase, step])
+  @@index([jobId, phase])
+}
+
+// 25. 写作会话（每日写作统计）
+model WritingSession {
+  id              String   @id @default(cuid())
+  novelId         String
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  date            String   // YYYY-MM-DD format
+  wordCount       Int      @default(0)
+  duration        Int      @default(0)  // seconds
+  chaptersWritten Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([novelId, date])
+  @@index([novelId, date])
+}
+
+// 26. 角色关系
+model CharacterRelation {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  charAId     String   // 角色A ID
+  charBId     String   // 角色B ID
+  charA       Character @relation("CharARelations", fields: [charAId], references: [id], onDelete: Cascade)
+  charB       Character @relation("CharBRelations", fields: [charBId], references: [id], onDelete: Cascade)
+  relType     String   // 关系类型：盟友/敌人/师徒/恋人/亲属/竞争
+  description String?  // 关系描述
+  startChapter Int?    // 关系起始章
+  endChapter  Int?     // 关系结束章
+  status      String   @default("active") // active/ended/changed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, charAId, charBId])
+  @@index([novelId, charAId])
+  @@index([novelId, charBId])
+}
+
+// 27. 剧情状态历史快照
+model StoryStateLog {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder Int
+  snapshot    String   // JSON: StoryState 快照
+  createdAt   DateTime @default(now())
+
+  @@unique([novelId, chapterOrder])
+  @@index([novelId])
+}
+
+// 28. 章节质量日志
+model ChapterQualityLog {
+  id            String   @id @default(cuid())
+  novelId       String
+  novel         Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder  Int
+  checkType     String   // post_gen/periodic/volume
+  scores        String   // JSON: {aiSmell, wordCount, style, infoDensity, character, emotion}
+  issues        String   // JSON: [{type, severity, description}]
+  retryCount    Int      @default(0)
+  passed        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@unique([novelId, chapterOrder, checkType])
+  @@index([novelId, checkType])
+}
+
+// 29. 爽点链
+model PayoffChain {
+  id          String   @id @default(cuid())
+  novelId     String
+  novel       Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  name        String                    // 链名称，如"老祖打工链"
+  description String   @default("")     // 链描述
+  stages      String   // JSON: [{chapter, event, status}]
+  status      String   @default("active") // active/completed/paused
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([novelId, name])
+  @@index([novelId])
+}
+
+// 30. 章节 Beat 蓝图
+model ChapterBeat {
+  id           String   @id @default(cuid())
+  novelId      String
+  novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapterOrder Int
+  beatOrder    Int
+  type         String   // hook/dialogue/payoff/twist/transition/conflict/reveal/emotional/hook_end
+  goal         String   // 本 Beat 的目标
+  content      String?  // Beat 内容摘要
+  wordTarget   Int      @default(300) // 目标字数
+  mustInclude  String   @default("[]") // JSON: 必须包含的元素
+  mustAvoid    String   @default("[]") // JSON: 必须避免的元素
+  // v3.0 场景动作模型
+  visibleAction String   @default("") // 角色具体做什么
+  opposition    String   @default("") // 阻碍是什么
+  turningMoment String   @default("") // 转折点
+  resultState   String   @default("") // 结束后状态变化
+  emotionTarget String   @default("") // 读者应产生什么情绪
+  createdAt    DateTime @default(now())
+
+  @@unique([novelId, chapterOrder, beatOrder])
+  @@index([novelId, chapterOrder])
+}
+
+// 31. 章节快照（每章后处理完成后生成，用于注入后续章节 Prompt）
+model ChapterSnapshot {
+  id              String   @id @default(cuid())
+  novelId         String
+  chapterOrder    Int
+  chapterId       String?
+
+  // 主角状态
+  protagonistStatus   String?  // 主角当前处境
+  protagonistEmotion  String?  // 主角当前情绪
+  protagonistLocation String?  // 主角当前位置
+
+  // 配角状态（JSON 数组）
+  activeCharacters    String?  // [{name, status, location, emotion}]
+
+  // 剧情状态
+  currentPhase        String?  // setup/development/climax/resolution
+  mainConflictProgress String? // 核心矛盾进展
+  tensionLevel        Int?     // 当前张力等级 1-10
+
+  // 伏笔/钩子状态
+  activeForeshadowCount Int?   // 活跃伏笔数
+  unresolvedHookCount   Int?   // 未回收钩子数
+  resolvedInChapter     String? // 本章回收的伏笔/钩子 JSON
+
+  // 时间线
+  storyTimeline       String?  // 故事内时间线描述
+
+  // 章节元数据
+  wordCount           Int?
+  emotionType         String?  // 本章主导情绪
+  pleasurePointType   String?  // 本章爽点类型（如有）
+
+  createdAt       DateTime @default(now())
+
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+
+  @@unique([novelId, chapterOrder])
+  @@index([novelId, chapterOrder])
+  @@map("chapter_snapshots")
+}
+
+// 32. 因果链
+model CausalLink {
+  id              String   @id @default(cuid())
+  novelId         String
+  chapterOrder    Int
+  causeType       String
+  causeRefId      String?
+  causeDescription String
+  effectType      String
+  effectRefId     String?
+  effectDescription String
+  strength        Int      @default(5)
+  isMainConflict  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  novel           Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  @@index([novelId, chapterOrder])
+  @@map("causal_links")
+}

@@ -1,0 +1,261 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e7]:
+        - link [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img [ref=e9]
+        - generic [ref=e12]:
+          - link "首页" [ref=e14] [cursor=pointer]:
+            - /url: /home
+            - generic [ref=e15]: 首页
+          - link "模型库" [ref=e17] [cursor=pointer]:
+            - /url: /models
+            - generic [ref=e18]: 模型库
+          - link "数据集" [ref=e20] [cursor=pointer]:
+            - /url: /datasets
+            - generic [ref=e21]: 数据集
+          - link "创空间" [ref=e23] [cursor=pointer]:
+            - /url: /studios
+            - generic [ref=e24]: 创空间
+          - link "文档" [ref=e26] [cursor=pointer]:
+            - /url: /docs
+            - generic [ref=e27]: 文档
+          - generic [ref=e29] [cursor=pointer]:
+            - text: 社区
+            - img [ref=e30]:
+              - img [ref=e31]
+          - generic [ref=e33]:
+            - link "Skills 中心" [ref=e36] [cursor=pointer]:
+              - /url: /skills
+              - generic [ref=e38]: Skills 中心
+            - link "MCP 广场" [ref=e40] [cursor=pointer]:
+              - /url: /mcp
+              - generic [ref=e42]: MCP 广场
+            - link "AIGC 专区" [ref=e44] [cursor=pointer]:
+              - /url: /aigc
+              - generic [ref=e47]: AIGC 专区
+        - generic [ref=e48]:
+          - link [ref=e50] [cursor=pointer]:
+            - /url: https://github.com/modelscope
+            - img [ref=e51]:
+              - img [ref=e52]
+          - img [ref=e659] [cursor=pointer]:
+            - img [ref=e660]
+          - generic [ref=e63]:
+            - img [ref=e65]:
+              - img [ref=e66]
+            - textbox "搜索您感兴趣的内容" [ref=e68]
+          - generic:
+            - link:
+              - /url: https://modelscope.cn
+        - button "登录 / 注册" [ref=e73] [cursor=pointer]:
+          - generic [ref=e74]: 登录 / 注册
+    - main [ref=e75]:
+      - generic [ref=e79]:
+        - generic [ref=e84]:
+          - img [ref=e86]:
+            - img [ref=e87]
+          - textbox [ref=e89]: 蓝湖
+        - generic [ref=e663]:
+          - generic [ref=e666]:
+            - generic [ref=e667] [cursor=pointer]:
+              - generic [ref=e668]: 综合
+              - generic [ref=e669]: "6"
+            - generic [ref=e670] [cursor=pointer]:
+              - generic [ref=e671]: 研习社
+              - generic [ref=e672]: "4"
+            - generic [ref=e673] [cursor=pointer]:
+              - generic [ref=e674]: 论文
+              - generic [ref=e675]: "1"
+            - generic [ref=e676] [cursor=pointer]:
+              - generic [ref=e677]: MCP
+              - generic [ref=e678]: "1"
+            - generic [ref=e679]: 其它分类下暂无搜索结果
+          - generic [ref=e682]:
+            - generic [ref=e683]:
+              - generic [ref=e684]:
+                - generic [ref=e685]: 研习社
+                - generic [ref=e686]: 共4个搜索结果
+              - generic [ref=e687]:
+                - link "跟同济子豪兄一起学MCP 同济子豪兄良心整理的MCP大模型协议知识库，包含基本原理、商业和学术机会，保姆级配置及使用教程 魔搭社区编辑部 2025.04.10 65.2k 23" [ref=e689] [cursor=pointer]:
+                  - /url: /learn/1121
+                  - generic [ref=e690]:
+                    - img [ref=e693]
+                    - generic [ref=e694]:
+                      - generic [ref=e695]: 跟同济子豪兄一起学MCP
+                      - generic [ref=e696]: 同济子豪兄良心整理的MCP大模型协议知识库，包含基本原理、商业和学术机会，保姆级配置及使用教程
+                      - generic [ref=e700]:
+                        - img [ref=e702]
+                        - link "魔搭社区编辑部" [ref=e703]:
+                          - /url: /organization/MSEO
+                        - generic [ref=e705]:
+                          - generic [ref=e706]:
+                            - img [ref=e707]:
+                              - img [ref=e708]
+                            - text: 2025.04.10
+                          - generic [ref=e710]:
+                            - img [ref=e711]:
+                              - img [ref=e712]
+                            - text: 65.2k
+                          - generic [ref=e714]:
+                            - img [ref=e715]:
+                              - img [ref=e716]
+                            - text: "23"
+                - link "InternLM“书生”系列大模型 书生”系列大模型技术解析与实践 vivian1985 2024.03.20 8.1k" [ref=e719] [cursor=pointer]:
+                  - /url: /learn/412
+                  - generic [ref=e720]:
+                    - img [ref=e723]
+                    - generic [ref=e724]:
+                      - generic [ref=e725]: InternLM“书生”系列大模型
+                      - generic [ref=e726]: 书生”系列大模型技术解析与实践
+                      - generic [ref=e730]:
+                        - img [ref=e732]
+                        - link "vivian1985" [ref=e734]:
+                          - /url: /profile/vivian1985
+                        - generic [ref=e736]:
+                          - generic [ref=e737]:
+                            - img [ref=e738]:
+                              - img [ref=e739]
+                            - text: 2024.03.20
+                          - generic [ref=e741]:
+                            - img [ref=e742]:
+                              - img [ref=e743]
+                            - text: 8.1k
+                - link "AIGC多模态生成：从实践到原理（附：从0手搓一个AI互动剧情小游戏） 本课程系统讲解AIGC的核心技术与应用，涵盖图像、视频、音频、HTML等内容的生成实践与底层原理。通过“导论—实践—原理—展望”四大部分，带你从零开始掌握生成模型的使用、训练与未来发展 魔搭社区编辑部 2025.09.29 107.3k 77" [ref=e746] [cursor=pointer]:
+                  - /url: /learn/1582
+                  - generic [ref=e747]:
+                    - img [ref=e750]
+                    - generic [ref=e751]:
+                      - generic [ref=e752]: AIGC多模态生成：从实践到原理（附：从0手搓一个AI互动剧情小游戏）
+                      - generic [ref=e753]: 本课程系统讲解AIGC的核心技术与应用，涵盖图像、视频、音频、HTML等内容的生成实践与底层原理。通过“导论—实践—原理—展望”四大部分，带你从零开始掌握生成模型的使用、训练与未来发展
+                      - generic [ref=e757]:
+                        - img [ref=e759]
+                        - link "魔搭社区编辑部" [ref=e760]:
+                          - /url: /organization/MSEO
+                        - generic [ref=e762]:
+                          - generic [ref=e763]:
+                            - img [ref=e764]:
+                              - img [ref=e765]
+                            - text: 2025.09.29
+                          - generic [ref=e767]:
+                            - img [ref=e768]:
+                              - img [ref=e769]
+                            - text: 107.3k
+                          - generic [ref=e771]:
+                            - img [ref=e772]:
+                              - img [ref=e773]
+                            - text: "77"
+                - link "七天入门LLM大模型学习 七天入门LLM大模型学习 是ModelScope魔搭社区推出的大模型课程，旨在帮助初学者理解和学习LLM的基础概念和实践 xishan 2024.03.20 152.1k 59" [ref=e776] [cursor=pointer]:
+                  - /url: /learn/399
+                  - generic [ref=e777]:
+                    - img [ref=e780]
+                    - generic [ref=e781]:
+                      - generic [ref=e782]: 七天入门LLM大模型学习
+                      - generic [ref=e783]: 七天入门LLM大模型学习 是ModelScope魔搭社区推出的大模型课程，旨在帮助初学者理解和学习LLM的基础概念和实践
+                      - generic [ref=e787]:
+                        - img [ref=e789]
+                        - link "xishan" [ref=e790]:
+                          - /url: /profile/xishan01
+                        - generic [ref=e792]:
+                          - generic [ref=e793]:
+                            - img [ref=e794]:
+                              - img [ref=e795]
+                            - text: 2024.03.20
+                          - generic [ref=e797]:
+                            - img [ref=e798]:
+                              - img [ref=e799]
+                            - text: 152.1k
+                          - generic [ref=e801]:
+                            - img [ref=e802]:
+                              - img [ref=e803]
+                            - text: "59"
+            - generic [ref=e805]:
+              - generic [ref=e806]:
+                - generic [ref=e807]: 论文
+                - generic [ref=e808]: 共1个搜索结果
+              - link "Vision-Aided Relative State Estimation for Approach and Landing on a Moving Platform with Inertial Measurements 本文研究了无人机（UAV）在动态移动平台上着陆时的相对位姿与速度估计问题。针对平台进行任意三维运动的情况，作者提出一种基于惯性测量单元（IMU）和单目视觉信息的级联观测器架构。系统利用安装在无人机和平台上的IMUs获取角速度与线加速度，并通过机载相机提取指向平台中心的视线方向（bearing vector）以及平台表面法向量。首先设计一个定义在SO(3)上的互补滤波器来估计相对姿态，随后将该估计结果用于构建一个线性Riccati观测器，以恢复相对位置和速度。理论分析表明，在持续激励条件下，整个级联系统具有几乎全局渐近稳定性和局部指数收敛性。进一步地，当平台仅绕其法向轴旋转时，作者扩展了设计方法，利用平台的线加速度信息恢复不可观测的偏航角，并给出了保证局部指数收敛的充分条件。大量仿真验证了所提方法的有效性与鲁棒性。 无人机 机器人 状态估计 传感器融合 非线性观测器设计 0 0 2025.12.22 发表" [ref=e811] [cursor=pointer]:
+                - /url: /papers/2512.19245
+                - generic [ref=e812]:
+                  - img [ref=e815]
+                  - generic [ref=e816]:
+                    - generic [ref=e817]: Vision-Aided Relative State Estimation for Approach and Landing on a Moving Platform with Inertial Measurements
+                    - generic [ref=e818]: 本文研究了无人机（UAV）在动态移动平台上着陆时的相对位姿与速度估计问题。针对平台进行任意三维运动的情况，作者提出一种基于惯性测量单元（IMU）和单目视觉信息的级联观测器架构。系统利用安装在无人机和平台上的IMUs获取角速度与线加速度，并通过机载相机提取指向平台中心的视线方向（bearing vector）以及平台表面法向量。首先设计一个定义在SO(3)上的互补滤波器来估计相对姿态，随后将该估计结果用于构建一个线性Riccati观测器，以恢复相对位置和速度。理论分析表明，在持续激励条件下，整个级联系统具有几乎全局渐近稳定性和局部指数收敛性。进一步地，当平台仅绕其法向轴旋转时，作者扩展了设计方法，利用平台的线加速度信息恢复不可观测的偏航角，并给出了保证局部指数收敛的充分条件。大量仿真验证了所提方法的有效性与鲁棒性。
+                    - generic [ref=e821]:
+                      - generic [ref=e824]: 无人机
+                      - generic [ref=e827]: 机器人
+                      - generic [ref=e830]: 状态估计
+                      - generic [ref=e833]: 传感器融合
+                      - generic [ref=e836]: 非线性观测器设计
+                      - img [ref=e838]:
+                        - img [ref=e839]
+                    - generic [ref=e841]:
+                      - generic [ref=e843]:
+                        - img [ref=e844]:
+                          - img [ref=e845]
+                        - text: "0"
+                      - generic [ref=e847]:
+                        - img [ref=e848]:
+                          - img [ref=e849]
+                        - text: "0"
+                      - generic [ref=e851]: 2025.12.22 发表
+            - generic [ref=e852]:
+              - generic [ref=e853]:
+                - generic [ref=e854]: MCP
+                - generic [ref=e855]: 共1个搜索结果
+              - link "蓝湖 Local 开发者工具 MIT License 开发者：dsphper 让所有 AI 助手共享团队知识，打破 AI IDE 孤岛 lanhumcp | 蓝湖mcp | lanhu-mcp | 蓝湖AI助手 | Lanhu AI Integration | 简体中文 • • • --- 一个功能强大的 服务器，专为 AI 编程时代设计，完美支持蓝湖（Lanhu）设计协作平台。 @aiUnite 1.3k 3" [active] [ref=e858] [cursor=pointer]:
+                - /url: /mcp/servers/aiUnite/lanhu_mcp
+                - generic [ref=e859]:
+                  - generic [ref=e861]:
+                    - generic [ref=e862]:
+                      - generic [ref=e863]: 蓝湖
+                      - generic [ref=e864]:
+                        - img [ref=e865]:
+                          - img [ref=e866]
+                        - generic [ref=e868]: Local
+                    - generic [ref=e871]:
+                      - generic [ref=e874]: 开发者工具
+                      - generic [ref=e878]: MIT License
+                      - generic [ref=e880]:
+                        - img [ref=e881]:
+                          - img [ref=e882]
+                        - generic [ref=e884]: 开发者：dsphper
+                  - generic [ref=e885]: 让所有 AI 助手共享团队知识，打破 AI IDE 孤岛 lanhumcp | 蓝湖mcp | lanhu-mcp | 蓝湖AI助手 | Lanhu AI Integration | 简体中文 • • • --- 一个功能强大的 服务器，专为 AI 编程时代设计，完美支持蓝湖（Lanhu）设计协作平台。
+                  - generic [ref=e886]:
+                    - link "@aiUnite" [ref=e889]:
+                      - /url: /profile/aiUnite
+                    - generic [ref=e890]:
+                      - generic [ref=e891]:
+                        - img [ref=e892]:
+                          - img [ref=e893]
+                        - text: 1.3k
+                      - generic [ref=e895]:
+                        - img [ref=e896]:
+                          - img [ref=e897]
+                        - text: "3"
+      - generic [ref=e609]:
+        - generic [ref=e610]: © 2022-2026 ModelScope.cn 版权所有
+        - generic [ref=e611]:
+          - img [ref=e614] [cursor=pointer]:
+            - img [ref=e615]
+          - link [ref=e618] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1069874770
+            - img [ref=e619]:
+              - img [ref=e620]
+          - link [ref=e623] [cursor=pointer]:
+            - /url: https://www.xiaohongshu.com/user/profile/6383f0d6000000001f01a09b
+            - img [ref=e624]:
+              - img [ref=e625]
+          - link [ref=e628] [cursor=pointer]:
+            - /url: https://www.douyin.com/user/MS4wLjABAAAAhMxg_XU_ZZcQROsfjhJkrMoRiW8BxuTlt-usqzBLLp5Xc_-hCNI2N-1lz-mv0VE4
+            - img [ref=e629]:
+              - img [ref=e630]
+          - link [ref=e633] [cursor=pointer]:
+            - /url: https://www.zhihu.com/people/modelscope
+            - img [ref=e634]:
+              - img [ref=e635]
+          - link [ref=e638] [cursor=pointer]:
+            - /url: https://github.com/modelscope
+            - img [ref=e639]:
+              - img [ref=e640]
+  - tooltip "让所有 AI 助手共享团队知识，打破 AI IDE 孤岛 lanhumcp | 蓝湖mcp | lanhu-mcp | 蓝湖AI助手 | Lanhu AI Integration | 简体中文 • • • --- 一个功能强大的 服务器，专为 AI 编程时代设计，完美支持蓝湖（Lanhu）设计协作平台。" [ref=e901]

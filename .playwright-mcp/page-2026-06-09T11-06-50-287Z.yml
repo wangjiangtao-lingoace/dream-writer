@@ -1,0 +1,464 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e7]:
+      - link [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img [ref=e9]
+      - generic [ref=e12]:
+        - link "首页" [ref=e14] [cursor=pointer]:
+          - /url: /home
+          - generic [ref=e15]: 首页
+        - link "模型库" [ref=e17] [cursor=pointer]:
+          - /url: /models
+          - generic [ref=e18]: 模型库
+        - link "数据集" [ref=e20] [cursor=pointer]:
+          - /url: /datasets
+          - generic [ref=e21]: 数据集
+        - link "创空间" [ref=e23] [cursor=pointer]:
+          - /url: /studios
+          - generic [ref=e24]: 创空间
+        - link "文档" [ref=e26] [cursor=pointer]:
+          - /url: /docs
+          - generic [ref=e27]: 文档
+        - generic [ref=e29] [cursor=pointer]:
+          - text: 社区
+          - img [ref=e30]:
+            - img [ref=e31]
+        - generic [ref=e33]:
+          - link "Skills 中心" [ref=e36] [cursor=pointer]:
+            - /url: /skills
+            - generic [ref=e38]: Skills 中心
+          - link "MCP 广场" [ref=e40] [cursor=pointer]:
+            - /url: /mcp
+            - generic [ref=e42]: MCP 广场
+          - link "AIGC 专区" [ref=e44] [cursor=pointer]:
+            - /url: /aigc
+            - generic [ref=e47]: AIGC 专区
+      - generic [ref=e48]:
+        - link [ref=e50] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+          - img [ref=e51]:
+            - img [ref=e52]
+        - generic [ref=e59]:
+          - generic [ref=e63]:
+            - img [ref=e65]:
+              - img [ref=e66]
+            - textbox "搜索您感兴趣的内容" [active] [ref=e68]
+          - generic [ref=e645]:
+            - heading "热门搜索" [level=4] [ref=e646]
+            - generic [ref=e647]:
+              - generic [ref=e648] [cursor=pointer]: Qwen3.6
+              - generic [ref=e649] [cursor=pointer]: qwen
+              - generic [ref=e650] [cursor=pointer]: qwen3.5
+              - generic [ref=e651] [cursor=pointer]: deepseek
+              - generic [ref=e652] [cursor=pointer]: qwen3
+              - generic [ref=e653] [cursor=pointer]: indextts2
+              - generic [ref=e654] [cursor=pointer]: gemma
+              - generic [ref=e655] [cursor=pointer]: API
+              - generic [ref=e656] [cursor=pointer]: qwen3.7
+              - generic [ref=e657] [cursor=pointer]: tts
+        - generic:
+          - link:
+            - /url: https://modelscope.cn
+      - button "登录 / 注册" [ref=e73] [cursor=pointer]:
+        - generic [ref=e74]: 登录 / 注册
+  - main [ref=e75]:
+    - generic [ref=e79]:
+      - generic [ref=e84]:
+        - img [ref=e86]:
+          - img [ref=e87]
+        - textbox [ref=e89]: Playwright
+      - generic [ref=e92]:
+        - generic [ref=e95]:
+          - generic [ref=e96] [cursor=pointer]:
+            - generic [ref=e97]: 综合
+            - generic [ref=e98]: "487"
+          - generic [ref=e99] [cursor=pointer]:
+            - generic [ref=e100]: 创空间
+            - generic [ref=e101]: "1"
+          - generic [ref=e102] [cursor=pointer]:
+            - generic [ref=e103]: 合集
+            - generic [ref=e104]: "1"
+          - generic [ref=e105] [cursor=pointer]:
+            - generic [ref=e106]: 研习社
+            - generic [ref=e107]: "1"
+          - generic [ref=e108] [cursor=pointer]:
+            - generic [ref=e109]: 论文
+            - generic [ref=e110]: "27"
+          - generic [ref=e111] [cursor=pointer]:
+            - generic [ref=e112]: Issue
+            - generic [ref=e113]: "2"
+          - generic [ref=e114] [cursor=pointer]:
+            - generic [ref=e115]: 个人
+            - generic [ref=e116]: "1"
+          - generic [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]: MCP
+            - generic [ref=e119]: "39"
+          - generic [ref=e120] [cursor=pointer]:
+            - generic [ref=e121]: Skills
+            - generic [ref=e122]: "415"
+          - generic [ref=e123]: 其它分类下暂无搜索结果
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - link "playwright Hosted 浏览器自动化 @albertjiang 445.8k 2.9k 4" [ref=e131] [cursor=pointer]:
+              - /url: /mcp/servers/albertjiang/playwright
+              - generic [ref=e132]:
+                - generic [ref=e134]:
+                  - generic [ref=e135]:
+                    - generic [ref=e136]: playwright
+                    - generic [ref=e137]:
+                      - img [ref=e138]:
+                        - img [ref=e139]
+                      - generic [ref=e141]: Hosted
+                  - generic [ref=e147]: 浏览器自动化
+                - generic [ref=e149]:
+                  - link "@albertjiang" [ref=e152]:
+                    - /url: /profile/albertjiang
+                  - generic [ref=e153]:
+                    - generic [ref=e155]:
+                      - img [ref=e156]:
+                        - img [ref=e157]
+                      - text: 445.8k
+                    - generic [ref=e159]:
+                      - img [ref=e160]:
+                        - img [ref=e161]
+                      - text: 2.9k
+                    - generic [ref=e163]:
+                      - img [ref=e164]:
+                        - img [ref=e165]
+                      - text: "4"
+            - link "微软Playwright Local 浏览器自动化等2个分类 Apache License 2.0 一种模型上下文协议服务器，它使大型语言模型能够通过结构化的可访问性快照与网页交互，而无需使用视觉模型或截图。 @microsoft 60.8k 160" [ref=e168] [cursor=pointer]:
+              - /url: /mcp/servers/@microsoft/playwright-mcp
+              - generic [ref=e169]:
+                - generic [ref=e170]:
+                  - generic [ref=e171]:
+                    - generic [ref=e172]:
+                      - generic [ref=e173]: 微软Playwright
+                      - generic [ref=e174]:
+                        - img [ref=e175]:
+                          - img [ref=e176]
+                        - generic [ref=e178]: Local
+                    - generic [ref=e181]:
+                      - generic [ref=e184]: 浏览器自动化等2个分类
+                      - generic [ref=e188]: Apache License 2.0
+                      - img [ref=e190]:
+                        - img [ref=e191]
+                  - img [ref=e195]
+                - generic [ref=e196]: 一种模型上下文协议服务器，它使大型语言模型能够通过结构化的可访问性快照与网页交互，而无需使用视觉模型或截图。
+                - generic [ref=e197]:
+                  - generic [ref=e199]: "@microsoft"
+                  - generic [ref=e200]:
+                    - generic [ref=e201]:
+                      - img [ref=e202]:
+                        - img [ref=e203]
+                      - text: 60.8k
+                    - generic [ref=e205]:
+                      - img [ref=e206]:
+                        - img [ref=e207]
+                      - text: "160"
+            - link "Playwright浏览器自动化工具 Hosted 浏览器自动化 MIT License 一个使用 Playwright 提供浏览器自动化功能的模型上下文协议服务器。此服务器使大型语言模型（LLMs）能够与网页交互、截屏以及在真实的浏览器环境中执行 JavaScript。 @executeautomation 21.3m 19.0k 51" [ref=e210] [cursor=pointer]:
+              - /url: /mcp/servers/@executeautomation/mcp-playwright
+              - generic [ref=e211]:
+                - generic [ref=e213]:
+                  - generic [ref=e214]:
+                    - generic [ref=e215]: Playwright浏览器自动化工具
+                    - generic [ref=e216]:
+                      - img [ref=e217]:
+                        - img [ref=e218]
+                      - generic [ref=e220]: Hosted
+                  - generic [ref=e223]:
+                    - generic [ref=e226]: 浏览器自动化
+                    - generic [ref=e230]: MIT License
+                    - img [ref=e232]:
+                      - img [ref=e233]
+                - generic [ref=e235]: 一个使用 Playwright 提供浏览器自动化功能的模型上下文协议服务器。此服务器使大型语言模型（LLMs）能够与网页交互、截屏以及在真实的浏览器环境中执行 JavaScript。
+                - generic [ref=e236]:
+                  - generic [ref=e238]: "@executeautomation"
+                  - generic [ref=e239]:
+                    - generic [ref=e241]:
+                      - img [ref=e242]:
+                        - img [ref=e243]
+                      - text: 21.3m
+                    - generic [ref=e245]:
+                      - img [ref=e246]:
+                        - img [ref=e247]
+                      - text: 19.0k
+                    - generic [ref=e249]:
+                      - img [ref=e250]:
+                        - img [ref=e251]
+                      - text: "51"
+            - link "Playwright浏览器自动化工具 Local 浏览器自动化 开发者：lebrodus 一个启用 Playwright 浏览器自动化的服务器，允许通过大语言模型在浏览器环境中与网页交互、截取屏幕截图以及执行 JavaScript。 @lebrodus 1.4k" [ref=e254] [cursor=pointer]:
+              - /url: /mcp/servers/@lebrodus/mcp-playwright
+              - generic [ref=e255]:
+                - generic [ref=e257]:
+                  - generic [ref=e258]:
+                    - generic [ref=e259]: Playwright浏览器自动化工具
+                    - generic [ref=e260]:
+                      - img [ref=e261]:
+                        - img [ref=e262]
+                      - generic [ref=e264]: Local
+                  - generic [ref=e267]:
+                    - generic [ref=e270]: 浏览器自动化
+                    - generic [ref=e272]:
+                      - img [ref=e273]:
+                        - img [ref=e274]
+                      - generic [ref=e276]: 开发者：lebrodus
+                - generic [ref=e277]: 一个启用 Playwright 浏览器自动化的服务器，允许通过大语言模型在浏览器环境中与网页交互、截取屏幕截图以及执行 JavaScript。
+                - generic [ref=e278]:
+                  - generic [ref=e280]: "@lebrodus"
+                  - generic [ref=e282]:
+                    - img [ref=e283]:
+                      - img [ref=e284]
+                    - text: 1.4k
+            - link "Playwright MCP 服务 Local 浏览器自动化 开发者：showfive 提供了一个利用模型上下文协议的服务器，通过 Playwright 实现类似人类的浏览器自动化，允许控制浏览器操作，例如导航、元素交互和滚动。 @showfive 1.0k 1" [ref=e287] [cursor=pointer]:
+              - /url: /mcp/servers/@showfive/playwright-mcp-server
+              - generic [ref=e288]:
+                - generic [ref=e290]:
+                  - generic [ref=e291]:
+                    - generic [ref=e292]: Playwright MCP 服务
+                    - generic [ref=e293]:
+                      - img [ref=e294]:
+                        - img [ref=e295]
+                      - generic [ref=e297]: Local
+                  - generic [ref=e300]:
+                    - generic [ref=e303]: 浏览器自动化
+                    - generic [ref=e305]:
+                      - img [ref=e306]:
+                        - img [ref=e307]
+                      - generic [ref=e309]: 开发者：showfive
+                - generic [ref=e310]: 提供了一个利用模型上下文协议的服务器，通过 Playwright 实现类似人类的浏览器自动化，允许控制浏览器操作，例如导航、元素交互和滚动。
+                - generic [ref=e311]:
+                  - generic [ref=e313]: "@showfive"
+                  - generic [ref=e314]:
+                    - generic [ref=e315]:
+                      - img [ref=e316]:
+                        - img [ref=e317]
+                      - text: 1.0k
+                    - generic [ref=e319]:
+                      - img [ref=e320]:
+                        - img [ref=e321]
+                      - text: "1"
+            - link "Playwright智能生成器 Local 浏览器自动化等2个分类 Other Playwright MCP服务器通过允许与网页和元素检查进行交互，实现由AI驱动的Playwright测试生成。它与Cursor等IDE集成，提供实时上下文以提高测试的准确性和效率。 @Ashish-Bansal 669 1" [ref=e324] [cursor=pointer]:
+              - /url: /mcp/servers/@Ashish-Bansal/playwright-mcp
+              - generic [ref=e325]:
+                - generic [ref=e327]:
+                  - generic [ref=e328]:
+                    - generic [ref=e329]: Playwright智能生成器
+                    - generic [ref=e330]:
+                      - img [ref=e331]:
+                        - img [ref=e332]
+                      - generic [ref=e334]: Local
+                  - generic [ref=e337]:
+                    - generic [ref=e340]: 浏览器自动化等2个分类
+                    - generic [ref=e344]: Other
+                    - img [ref=e346]:
+                      - img [ref=e347]
+                - generic [ref=e349]: Playwright MCP服务器通过允许与网页和元素检查进行交互，实现由AI驱动的Playwright测试生成。它与Cursor等IDE集成，提供实时上下文以提高测试的准确性和效率。
+                - generic [ref=e350]:
+                  - generic [ref=e352]: "@Ashish-Bansal"
+                  - generic [ref=e353]:
+                    - generic [ref=e354]:
+                      - img [ref=e355]:
+                        - img [ref=e356]
+                      - text: "669"
+                    - generic [ref=e358]:
+                      - img [ref=e359]:
+                        - img [ref=e360]
+                      - text: "1"
+            - link "Playwright MCP Hosted 浏览器自动化 Apache License 2.0 A Model Context Protocol (MCP) server that provides browser automation capabilities using . @hanlm21 28.6k 637 2" [ref=e363] [cursor=pointer]:
+              - /url: /mcp/servers/hanlm21/playwright-mcp
+              - generic [ref=e364]:
+                - generic [ref=e366]:
+                  - generic [ref=e367]:
+                    - generic [ref=e368]: Playwright MCP
+                    - generic [ref=e369]:
+                      - img [ref=e370]:
+                        - img [ref=e371]
+                      - generic [ref=e373]: Hosted
+                  - generic [ref=e376]:
+                    - generic [ref=e379]: 浏览器自动化
+                    - generic [ref=e383]: Apache License 2.0
+                    - img [ref=e385]:
+                      - img [ref=e386]
+                - generic [ref=e388]: A Model Context Protocol (MCP) server that provides browser automation capabilities using .
+                - generic [ref=e389]:
+                  - link "@hanlm21" [ref=e392]:
+                    - /url: /profile/hanlm21
+                  - generic [ref=e393]:
+                    - generic [ref=e395]:
+                      - img [ref=e396]:
+                        - img [ref=e397]
+                      - text: 28.6k
+                    - generic [ref=e399]:
+                      - img [ref=e400]:
+                        - img [ref=e401]
+                      - text: "637"
+                    - generic [ref=e403]:
+                      - img [ref=e404]:
+                        - img [ref=e405]
+                      - text: "2"
+            - link "Playwright日志监控 Local 浏览器自动化 开发者：Operative-Sh 打开一个浏览器，用于监控和检索控制台日志和网络请求，向大型语言模型（LLMs）提供有关网页行为的结构化数据。 @Operative-Sh 547" [ref=e408] [cursor=pointer]:
+              - /url: /mcp/servers/@Operative-Sh/playwright-consolelogs-mcp
+              - generic [ref=e409]:
+                - generic [ref=e410]:
+                  - generic [ref=e411]:
+                    - generic [ref=e412]:
+                      - generic [ref=e413]: Playwright日志监控
+                      - generic [ref=e414]:
+                        - img [ref=e415]:
+                          - img [ref=e416]
+                        - generic [ref=e418]: Local
+                    - generic [ref=e421]:
+                      - generic [ref=e424]: 浏览器自动化
+                      - generic [ref=e426]:
+                        - img [ref=e427]:
+                          - img [ref=e428]
+                        - generic [ref=e430]: 开发者：Operative-Sh
+                  - img [ref=e433]
+                - generic [ref=e434]: 打开一个浏览器，用于监控和检索控制台日志和网络请求，向大型语言模型（LLMs）提供有关网页行为的结构化数据。
+                - generic [ref=e435]:
+                  - generic [ref=e437]: "@Operative-Sh"
+                  - generic [ref=e439]:
+                    - img [ref=e440]:
+                      - img [ref=e441]
+                    - text: "547"
+            - link "Playwright 助手 Local 浏览器自动化 Apache License 2.0 服务器提供了使用 Playwright 进行网络自动化的工具，允许在网页上进行导航、交互和执行 JavaScript，并支持具有摘要功能的笔记存储。 @blackwhite084 537" [ref=e444] [cursor=pointer]:
+              - /url: /mcp/servers/@blackwhite084/playwright-plus-python-mcp
+              - generic [ref=e445]:
+                - generic [ref=e447]:
+                  - generic [ref=e448]:
+                    - generic [ref=e449]: Playwright 助手
+                    - generic [ref=e450]:
+                      - img [ref=e451]:
+                        - img [ref=e452]
+                      - generic [ref=e454]: Local
+                  - generic [ref=e457]:
+                    - generic [ref=e460]: 浏览器自动化
+                    - generic [ref=e464]: Apache License 2.0
+                    - img [ref=e466]:
+                      - img [ref=e467]
+                - generic [ref=e469]: 服务器提供了使用 Playwright 进行网络自动化的工具，允许在网页上进行导航、交互和执行 JavaScript，并支持具有摘要功能的笔记存储。
+                - generic [ref=e470]:
+                  - generic [ref=e472]: "@blackwhite084"
+                  - generic [ref=e474]:
+                    - img [ref=e475]:
+                      - img [ref=e476]
+                    - text: "537"
+            - link "Playwright 流式服务 Local 浏览器自动化 开发者：torohash 通过模型上下文协议（MCP）提供 Playwright 浏览器自动化功能的服务，允许客户端通过 SSE 连接使用 Playwright 功能。 @torohash 492" [ref=e479] [cursor=pointer]:
+              - /url: /mcp/servers/@torohash/playwright-sse-mcp-server
+              - generic [ref=e480]:
+                - generic [ref=e482]:
+                  - generic [ref=e483]:
+                    - generic [ref=e484]: Playwright 流式服务
+                    - generic [ref=e485]:
+                      - img [ref=e486]:
+                        - img [ref=e487]
+                      - generic [ref=e489]: Local
+                  - generic [ref=e492]:
+                    - generic [ref=e495]: 浏览器自动化
+                    - generic [ref=e497]:
+                      - img [ref=e498]:
+                        - img [ref=e499]
+                      - generic [ref=e501]: 开发者：torohash
+                - generic [ref=e502]: 通过模型上下文协议（MCP）提供 Playwright 浏览器自动化功能的服务，允许客户端通过 SSE 连接使用 Playwright 功能。
+                - generic [ref=e503]:
+                  - generic [ref=e505]: "@torohash"
+                  - generic [ref=e507]:
+                    - img [ref=e508]:
+                      - img [ref=e509]
+                    - text: "492"
+            - link "Playwright AI浏览器控制台 Local 浏览器自动化 Apache License 2.0 一个利用 Playwright 进行自动化浏览器测试，并与 Cloudflare Workers 集成的服务器，使 AI 助手能够控制网页浏览器进行导航、交互和截图。 @cloudflare 428" [ref=e512] [cursor=pointer]:
+              - /url: /mcp/servers/@cloudflare/playwright-mcp
+              - generic [ref=e513]:
+                - generic [ref=e514]:
+                  - generic [ref=e515]:
+                    - generic [ref=e516]:
+                      - generic [ref=e517]: Playwright AI浏览器控制台
+                      - generic [ref=e518]:
+                        - img [ref=e519]:
+                          - img [ref=e520]
+                        - generic [ref=e522]: Local
+                    - generic [ref=e525]:
+                      - generic [ref=e528]: 浏览器自动化
+                      - generic [ref=e532]: Apache License 2.0
+                      - img [ref=e534]:
+                        - img [ref=e535]
+                  - img [ref=e539]
+                - generic [ref=e540]: 一个利用 Playwright 进行自动化浏览器测试，并与 Cloudflare Workers 集成的服务器，使 AI 助手能够控制网页浏览器进行导航、交互和截图。
+                - generic [ref=e541]:
+                  - generic [ref=e543]: "@cloudflare"
+                  - generic [ref=e545]:
+                    - img [ref=e546]:
+                      - img [ref=e547]
+                    - text: "428"
+            - link "Playwright CDP工具 Local 浏览器自动化 Other 开发者：lars-hagen 正文语言类型为英语。 翻译结果：通过支持 Chrome DevTools 协议的 Playwright 框架，使大型语言模型（LLM）能够执行浏览器自动化操作，可以连接到现有的 Chrome 实例以进行高级网络交互和 JavaScript 执行。 @lars-hagen 354" [ref=e550] [cursor=pointer]:
+              - /url: /mcp/servers/@lars-hagen/mcp-playwright-cdp
+              - generic [ref=e551]:
+                - generic [ref=e553]:
+                  - generic [ref=e554]:
+                    - generic [ref=e555]: Playwright CDP工具
+                    - generic [ref=e556]:
+                      - img [ref=e557]:
+                        - img [ref=e558]
+                      - generic [ref=e560]: Local
+                  - generic [ref=e563]:
+                    - generic [ref=e566]: 浏览器自动化
+                    - generic [ref=e570]: Other
+                    - generic [ref=e572]:
+                      - img [ref=e573]:
+                        - img [ref=e574]
+                      - generic [ref=e576]: 开发者：lars-hagen
+                - generic [ref=e577]: 正文语言类型为英语。 翻译结果：通过支持 Chrome DevTools 协议的 Playwright 框架，使大型语言模型（LLM）能够执行浏览器自动化操作，可以连接到现有的 Chrome 实例以进行高级网络交互和 JavaScript 执行。
+                - generic [ref=e578]:
+                  - generic [ref=e580]: "@lars-hagen"
+                  - generic [ref=e582]:
+                    - img [ref=e583]:
+                      - img [ref=e584]
+                    - text: "354"
+          - list [ref=e587]:
+            - listitem "上一页" [ref=e588]:
+              - button [disabled] [ref=e589]:
+                - img [ref=e590]:
+                  - img [ref=e591]
+            - listitem "1" [ref=e593] [cursor=pointer]:
+              - generic [ref=e594]: "1"
+            - listitem "2" [ref=e595] [cursor=pointer]:
+              - generic [ref=e596]: "2"
+            - listitem "3" [ref=e597] [cursor=pointer]:
+              - generic [ref=e598]: "3"
+            - listitem "4" [ref=e599] [cursor=pointer]:
+              - generic [ref=e600]: "4"
+            - listitem "下一页" [ref=e601] [cursor=pointer]:
+              - button [ref=e602]:
+                - img [ref=e603]:
+                  - img [ref=e604]
+            - listitem [ref=e606]:
+              - generic [ref=e607]:
+                - text: 跳至
+                - textbox "页" [ref=e608]
+                - text: 页
+    - generic [ref=e609]:
+      - generic [ref=e610]: © 2022-2026 ModelScope.cn 版权所有
+      - generic [ref=e611]:
+        - img [ref=e614] [cursor=pointer]:
+          - img [ref=e615]
+        - link [ref=e618] [cursor=pointer]:
+          - /url: https://space.bilibili.com/1069874770
+          - img [ref=e619]:
+            - img [ref=e620]
+        - link [ref=e623] [cursor=pointer]:
+          - /url: https://www.xiaohongshu.com/user/profile/6383f0d6000000001f01a09b
+          - img [ref=e624]:
+            - img [ref=e625]
+        - link [ref=e628] [cursor=pointer]:
+          - /url: https://www.douyin.com/user/MS4wLjABAAAAhMxg_XU_ZZcQROsfjhJkrMoRiW8BxuTlt-usqzBLLp5Xc_-hCNI2N-1lz-mv0VE4
+          - img [ref=e629]:
+            - img [ref=e630]
+        - link [ref=e633] [cursor=pointer]:
+          - /url: https://www.zhihu.com/people/modelscope
+          - img [ref=e634]:
+            - img [ref=e635]
+        - link [ref=e638] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+          - img [ref=e639]:
+            - img [ref=e640]

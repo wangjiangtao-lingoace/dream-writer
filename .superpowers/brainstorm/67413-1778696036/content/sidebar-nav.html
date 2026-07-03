@@ -1,0 +1,114 @@
+<h2>侧边栏导航结构</h2>
+<p class="subtitle">左侧图标侧边栏怎么组织？核心是：进入小说后，侧边栏展示什么？</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Icon sidebar -->
+        <div style="width: 52px; background: #0c0c0e; border-right: 1px solid #222228; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 6px;">
+          <div style="width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, #f97316, #fb923c); margin-bottom: 8px;"></div>
+          <!-- Active item -->
+          <div style="width: 36px; height: 32px; border-radius: 6px; background: rgba(249,115,22,0.15); display: flex; align-items: center; justify-content: center;">
+            <div style="width: 16px; height: 16px; border-radius: 3px; background: #f97316;"></div>
+          </div>
+          <div style="width: 36px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 16px; height: 16px; border-radius: 3px; background: #3a3a42;"></div>
+          </div>
+          <div style="width: 36px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 16px; height: 16px; border-radius: 3px; background: #3a3a42;"></div>
+          </div>
+          <div style="width: 36px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 16px; height: 16px; border-radius: 3px; background: #3a3a42;"></div>
+          </div>
+          <div style="width: 36px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 16px; height: 16px; border-radius: 3px; background: #3a3a42;"></div>
+          </div>
+          <div style="flex: 1;"></div>
+          <div style="width: 16px; height: 16px; border-radius: 3px; background: #3a3a42;"></div>
+        </div>
+        <!-- Text nav panel (slides out) -->
+        <div style="width: 160px; background: #0f0f12; border-right: 1px solid #222228; padding: 12px 10px;">
+          <div style="font-size: 9px; color: #f97316; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">创作工作台</div>
+          <div style="padding: 5px 8px; border-radius: 4px; background: rgba(249,115,22,0.1); margin-bottom: 3px;">
+            <div style="height: 7px; width: 60%; background: #f97316; border-radius: 2px; opacity: 0.8;"></div>
+          </div>
+          <div style="padding: 5px 8px; border-radius: 4px; margin-bottom: 3px;">
+            <div style="height: 7px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 5px 8px; border-radius: 4px; margin-bottom: 3px;">
+            <div style="height: 7px; width: 55%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 5px 8px; border-radius: 4px; margin-bottom: 3px;">
+            <div style="height: 7px; width: 45%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 5px 8px; border-radius: 4px;">
+            <div style="height: 7px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Main content area -->
+        <div style="flex: 1; background: #08080a; padding: 12px;">
+          <div style="height: 10px; width: 35%; background: #1c1c20; border-radius: 2px; margin-bottom: 10px;"></div>
+          <div style="height: 6px; width: 80%; background: #18181c; border-radius: 2px; margin-bottom: 4px;"></div>
+          <div style="height: 6px; width: 65%; background: #18181c; border-radius: 2px; margin-bottom: 4px;"></div>
+          <div style="height: 6px; width: 72%; background: #18181c; border-radius: 2px; margin-bottom: 12px;"></div>
+          <div style="height: 80px; background: #111114; border-radius: 6px; border: 1px solid #222228;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 图标 + 弹出文字面板</h3>
+      <p>侧边栏默认只显示图标（52px），hover 或点击某图标后弹出文字子菜单面板。主内容区空间最大化。类似 VS Code 的图标+侧边栏模式。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 16px; background: #08080a;">
+      <div style="display: flex; height: 240px; border-radius: 10px; overflow: hidden; border: 1px solid #222228;">
+        <!-- Collapsible sidebar with text -->
+        <div style="width: 200px; background: #0c0c0e; border-right: 1px solid #222228; padding: 12px 10px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <div style="width: 24px; height: 24px; border-radius: 5px; background: linear-gradient(135deg, #f97316, #fb923c);"></div>
+            <div style="height: 8px; width: 60%; background: #e7e5e4; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="font-size: 8px; color: #6b6b76; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding: 0 6px;">小说项目</div>
+          <!-- Active item -->
+          <div style="padding: 6px 8px; border-radius: 5px; background: rgba(249,115,22,0.12); margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: #f97316;"></div>
+            <div style="height: 7px; width: 55%; background: #f97316; border-radius: 2px; opacity: 0.7;"></div>
+          </div>
+          <div style="padding: 6px 8px; border-radius: 5px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: #3a3a42;"></div>
+            <div style="height: 7px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 6px 8px; border-radius: 5px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: #3a3a42;"></div>
+            <div style="height: 7px; width: 45%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="height: 1px; background: #222228; margin: 8px 0;"></div>
+          <div style="font-size: 8px; color: #6b6b76; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding: 0 6px;">工具</div>
+          <div style="padding: 6px 8px; border-radius: 5px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: #3a3a42;"></div>
+            <div style="height: 7px; width: 50%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+          <div style="padding: 6px 8px; border-radius: 5px; display: flex; align-items: center; gap: 6px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: #3a3a42;"></div>
+            <div style="height: 7px; width: 55%; background: #3a3a42; border-radius: 2px;"></div>
+          </div>
+        </div>
+        <!-- Main content -->
+        <div style="flex: 1; background: #08080a; padding: 12px;">
+          <div style="height: 10px; width: 35%; background: #1c1c20; border-radius: 2px; margin-bottom: 10px;"></div>
+          <div style="height: 6px; width: 80%; background: #18181c; border-radius: 2px; margin-bottom: 4px;"></div>
+          <div style="height: 6px; width: 65%; background: #18181c; border-radius: 2px; margin-bottom: 4px;"></div>
+          <div style="height: 6px; width: 72%; background: #18181c; border-radius: 2px; margin-bottom: 12px;"></div>
+          <div style="height: 80px; background: #111114; border-radius: 6px; border: 1px solid #222228;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 固定文字侧边栏</h3>
+      <p>侧边栏固定 200px 宽，直接显示文字菜单项，分组清晰（项目/工具/设置）。可折叠为图标模式。类似 Notion/飞书。</p>
+    </div>
+  </div>
+</div>

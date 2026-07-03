@@ -1,7 +1,7 @@
 {
   "name": "dream-writer",
   "version": "1.0.0",
-  "description": "古色古香AI小说创作助手 - 传统线装书风格的智能写作平台",
+  "description": "AI小说创作助手 - 传统线装书风格的智能写作平台",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
@@ -24,6 +24,14 @@
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
     "pnpm": ">=10.6.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "better-sqlite3",
+      "esbuild",
+      "prisma"
+    ]
   },
   "packageManager": "pnpm@10.6.0"
 }

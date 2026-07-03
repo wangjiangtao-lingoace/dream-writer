@@ -1,0 +1,179 @@
+/* SmartJsonViewer 组件样式 */
+
+/* 基础样式 */
+.json-empty,
+.json-empty-object,
+.json-empty-array,
+.json-null,
+.json-unknown,
+.json-truncated {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.json-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.json-primitive {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.json-boolean.true {
+  color: #28a745;
+}
+
+.json-boolean.false {
+  color: #dc3545;
+}
+
+/* 表格样式 */
+.json-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.json-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.json-table .json-key {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  width: 120px;
+  background: var(--bg-surface);
+}
+
+.json-table .json-value {
+  color: var(--text-primary);
+}
+
+/* 列表样式 */
+.json-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.json-list-item {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.json-list-item:last-child {
+  border-bottom: none;
+}
+
+/* 卡片列表样式 */
+.json-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.json-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.json-card-header {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.json-card-index {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.json-card-body {
+  padding: 0.75rem;
+}
+
+/* 树形结构样式 */
+.json-tree {
+  font-size: 0.875rem;
+}
+
+.tree-branch {
+  margin-left: 1rem;
+}
+
+.tree-node {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.tree-node.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tree-node.clickable:hover {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-sm);
+}
+
+.tree-toggle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tree-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tree-value {
+  color: var(--text-primary);
+}
+
+.tree-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 0.25rem;
+}
+
+.tree-children {
+  margin-left: 1.5rem;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 0.5rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .json-table .json-key {
+    width: 100px;
+    font-size: 0.8125rem;
+  }
+
+  .json-table td {
+    padding: 0.375rem 0.5rem;
+  }
+
+  .tree-branch {
+    margin-left: 0.5rem;
+  }
+
+  .tree-children {
+    margin-left: 1rem;
+  }
+}

@@ -1,288 +1,213 @@
-# Dream Writer 实施路线图
-## 古色古香AI小说创作助手 - 完整实施方案
+# Dream Writer 实施路线图（轻量版）
 
-> "墨香流传，笔耕不辍 - 从构想到成书的全流程陪伴"
-
----
-
-## 🎯 项目概况
-
-### 基本信息
-- **项目名称**: Dream Writer (梦中笔者)
-- **Git仓库**: `git@github.com:wangjiangtao-lingoace/dream-writer.git`
-- **设计理念**: 传统线装书风格 + 现代AI能力
-- **目标用户**: 古风文学创作者、小说写作爱好者
-
-### 核心特色
-✨ **古色古香**: 传统线装书视觉风格，沉浸式创作体验
-🤖 **智能创作**: 完整的AI能力，一句话启动到成书全程陪伴
-🎨 **场景适配**: 灵感、仿写、续写、拆书四大场景专门优化
-📚 **文化传承**: 现代技术承载古典文学，古法新用
+> 一个轻量、可迭代的 AI 小说创作骨架。
+> 以 **P0：骨架联通** 为基线，分阶段按需堆能力，每一步都可独立部署。
 
 ---
 
-## 📋 实施计划概览
+## 设计前提
 
-### 🎯 Phase 1: 基础架构 (第1-2周)
-**目标**: 搭建项目基础，建立古风UI系统
-
-**关键任务**:
-- ✅ 项目结构创建
-- ✅ 古风主题系统设计
-- ✅ 基础古风组件库
-- ⏳ 开发环境配置
-
-**交付物**:
-- 完整的monorepo结构
-- 古色古香CSS主题系统
-- 可复用的古风UI组件
-- 可运行的开发环境
+- 不追求 AI-Novel 的全功能复刻（多导演、签节执行、状态版本、风格引擎等暂不纳入）
+- 单用户本地优先，SQLite + Express + React，部署 = 一台机器
+- 所有阶段以「能完整跑通最小闭环」为完成标准，禁止半成品合入主线
 
 ---
 
-### 🎯 Phase 2: AI能力移植 (第3-4周)
-**目标**: 完整移植现有AI能力，保持技术先进性
+## 阶段总览
 
-**关键任务**:
-- ⏳ Agent运行时系统 (16h)
-- ⏳ 提示词治理系统 (8h)
-- ⏳ LLM调用层 (6h)
-- ⏳ LangChain/LangGraph集成 (12h)
-
-**交付物**:
-- 完整的AI编排能力
-- 提示词资产管理系统
-- 多供应商大模型支持
-- 工具调用和状态管理
+| 阶段 | 主题 | 状态 | 关键交付 |
+| --- | --- | --- | --- |
+| **P0** | 骨架联通 | ✅ 完成 | pnpm workspace + 8 表 schema + `/api/health` + 首页连通 |
+| **P1** | 小说主线 | ✅ 完成（超额） | Novel/Chapter CRUD + 章节流式生成 + 单一 LLM 入口 + **Pipeline 三阶段全自动流水线** + **拆书分析** + **仿写方案** |
+| **P2** | 世界观 / 人物 / 资料库 | ✅ 完成（超额） | Worldview/Character/KnowledgeAsset CRUD + 富文本 + **风格学习** + **记忆系统** + **一致性校验** + **伏笔管理** + **节奏优化** + **导演分析** |
+| **P3** | 检索增强（RAG） | ✅ 完成 | Qdrant + hybrid（BM25 + 向量）+ RagChunk 写入 |
+| **P4** | 打磨 | 🟡 部分完成 | ✅ 错误处理中间件 + Jest 测试（32 个用例）<br>⏳ 配额限制 / 结构化日志 / UI 细节统一 / E2E 测试 |
+| **P5** | 可选迁移 | 待启动 | AI-Novel 旧库 → 新 schema 的导入工具 |
 
 ---
 
-### 🎯 Phase 3: 业务逻辑移植 (第5-7周)
-**目标**: 移植核心业务逻辑，保证功能完整性
+## P0 · 骨架联通（已完成）
 
-**关键任务**:
-- ⏳ 小说核心服务 (20h)
-- ⏳ 自动导演系统 (16h)
-- ⏳ 签节执行系统 (12h)
-- ⏳ 角色和世界观 (10h)
-- ⏳ 知识库和RAG (14h)
+**目标**：把仓库从 AI-Novel 重型副本，缩成最小可启动骨架，确认开发链路畅通。
 
-**交付物**:
-- 完整的小说管理能力
-- AI自动导演功能
-- 章节执行和质量控制
-- 角色动态和世界观管理
-- RAG检索增强能力
+**关键决策**
+- 删除 `agents / services / routes / prompting` 整目录
+- LLM 调用层只保留 9 个自洽文件（其余依赖已删模块，连带删除）
+- Prisma schema 1997 行 → 140 行 / 8 表
+- `dev.db` 全新初始化（不沿用旧业务数据）
+
+**完成判据**：`pnpm dev` 起服 + `curl /api/health` 返回正确 JSON ✅
+
+详见：`docs/change-logs/202605111000-change-log.md`
 
 ---
 
-### 🎯 Phase 4: 古风UI重构 (第8-10周)
-**目标**: 完整重构用户界面，实现传统线装书风格
+## P1 · 小说主线（✅ 已完成 - 超额交付）
 
-**关键任务**:
-- ⏳ 新首页 - 古风版 (8h)
-- ⏳ 场景化页面 (12h)
-- ⏳ 简化工作台 (16h)
-- ⏳ Creative Hub古风版 (10h)
+**目标**：用户能创建一本小说、写章节、用 LLM 生成正文草稿。
 
-**交付物**:
-- 古风快速启动页面
-- 四大创作场景页面
-- 传统书房风格工作台
-- 古茶馆风格AI中枢
+**后端**
+- `services/llm/LlmInvokeService`：统一的（非流式 / 流式）LLM 调用入口，支持 12 种 LLM 提供商
+- `services/NovelService`、`services/ChapterService`：CRUD
+- `routes/novel.ts`、`routes/chapter.ts`、`routes/generation.ts`（SSE 章节生成）
+- **✨ 超额交付**：
+  - `services/PipelineService` + `services/pipeline/*`（22 个阶段处理器）：三阶段全自动流水线
+  - `services/BookAnalysisService`：8 维结构化拆书分析
+  - `services/ImitationPlanService`：仿写方案生成
 
----
+**前端**
+- `pages/NovelList` / `pages/NovelEdit` / `pages/ChapterEdit`
+- 章节编辑器：左侧 outline / 右侧正文 / 顶部「生成」按钮触发 SSE 流式追加
+- **✨ 超额交付**：
+  - `pages/PipelinePage`：全自动创作流水线监控页
+  - `pages/AnalyzeCreate`：拆书创作流程
+  - `pages/ImportContinue`：拆书结果导入续写
 
-### 🎯 Phase 5: 体验优化 (第11周)
-**目标**: 优化用户体验，增强沉浸感
+**完成判据**
+- ✅ 创建小说 → 新建章节 → 触发 LLM 生成 → 正文实时流式落到编辑器 → 保存后能正确回读
+- ✅ 支持 12 种 LLM provider（DeepSeek、OpenAI、Qwen、Gemini、MiMo 等）
+- ✅ Pipeline 三阶段（规划 → 结构化 → 正文生成）全流程跑通
+- ✅ 拆书分析 → 生成仿写方案 → 自动创建作品
 
-**关键任务**:
-- ⏳ 简化用户流程 (8h)
-- ⏳ 古风化AI反馈 (6h)
-- ⏳ 沉浸式体验增强 (4h)
-
-**交付物**:
-- 零配置启动体验
-- 古典文学语言AI反馈
-- 音效和动画增强
-
----
-
-### 🎯 Phase 6: 测试部署 (第12周)
-**目标**: 全面测试，准备上线
-
-**关键任务**:
-- ⏳ 功能完整性测试 (12h)
-- ⏳ 性能优化 (8h)
-- ⏳ Git仓库配置 (2h)
-
-**交付物**:
-- 通过所有功能测试
-- 性能指标达标
-- 可部署的代码仓库
+**变更记录**：
+- `docs/change-logs/202605111000-change-log.md` — P0 完成
+- `docs/change-logs/202605140900-change-log.md` — P1 基础完成
+- `docs/change-logs/202605141500-change-log.md` — Pipeline 全流程完成
 
 ---
 
-## 🎨 古风设计系统
+## P2 · 世界观 / 人物 / 资料库（✅ 已完成 - 超额交付）
 
-### 视觉风格定义
-```
-传统线装书风格:
-├── 宣纸背景: 米黄色纹理，模拟古籍纸张
-├── 古典边框: 双线边框，回纹装饰
-├── 印泥印章: 红色印章效果，增加古典感
-├── 毛笔字效: 书法字体，墨色渐变
-├── 水墨渲染: 淡雅背景，山水意境
-└── 文房元素: 笔墨纸砚，古典家具
-```
+**目标**：把生成正文时可引用的「设定资料」管理起来。
 
-### 色彩规范
-```css
-/* 宣纸色系 */
---paper-aged: #f4e4c1;    /* 陈旧宣纸 */
---paper-warm: #faf6e9;    /* 温暖宣纸 */
---paper-cream: #fef9e7;   /* 乳白宣纸 */
+**后端**
+- `services/WorldviewService`、`services/CharacterService`、`services/KnowledgeAssetService`
+- `routes/worldview.ts`、`routes/character.ts`、`routes/knowledge.ts`
+- 资料库支持上传文本 / Markdown，存为 `KnowledgeAsset`
+- **✨ 超额交付**：
+  - `services/StyleService`：风格学习与去 AI 味处理
+  - `services/MemoryService`：四级分层记忆系统（永久/长期/短期/临时）
+  - `services/ConsistencyCheckService`：一致性校验（战力/人设/世界观/时间线）
+  - `services/ForeshadowService`：伏笔埋设与回收管理
+  - `services/EmotionService` + `services/RhythmService`：节奏优化
+  - `services/DirectorService`：AI 导演分析
+  - `services/CharacterImportService`：人物批量导入
 
-/* 墨色色系 */
---ink-black: #2c2c2c;     /* 浓墨 */
---ink-dark: #3a3a3a;       /* 淡墨 */
---ink-faded: #5a5a5a;      /* 褪色墨 */
+**前端**
+- `pages/WorldviewEdit`：富文本（tiptap or markdown）
+- `pages/CharacterCardList` + `pages/CharacterEdit`：人物卡 + 头像
+- `pages/Library`：资料库列表 / 上传 / 预览
+- **✨ 超额交付**：
+  - `components/CharacterRelationGraph`：人物关系图可视化
+  - `pages/CharacterImportPage`：人物批量导入页
+  - 工作台标签页：风格/记忆/校验/关系图
 
-/* 装饰色系 */
---seal-red: #c23b3b;       /* 印泥红 */
---wood-dark: #5d4037;      /* 老木色 */
---gold-muted: #b8860b;     /* 鎏金色 */
-```
+**完成判据**
+- ✅ 小说可关联世界观 / 多个人物卡 / 多份资料
+- ✅ 章节生成 prompt 可手选注入哪些设定
+- ✅ 风格学习与去 AI 味自动处理
+- ✅ 四级记忆系统自动衰减与整合
+- ✅ 一致性校验覆盖 4 个维度
+- ✅ 伏笔生命周期自动管理
 
-### 字体系统
-```
-标题字体: STKaiti, KaiTi (楷体)
-正文字体: Georgia, serif (衬线体)
-装饰字体: 华文行楷, 方正舒体
-```
-
----
-
-## 🚀 技术架构
-
-### 前端技术栈
-```typescript
-// 完全复用成熟技术
-const FRONTEND_STACK = {
-  framework: 'React 18+',
-  language: 'TypeScript 5+',
-  bundler: 'Vite 5+',
-  routing: 'React Router 6+',
-  state: 'TanStack Query',
-  ui: '自定义古风组件库'
-};
-```
-
-### 后端技术栈
-```typescript
-// 保持现有技术架构
-const BACKEND_STACK = {
-  runtime: 'Node.js 20+',
-  framework: 'Express 5+',
-  language: 'TypeScript 5+',
-  orm: 'Prisma 7+',
-  database: 'SQLite (默认) / PostgreSQL (可选)',
-  ai: 'LangChain + LangGraph'
-};
-```
-
-### AI能力保持
-```typescript
-// 100%保留现有AI能力
-const AI_CAPABILITIES = {
-  orchestration: 'LangGraph Agent编排',
-  planning: '智能规划服务',
-  generation: '多模型文本生成',
-  rag: '知识库检索增强',
-  direction: 'AI自动导演',
-  quality: '审校修复系统'
-};
-```
+**变更记录**：
+- `docs/change-logs/202605141700-change-log.md` — P2 基础完成
+- `docs/change-logs/202605142100-change-log.md` — 风格/记忆/校验完成
+- `docs/change-logs/202606071230-character-import-feature.md` — 人物批量导入
+- `docs/change-logs/202606071230-character-relation-graph.md` — 关系图可视化
 
 ---
 
-## 📊 工作量评估
+## P3 · 检索增强（RAG）（✅ 已完成）
 
-### 时间规划
-- **总工期**: 12周 (约3个月)
-- **团队配置**: 1-2名开发者
-- **工作密度**: 中等强度，注重质量
+**目标**：资料库规模上来后，自动检索最相关片段注入 prompt。
 
-### 里程碑节点
-- **M1 (第2周)**: 基础架构完成，可运行开发环境
-- **M2 (第4周)**: AI能力移植完成，核心功能可用
-- **M3 (第7周)**: 业务逻辑移植完成，功能完整性达标
-- **M4 (第10周)**: UI重构完成，古风风格统一
-- **M5 (第12周)**: 测试通过，可以发布Beta版本
+**后端**
+- ✅ 引入 Qdrant（本地 docker）
+- ✅ `services/RagIngestService`：资料库文档切片 → embedding → 写 Qdrant + `RagChunk`
+- ✅ `services/RagRetrieveService`：hybrid 检索（BM25 倒排 + 向量召回 → RRF 融合）
+- ✅ 章节生成前自动拉 top-k 片段拼入 prompt
 
-### 风险管理
-- **技术风险**: AI系统移植复杂度 → 分阶段验证
-- **设计风险**: 古风风格实现难度 → 早期原型验证
-- **时间风险**: 工期可能紧张 → 优先级动态调整
-- **质量风险**: 功能完整性保证 → 充分测试覆盖
+**前端**
+- ✅ 资料库页面增加「构建索引」按钮、「重建」按钮
+- ✅ 章节生成结果展示「本次引用的片段」可折叠卡片
 
----
+**完成判据**
+- ✅ 资料库 ≥10 篇文档时，章节生成能稳定命中相关内容
+- ✅ 检索耗时 P95 < 500ms
 
-## 🎯 关键成功指标
-
-### 功能完整性
-- ✅ AI自动导演系统完整移植
-- ✅ 四大场景全部支持
-- ✅ RAG知识库功能正常
-- ✅ 角色世界观管理完善
-
-### 古风一致性
-- ✅ 所有页面统一线装书风格
-- ✅ AI反馈采用古典文学语言
-- ✅ 沉浸式体验贯穿全流程
-- ✅ 减少现代UI元素干扰
-
-### 用户体验
-- ✅ 零配置启动，一句话即可开始
-- ✅ 流程简化，新手也能快速上手
-- ✅ 性能流畅，古风效果不卡顿
-- ✅ 引导清晰，每步都有明确指引
+**变更记录**：
+- `docs/change-logs/202605150900-change-log.md` — P3 完成
+- 移除了 `KnowledgeSearchService`（被 RAG 替代）
 
 ---
 
-## 🔄 下一步行动
+## P4 · 打磨（🟡 部分完成）
 
-### 立即开始
-1. **确认方案**: 用户确认本实施路线图
-2. **配置Git**: 设置新仓库远程地址
-3. **开始Phase 1**: 启动基础架构搭建
+**目标**：从「能用」推进到「敢长期用」。
 
-### 第一周目标
-- 完成开发环境配置
-- 古风主题系统验证
-- 基础组件库可用
-- 第一个可运行的原型
+**清单**
+- ✅ 全局错误处理 / 用户可见的错误提示（`errorHandler.ts` 中间件）
+- ✅ Jest 测试框架 + 32 个单元测试用例（覆盖率 61.5%）
+- ✅ 类型安全：TypeScript 0 错误
+- ✅ UI 视觉统一：主题切换（indigo）、CSS 变量系统、字体统一（Inter）
+- ⏳ LLM 调用配额与速率限制（按 provider）
+- ⏳ 结构化日志（pino / winston），关键事件落 `GenerationLog`
+- ⏳ 端到端 happy path 测试（playwright）
 
----
+**完成判据**：一台机器连续创作 7 天无需手工重启 / 清理。
 
-## 📝 备注
-
-### 设计理念
-> "古为今用，艺为工器"
-- 用现代AI技术承载古典文学创作
-- 用传统美学提升现代工具体验
-- 保持技术先进性的同时传承文化
-
-### 开发原则
-- **功能优先**: 先保证功能完整，再优化体验
-- **渐进实施**: 分阶段交付，及时验证调整
-- **质量第一**: 不为了赶工期牺牲代码质量
-- **用户导向**: 始终以用户创作体验为核心
+**变更记录**：
+- `docs/change-logs/202606121500-change-log.md` — 错误处理 + Jest 测试完成
+- `docs/change-logs/202606081000-character-card-ui-fix.md` — UI 修复
+- Git commit `869533f` — 主题切换到 indigo + 字体统一
+- Git commit `cc659ff` — CSS 变量系统统一颜色
 
 ---
 
-*"墨香纸贵，笔耕不辍，以AI为笔，以古风为墨，助君成书"*
+## P5 · 可选迁移
 
-**开始时间**: 待用户确认后启动
-**预计完成**: 12周后
-**当前状态**: 方案制定完成，等待确认 🎋
+**目标**：把 AI-Novel 旧库里有价值的小说搬过来。
+
+**思路**
+- 单次脚本 `scripts/migrate-from-ai-novel.ts`：旧 schema → 新 schema 字段映射
+- 只迁移：Novel、Chapter、Character、Worldview、KnowledgeAsset
+- 其他（状态版本 / 任务 / 风格规则 / 自动导演产物）一律丢弃
+- 输出 dry-run 报告 → 用户确认后 commit
+
+**完成判据**：单本小说迁移后，正文 / 章节顺序 / 人物卡完整无丢失。
+
+---
+
+## 不做的事
+
+为避免重蹈 AI-Novel 重负累：
+
+- ❌ 多 Agent 编排 / Planner / 工具注册中心
+- ❌ 自动导演 / 章节签节执行 / 自动审校
+- ❌ 风格引擎 / 反 AI 规则 / 风格特征提取
+- ❌ 任务中心 / 任务令牌 / 任务可视化
+- ❌ 状态机 / Canonical State / Open Conflicts
+
+如未来确有强诉求，单独立项重新评估，**不在本路线图内悄悄加塞**。
+
+---
+
+---
+
+## 项目当前状态（2026-06-12）
+
+- **分支**：`feat/lightweight-rebuild`
+- **阶段**：P4 部分完成（70 分 Beta 状态）
+- **数据库**：36 张表，8 次迁移
+- **TypeScript**：0 错误
+- **测试覆盖率**：61.5%（32 个单元测试）
+- **LLM 提供商**：12 种（DeepSeek、OpenAI、Qwen、Gemini、MiMo 等）
+- **核心功能**：✅ 独立创作 + ✅ 拆书仿写 + ✅ Pipeline 全自动流水线
+
+**最近变更**：
+- `docs/change-logs/202606121500-change-log.md` — P0/P1 级问题修复，升级到 Beta 70 分
+- `docs/change-logs/202606111000-readme-sync.md` — README.md 全面同步
+- Git commit `ffee9e2` — v2.2 版本发布
+
+*基线快照：`aa17b24` · 路线图版本：2026-06-12*
